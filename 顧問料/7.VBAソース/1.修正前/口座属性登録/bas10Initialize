@@ -1,0 +1,913 @@
+Attribute VB_Name = "bas10Initialize"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：国内顧問料計算システム・口座属性登録
+'
+'オブジェクト名：bas10Initialize
+'
+'機能概要　：初期処理
+'
+'更新履歴　：2006/08/08 SRA 西濱       新規作成
+'
+'*************************************************************************
+Const MODULE_NAME = "bas10Initialize"
+
+'*************************************************************************
+'関数名　　：口座属性登録画面の初期化メイン
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：初期起動時に行われる初期処理のメイン
+'
+'更新履歴　：2006/08/08 SRA K.Nishihama    新規作成
+'修正履歴　：2006/10/31 SRA Iida           丸め処理２､３を削除（仕様修正）
+'更新履歴　：2007/02/14 SRA Y.Azuma        変更     (PH2)QANo.209 上期成功報酬対応
+'更新履歴　：2007/03/08 SRA T.Ichikawa     変更     (PH3)QANo. ０円請求書文言出力追加
+'更新履歴　：2007/11/09 SRA Y.Azuma        変更     (PH4)PH対応
+'更新履歴　：2008/10/14 SRA T.Mizutani     変更     海外口座の契約日の管理
+'
+'*************************************************************************
+Public Sub g_subKohzaInitialize()
+
+    '画面の初期化
+    
+'------------<Modify Start azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+    Call gCom01_BookProtect(ThisWorkbook, False)    'ブックの保護解除
+    Worksheets(MAIN_SHEETNAME).Visible = True
+    Worksheets(MAIN_SHEETNAME2).Visible = True
+    Call gCom01_BookProtect(ThisWorkbook, True)     'ブックの保護
+    
+    '年請求回数区分リストの作成
+    Call sub_CreateList_CodeValue(LIST_SEIKYU_KAISUU)
+    
+    '協会報告区分リストの作成
+    Call sub_CreateList_CodeValue(LIST_KYOUKAI_KUBUN)
+    
+    '信託契約区分リストの作成
+    Call sub_CreateList_Dt301d(LIST_SHINTAKU_KEIYAKU)
+    
+'------------<Modify End   azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+    
+    
+'************　国内口座 ************************
+    Call gCom01_SheetProtect(Worksheets(MAIN_SHEETNAME), False)
+    With Worksheets(MAIN_SHEETNAME)
+        .Range("口座番号").Value = ""
+    '------------<Modify Start azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+        .Range("口座名称カナ").Value = ""
+        .Range("口座名称漢字").Value = ""
+    '    .Range("口座名称").Value = ""
+        
+        .Range("年請求回数区分").Value = func_SearchComboItem("2", LIST_SEIKYU_KAISUU)      '年請求回数区分の初期値設定
+        '.Range("年請求回数区分").Value = "2:年2回"
+        .Range("信託契約区分").Value = func_SearchComboItem("6", LIST_SHINTAKU_KEIYAKU)
+        '.Range("信託契約区分").Value = "6:年金特定信託契約"    '信託契約区分の初期値設定
+    '------------<Modify End   azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+        .Range("丸め１").Value = "0:何もしない"
+        '2006/10/31 DEL S
+    '    .Range("丸め２").Value = "0:何もしない"
+    '    .Range("丸め３").Value = "0:何もしない"
+        '2006/10/31 DEL S
+        .Range("丸め４").Value = "0:何もしない"
+        .Range("丸め５").Value = "0:何もしない"
+        .Range("丸め６").Value = "0:何もしない"
+        .Range("丸め７").Value = "0:何もしない"
+        .Range("丸め８").Value = "0:何もしない"
+        .Range("按分方法").Value = "1:料率段階で日数按分"
+        .Range("最低保証額").Value = ""
+        .Range("料率控除割合").Value = ""
+        .Range("合算親口座").Value = ""
+        .Range("合算開始日").Value = ""
+        .Range("合算終了日").Value = ""
+        
+        'チェックボックスをすべて未チェックにする
+        .ChkRyouritu.Value = False
+        .ChkT21.Value = False
+        .ChkSeikouHoushu.Value = False
+        
+    '------------<Modify Start Ichikawa 2007/03/08 > -----------------------
+        .ChkSeikyushoMongon.Value = False
+    '------------<Modify End   Ichikawa 2007/03/08 > -----------------------
+        
+        'ラジオボタンを「掛け目型」へ
+    '------------<Modify Start azuma 2006/12/08 > -----------------------
+        .OptKakemeA.Value = True
+    '    .OptKakeme.Value = True
+    '------------<Modify End   azuma 2006/12/08 > -----------------------
+        
+    '------------<Modify Start azuma 2007/02/14 > -----------------------
+        .Range("上期未収掛け目").Value = ""
+    '------------<Modify End   azuma 2007/02/14 > -----------------------
+        
+    '------------<Modify Start Ichikawa 2007/03/08 > -----------------------
+        .Range("請求書文言出力").Value = ""
+    '------------<Modify End   Ichikawa 2007/03/08 > -----------------------
+        
+        'Templateシートに書き込まれている情報をクリア
+        Worksheets(TIMESTAMP_SHEETNAME).Range("検索時口座ＮＯ") = ""
+        Worksheets(TIMESTAMP_SHEETNAME).Range("丸め方法登録日時") = ""
+        Worksheets(TIMESTAMP_SHEETNAME).Range("口座属性登録日時") = ""
+        Worksheets(TIMESTAMP_SHEETNAME).Range("合算口座登録日時") = ""
+        Worksheets(TIMESTAMP_SHEETNAME).Range("検索時合算親口座番号") = ""
+        
+    '------------<Modify Start Ichikawa 2007/03/08 > -----------------------
+        Worksheets(TIMESTAMP_SHEETNAME).Range("請求書文言登録日時") = ""
+    '------------<Modify End   Ichikawa 2007/03/08 > -----------------------
+    
+'------------<Modify Start azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+        Worksheets(TIMESTAMP_SHEETNAME).Range("属性情報登録日時") = ""
+
+        .Range("送付書顧客名").Value = ""
+        .Range("送付書郵便番号").Value = ""
+        .Range("送付書住所1").Value = ""
+        .Range("送付書住所2").Value = ""
+        .Range("送付書担当部").Value = ""
+        .Range("送付書代表者肩書").Value = ""
+        .Range("送付書電話番号").Value = ""
+        .Range("送付書Email").Value = ""
+        .Range("送付書担当者").Value = ""
+        .Range("送付書代表者").Value = ""
+        .Range("送付書FAX番号").Value = ""
+        .Range("請求書顧客名").Value = ""
+        .Range("契約書顧客名").Value = ""
+        .Range("契約書郵便番号").Value = ""
+        .Range("契約書住所1").Value = ""
+        .Range("契約書住所2").Value = ""
+        .Range("契約書担当部").Value = ""
+        .Range("契約書代表者肩書").Value = ""
+        .Range("契約書電話番号").Value = ""
+        .Range("契約書Email").Value = ""
+        .Range("契約書担当者").Value = ""
+        .Range("契約書代表者").Value = ""
+        .Range("契約書FAX番号").Value = ""
+        .Range("協会区分").Value = ""
+        '------------<Add Start 海外口座の契約日の管理 mizutani 2008/10/14 > -----------------------
+        .Range("契約年月日").Value = ""
+        '------------<Add End 海外口座の契約日の管理 mizutani 2008/10/14 > -----------------------
+        
+        '未更新マークの非表示
+        .lblMikoushin_kokunai.Visible = False
+        
+        '統計付加情報削除
+        Call gKsC_fncKsCmnCheckRowDelete(ThisWorkbook.Worksheets(MAIN_SHEETNAME), 1, True)
+        
+        '統計付加情報行作成
+        Call sub_CreateToukeiFukaJohho(ThisWorkbook.Worksheets(MAIN_SHEETNAME), True)
+        
+        .OLEObjects("optKohza_zokusei").Object.Value = True
+        
+'------------<Modify End   azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+    End With
+    Call gCom01_SheetProtect(Worksheets(MAIN_SHEETNAME), True)
+
+
+'------------<Modify Start azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+'************　海外口座 ************************
+    Call gCom01_SheetProtect(Worksheets(MAIN_SHEETNAME2), False)
+    With Worksheets(MAIN_SHEETNAME2)
+        .Range("口座番号").Value = ""
+        .Range("口座名称カナ").Value = ""
+        .Range("口座名称漢字").Value = ""
+        
+        .Range("カウント対象FROM").Value = ""
+        .Range("カウント対象TO").Value = ""
+        .Range("協会区分").Value = ""
+        '------------<Add Start 海外口座の契約日の管理 mizutani 2008/10/14 > -----------------------
+        .Range("契約年月日").Value = ""
+        '------------<Add End 海外口座の契約日の管理 mizutani 2008/10/14 > -----------------------
+        
+        '未更新マークの非表示
+        .OLEObjects("lblMikoushin_kaigai").Visible = False
+        
+        '統計付加情報削除
+        Call gKsC_fncKsCmnCheckRowDelete(ThisWorkbook.Worksheets(MAIN_SHEETNAME2), 1, True)
+        
+        '統計付加情報行作成
+        Call sub_CreateToukeiFukaJohho(ThisWorkbook.Worksheets(MAIN_SHEETNAME2))
+    End With
+    Call gCom01_SheetProtect(Worksheets(MAIN_SHEETNAME2), True)
+    
+    Call gCom01_BookProtect(ThisWorkbook, False)    'ブックの保護解除
+    Worksheets(MAIN_SHEETNAME).Visible = True
+    Worksheets(MAIN_SHEETNAME2).Visible = False
+    Call gCom01_BookProtect(ThisWorkbook, True)     'ブックの保護
+'------------<Modify End   azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+
+
+    HideItem
+    
+    
+End Sub
+
+'*************************************************************************
+'関数名　　：口座属性登録画面の初期化(検索、更新ボタン押下後)
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：検索、更新ボタン押下後に行われる初期処理
+'
+'更新履歴　：2006/08/08 SRA K.Nishihama    新規作成
+'修正履歴　：2006/10/31 SRA Iida           丸め処理２､３を削除（仕様修正）
+'更新履歴　：2007/02/14 SRA Y.Azuma    　　変更     (PH2)QANo.209 上期成功報酬対応
+'更新履歴　：2007/03/08 SRA T.Ichikawa     変更     (PH3)QANo. ０円請求書文言出力追加
+'更新履歴　：2007/11/09 SRA Y.Azuma        変更     (PH4)
+'更新履歴　：2008/10/14 SRA T.Mizutani     変更     海外口座の契約日の管理
+'*************************************************************************
+Public Sub g_subButtonInitialize()
+
+    '画面の初期化
+    
+    '国内口座
+    Call gCom01_SheetProtect(Worksheets(MAIN_SHEETNAME), False)
+    With Worksheets(MAIN_SHEETNAME)
+'------------<Modify Start azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+        .Range("口座名称カナ").Value = ""
+        .Range("口座名称漢字").Value = ""
+        .Range("年請求回数区分").Value = func_SearchComboItem("2", LIST_SEIKYU_KAISUU)      '年請求回数区分の初期値設定
+        .Range("信託契約区分").Value = func_SearchComboItem("6", LIST_SHINTAKU_KEIYAKU)
+        .OLEObjects("optKohza_zokusei").Object.Value = True
+'------------<Modify End   azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+    
+        .Range("丸め１").Value = "0:何もしない"
+        '2006/10/31 DEL S
+    '    Worksheets(MAIN_SHEETNAME).Range("丸め２").Value = "0:何もしない"
+    '    Worksheets(MAIN_SHEETNAME).Range("丸め３").Value = "0:何もしない"
+        '2006/10/31 DEL S
+        .Range("丸め４").Value = "0:何もしない"
+        .Range("丸め５").Value = "0:何もしない"
+        .Range("丸め６").Value = "0:何もしない"
+        .Range("丸め７").Value = "0:何もしない"
+        .Range("丸め８").Value = "0:何もしない"
+        .Range("按分方法").Value = "1:料率段階で日数按分"
+        .Range("最低保証額").Value = ""
+        .Range("料率控除割合").Value = ""
+        .Range("合算親口座").Value = ""
+        .Range("合算開始日").Value = ""
+        .Range("合算終了日").Value = ""
+        
+    '------------<Modify Start azuma 2007/02/14 > -----------------------
+        .Range("上期未収掛け目").Value = ""
+    '------------<Modify End   azuma 2007/02/14 > -----------------------
+        
+    '------------<Modify Start Ichikawa 2007/03/08 > -----------------------
+        .Range("請求書文言出力").Value = ""
+    '------------<Modify End   Ichikawa 2007/03/08 > -----------------------
+        
+        'チェックボックスをすべて未チェックにする
+        .ChkRyouritu.Value = False
+        .ChkT21.Value = False
+        .ChkSeikouHoushu.Value = False
+        
+    '------------<Modify Start Ichikawa 2007/03/08 > -----------------------
+        .ChkSeikyushoMongon.Value = False
+    '------------<Modify End   Ichikawa 2007/03/08 > -----------------------
+        
+        'ラジオボタンを「掛け目型」へ
+    '------------<Modify Start azuma 2006/12/08 > -----------------------
+        .OptKakemeA.Value = True
+    '    Worksheets(MAIN_SHEETNAME).OptKakeme.Value = True
+    '------------<Modify End   azuma 2006/12/08 > -----------------------
+'------------<Modify Start azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+        .Range("送付書顧客名").Value = ""
+        .Range("送付書郵便番号").Value = ""
+        .Range("送付書住所1").Value = ""
+        .Range("送付書住所2").Value = ""
+        .Range("送付書担当部").Value = ""
+        .Range("送付書代表者肩書").Value = ""
+        .Range("送付書電話番号").Value = ""
+        .Range("送付書Email").Value = ""
+        .Range("送付書担当者").Value = ""
+        .Range("送付書代表者").Value = ""
+        .Range("送付書FAX番号").Value = ""
+        .Range("請求書顧客名").Value = ""
+        .Range("契約書顧客名").Value = ""
+        .Range("契約書郵便番号").Value = ""
+        .Range("契約書住所1").Value = ""
+        .Range("契約書住所2").Value = ""
+        .Range("契約書担当部").Value = ""
+        .Range("契約書代表者肩書").Value = ""
+        .Range("契約書電話番号").Value = ""
+        .Range("契約書Email").Value = ""
+        .Range("契約書担当者").Value = ""
+        .Range("契約書代表者").Value = ""
+        .Range("契約書FAX番号").Value = ""
+        .Range("協会区分").Value = ""
+        '------------<Add Start 海外口座の契約日の管理 mizutani 2008/10/14 > -----------------------
+        .Range("契約年月日").Value = ""
+        '------------<Add End 海外口座の契約日の管理 mizutani 2008/10/14 > -----------------------
+        
+        '未更新マークの非表示
+        .lblMikoushin_kokunai.Visible = False
+        
+        '統計付加情報用属性の初期化
+        Call sub_ZokuseiInit(Worksheets(MAIN_SHEETNAME))
+'------------<Modify End   azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+    End With
+    Call gCom01_SheetProtect(Worksheets(MAIN_SHEETNAME), True)
+    
+    
+'------------<Modify Start azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+    '海外口座
+    Call gCom01_SheetProtect(Worksheets(MAIN_SHEETNAME2), False)
+    With Worksheets(MAIN_SHEETNAME2)
+        .Range("口座名称カナ").Value = ""
+        .Range("口座名称漢字").Value = ""
+        
+        .Range("カウント対象FROM").Value = ""
+        .Range("カウント対象TO").Value = ""
+        .Range("協会区分").Value = ""
+        '------------<Add Start 海外口座の契約日の管理 mizutani 2008/10/14 > -----------------------
+        .Range("契約年月日").Value = ""
+        '------------<Add End 海外口座の契約日の管理 mizutani 2008/10/14 > -----------------------
+        
+        '未更新マークの非表示
+        .OLEObjects("lblMikoushin_kaigai").Visible = False
+        
+        '統計付加情報用属性の初期化
+        Call sub_ZokuseiInit(Worksheets(MAIN_SHEETNAME2))
+    End With
+    Call gCom01_SheetProtect(Worksheets(MAIN_SHEETNAME2), True)
+'------------<Modify End   azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+    
+    'Templateシートに書き込まれている情報をクリア
+    Worksheets(TIMESTAMP_SHEETNAME).Range("検索時口座ＮＯ") = ""
+    Worksheets(TIMESTAMP_SHEETNAME).Range("丸め方法登録日時") = ""
+    Worksheets(TIMESTAMP_SHEETNAME).Range("口座属性登録日時") = ""
+    Worksheets(TIMESTAMP_SHEETNAME).Range("合算口座登録日時") = ""
+    Worksheets(TIMESTAMP_SHEETNAME).Range("検索時合算親口座番号") = ""
+    
+'------------<Modify Start Ichikawa 2007/03/08 > -----------------------
+    Worksheets(TIMESTAMP_SHEETNAME).Range("請求書文言登録日時") = ""
+'------------<Modify End   Ichikawa 2007/03/08 > -----------------------
+    
+'------------<Modify Start azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+    Worksheets(TIMESTAMP_SHEETNAME).Range("属性情報登録日時") = ""
+'------------<Modify End   azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+    
+    
+End Sub
+
+
+'*************************************************************************
+'関数名　　：コンボリスト作成(コード値テーブル)
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：コード値テーブルから指定の一覧を取得しTemplateシートに作成する。
+'
+'更新履歴　：：2007/11/09 SRA Y.Azuma    新規     (PH4)
+'*************************************************************************
+Private Sub sub_CreateList_CodeValue(ByVal strListName As String)
+
+On Error GoTo ErrHandler
+    
+    Dim strSql          As String
+    Dim vData()         As Variant
+    Dim lngCol          As Long
+    Dim lngRow          As Long
+    Dim lngCnt          As Long
+    Dim strCodeNo       As String
+    Dim lngListCol      As Long
+    Dim lngLen          As Long
+    
+    
+    
+    Select Case strListName
+        Case LIST_SEIKYU_KAISUU
+        '年間請求回数区分
+            strCodeNo = "45"
+            lngListCol = 3
+        Case LIST_KYOUKAI_KUBUN
+        '協会報告区分
+            strCodeNo = "41"
+            lngListCol = 4
+    End Select
+    
+    lngLen = gfunc_Separate(strListName)
+
+    strSql = ""
+    strSql = strSql & "   SELECT LPAD(CODE_VALUE," & lngLen & ",' ')||':'||TRIM(VALUE_NAME)"
+    strSql = strSql & "     FROM KYK_CODE_VALUE"
+    strSql = strSql & "    WHERE CODE_NO='" & strCodeNo & "'"
+    strSql = strSql & "      AND SAKUJO_FLG='0'"
+    strSql = strSql & " ORDER BY CODE_VALUE"
+    
+    'データ取得
+    Call gclsdb.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow)
+    
+    ThisWorkbook.Worksheets(DATA_SHEETNAME).Activate
+    
+    'のデータセル範囲をクリア
+    With ThisWorkbook.Worksheets(DATA_SHEETNAME)
+        .Range(.Cells(2, lngListCol), .Cells(65536, lngListCol)).ClearContents
+    End With
+    
+    '取得データをセルに設定
+    For lngCnt = 0 To lngRow - 1
+         ThisWorkbook.Worksheets(DATA_SHEETNAME).Cells(2 + lngCnt + 0, lngListCol).Value = vData(0, lngCnt)
+    Next lngCnt
+    
+    Erase vData
+
+    'セル名の定義
+    Call subNameDefine(strListName)
+    
+    Exit Sub
+ErrHandler:
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "sub_CreateList_CodeValue", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Erase vData
+End Sub
+
+'*************************************************************************
+'関数名　　：コンボリスト作成(コードブックビュー)
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：コードブックビューから指定の一覧を取得しTemplateシートに作成する。
+'
+'更新履歴　：：2007/11/09 SRA Y.Azuma    新規     (PH4)
+'*************************************************************************
+Private Sub sub_CreateList_Dt301d(ByVal strListName As String)
+
+On Error GoTo ErrHandler
+    
+    Dim strSql          As String
+    Dim vData()         As Variant
+    Dim lngCol          As Long
+    Dim lngRow          As Long
+    Dim lngCnt          As Long
+    Dim strCodeKbn       As String
+    Dim lngListCol      As Long
+    
+    
+    
+    Select Case strListName
+        Case LIST_SHINTAKU_KEIYAKU
+        '信託契約区分
+            strCodeKbn = "88"
+            lngListCol = 5
+    End Select
+
+
+    strSql = ""
+    strSql = strSql & "   SELECT TRIM(CD_1)||':'||TRIM(NAME_J)"
+    strSql = strSql & "     FROM VW_DT301D"
+    strSql = strSql & "    WHERE CD_KBN='" & strCodeKbn & "'"
+    strSql = strSql & " ORDER BY CD_1"
+    
+    'データ取得
+    Call gclsdb.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow)
+    
+    ThisWorkbook.Worksheets(DATA_SHEETNAME).Activate
+    
+    'のデータセル範囲をクリア
+    With ThisWorkbook.Worksheets(DATA_SHEETNAME)
+        .Range(.Cells(2, lngListCol), .Cells(65536, lngListCol)).ClearContents
+    End With
+    
+    '取得データをセルに設定
+    For lngCnt = 0 To lngRow - 1
+         ThisWorkbook.Worksheets(DATA_SHEETNAME).Cells(2 + lngCnt + 0, lngListCol).Value = vData(0, lngCnt)
+    Next lngCnt
+    
+    Erase vData
+
+    'セル名の定義
+    Call subNameDefine(strListName)
+    
+    Exit Sub
+ErrHandler:
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "sub_CreateList_Dt301d", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Erase vData
+End Sub
+
+'*************************************************************************
+'関数名　　：コンボ用リストの名前定義設定
+'
+'引　　数　：無し
+'
+'戻り値　　：無し
+'
+'機能説明　：コンボ用リストのセル名前定義を再設定する。
+'
+'更新履歴　：：2007/11/09 SRA Y.Azuma    新規     (PH4)
+'
+'*************************************************************************
+Private Sub subNameDefine(ByVal strListName As String)
+
+    Dim RowCnt  As Long
+    
+    Dim lngShisan       As Long
+    Dim strShisanBunrui As String
+    Dim lngListCol      As Long
+    
+    '*** 資産の名前定義
+        
+    Select Case strListName
+        Case LIST_SEIKYU_KAISUU
+        '年間請求回数区分
+            lngListCol = 3
+        Case LIST_KYOUKAI_KUBUN
+        '協会報告区分
+            lngListCol = 4
+        Case LIST_SHINTAKU_KEIYAKU
+        '信託契約区分
+            lngListCol = 5
+    End Select
+        
+    For RowCnt = 2 + 0 To 65536
+        If Trim(ThisWorkbook.Worksheets(DATA_SHEETNAME).Cells(RowCnt, lngListCol).Value) = "" Then
+            RowCnt = RowCnt - 1
+            Exit For
+        End If
+    Next RowCnt
+        
+    '再定義
+    ThisWorkbook.Names.Add Name:=strListName, _
+     RefersToR1C1:="=data!R2C" & lngListCol & ":R" & RowCnt & "C" & lngListCol
+
+
+End Sub
+
+
+'*************************************************************************
+'関数名　　：統計情報用属性行作成メイン関数
+'
+'引　　数　：TargetSheets       I       処理対象シートオブジェクト
+'
+'戻り値　　：無し
+'
+'機能説明　：コンボ用リストのセル名前定義を再設定する。
+'
+'更新履歴　：2007/11/09 SRA Y.Azuma    新規     (PH4)
+'更新履歴　：2007/12/20 SRA Y.Azuma    変更     (PH4)連結バグ対応
+'
+'*************************************************************************
+Private Sub sub_CreateToukeiFukaJohho(ByRef TargetSheets As Object, Optional ByVal blnKensaku As Boolean = False)
+    
+    Dim lngRowCnt   As Long
+    Dim lngMaxRow   As Long
+    Dim lngAddRow   As Long
+    Dim strList     As String
+    Dim lngListCnt  As Long
+
+    If blnKensaku Then
+        Erase gZokusei      '属性情報配列の初期化
+    
+        'コードテーブル、コード値テーブルから統計情報用属性の一覧取得
+        If func_getZokuseiJohho(gZokusei()) = False Then
+            Exit Sub
+        End If
+        
+    '------------<Modify Start azuma 2007/12/20 (PH4)> ★★★☆-----------------------
+        '属性リストシートとセル定義の作成
+        If func_setZokuseiDataSheet(gZokusei()) = False Then
+            Exit Sub
+        End If
+    '------------<Modify End   azuma 2007/12/20 (PH4)> ★★★☆-----------------------
+    End If
+    
+    lngMaxRow = UBound(gZokusei)
+        
+    '追加開始行
+    lngAddRow = TargetSheets.Range("統計付加情報開始行").Row
+    For lngRowCnt = 0 To lngMaxRow
+        lngAddRow = lngAddRow + 1
+        '行追加
+        Call gKsC_fncKsCmnInsRow(TargetSheets, lngAddRow, 3)
+        
+        With TargetSheets.Range("統計付加情報開始行")
+            '属性番号設定
+            .Offset(lngRowCnt + 1, 0).Value = gZokusei(lngRowCnt).Code_No
+            
+            '属性名
+            .Offset(lngRowCnt + 1, 1).Value = gZokusei(lngRowCnt).Code_Name
+            
+            'リスト作成
+            strList = ""
+            For lngListCnt = 0 To UBound(gZokusei(lngRowCnt).Zokusei_List)
+                strList = strList & gZokusei(lngRowCnt).Zokusei_List(lngListCnt).Value_List & " , "
+            Next lngListCnt
+            strList = Mid(strList, 1, Len(strList) - 3)
+            
+            'リストの紐付け
+            With .Offset(lngRowCnt + 1, 5).Validation
+                .Delete
+                .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:= _
+                xlBetween, Formula1:="=" & gZokusei(lngRowCnt).DefineName
+                .IgnoreBlank = True
+                .InCellDropdown = True
+                .IMEMode = xlIMEModeNoControl
+                .ShowInput = True
+                .ShowError = True
+            End With
+'            With .Offset(lngRowCnt + 1, 5).Validation
+'                .Delete
+'                .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:= _
+'                xlBetween, Formula1:=strList
+'                .IgnoreBlank = True
+'                .InCellDropdown = True
+'                .IMEMode = xlIMEModeNoControl
+'                .ShowInput = True
+'                .ShowError = True
+'            End With
+            
+            'アクティブフラグ
+            .Offset(lngRowCnt + 1, 10).Value = gZokusei(lngRowCnt).Active_Flg
+            
+            '国内海外区分
+            .Offset(lngRowCnt + 1, 12).Value = gZokusei(lngRowCnt).Kokunai_Kaigai_Kbn
+            
+            '摘要
+            .Offset(lngRowCnt + 1, 14).Value = gZokusei(lngRowCnt).Bikoh
+            
+        End With
+        
+    Next lngRowCnt
+
+End Sub
+
+'*************************************************************************
+'関数名　　：統計情報用属性情報取得関数
+'
+'引　　数　：Zokusei        I       属性情報構造体配列
+'
+'戻り値　　：Boolean
+'
+'機能説明　：属性情報をコードテーブル、コード値テーブルから取得する。
+'
+'更新履歴　：2007/11/09 SRA Y.Azuma    新規     (PH4)
+'更新履歴　：2007/12/18 SRA Y.Azuma    変更     (PH4)連結バグ対応
+'更新履歴　：2007/12/20 SRA Y.Azuma    変更     (PH4)連結バグ対応
+'
+'*************************************************************************
+Private Function func_getZokuseiJohho(ByRef Zokusei() As typZokusei) As Boolean
+
+On Error GoTo ErrHandler
+    
+    Dim strSql          As String
+    Dim vData()         As Variant
+    Dim lngCol          As Long
+    Dim lngRow          As Long
+    Dim lngCnt          As Long
+    Dim strPreCodeNo    As String   '1つ前のコードNO
+    Dim lngListRow      As Long     '属性情報構造体のインデックス
+    Dim lngListCnt      As Long     '属性値構造体のインデックス
+    
+
+    func_getZokuseiJohho = False
+    
+    strPreCodeNo = ""
+    lngListRow = -1
+    lngListCnt = -1
+    
+    strSql = ""
+    strSql = strSql & " SELECT TO_NUMBER(C.CODE_NO)-1000"
+    strSql = strSql & "       ,TRIM(C.CODE_NAME)"
+    strSql = strSql & "       ,DECODE(C.ACTIVE_FLG,'0','無効'"
+    strSql = strSql & "                           ,'1','有効')"
+    strSql = strSql & "       ,DECODE(C.KOKUNAI_KAIGAI_KBN,'0','共通'"
+    strSql = strSql & "                                   ,'1','国内'"
+    strSql = strSql & "                                   ,'2','海外')"
+    strSql = strSql & "       ,TRIM(C.BIKOH)"
+    strSql = strSql & "       ,V.CODE_VALUE"
+    strSql = strSql & "       ,TRIM(V.VALUE_NAME)"
+    strSql = strSql & "   FROM KYK_CODE C"
+    strSql = strSql & "       ,KYK_CODE_VALUE V"
+    strSql = strSql & "  WHERE C.CODE_NO = V.CODE_NO"
+    strSql = strSql & "    AND TO_NUMBER(C.CODE_NO) >= 1000"
+    strSql = strSql & "    AND C.SAKUJO_FLG = '0'"
+    strSql = strSql & "    AND V.SAKUJO_FLG = '0'"
+    strSql = strSql & "  ORDER BY TO_NUMBER(C.CODE_NO)"
+'------------<Modify Start azuma 2007/12/18 (PH4)> ★★★☆-----------------------
+    strSql = strSql & "          ,SUBSTR('000000000'||V.CODE_VALUE,LENGTH('000000000'||V.CODE_VALUE)-9,10)"
+'    strSql = strSql & "          ,TO_NUMBER(V.CODE_VALUE)"
+'------------<Modify End   azuma 2007/12/18 (PH4)> ★★★☆-----------------------
+    
+    'データ取得
+    Call gclsdb.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow)
+    
+    '取得データを構造体に設定
+    If lngRow > 0 Then
+        
+    
+        For lngCnt = 0 To lngRow - 1
+            If strPreCodeNo = CStr(vData(0, lngCnt)) Then
+                lngListCnt = lngListCnt + 1
+                ReDim Preserve Zokusei(lngListRow).Zokusei_List(lngListCnt)
+                With Zokusei(lngListRow).Zokusei_List(lngListCnt)
+                    .Code_Value = CStr(vData(5, lngCnt))    'コード値
+                    .Value_Name = CStr(vData(6, lngCnt))    'コードの名前
+                    .Value_Name_E = ""                      'コードの英字名前
+                    .Value_List = CStr(vData(5, lngCnt)) & ":" & CStr(vData(6, lngCnt)) 'リスト値
+                End With
+            Else
+                lngListRow = lngListRow + 1
+                ReDim Preserve Zokusei(lngListRow)
+                lngListCnt = 0
+                With Zokusei(lngListRow)
+                    .Code_No = CStr(vData(0, lngCnt))               '属性NO
+                    .Code_Name = CStr(vData(1, lngCnt))             '属性名
+                    .Active_Flg = CStr(vData(2, lngCnt))            'アクティブフラグ
+                    .Kokunai_Kaigai_Kbn = CStr(vData(3, lngCnt))    '国内海外区分
+                    .Bikoh = CStr(vData(4, lngCnt))                 '摘要
+'------------<Modify Start azuma 2007/12/20 (PH4)> ★★★☆-----------------------
+                    .DefineName = LIST_ZOKUSEI_HEAD & CStr(vData(0, lngCnt))    'セル属性定義名
+'------------<Modify End   azuma 2007/12/20 (PH4)> ★★★☆-----------------------
+                    
+                    'コード値構造体の設定
+                    ReDim .Zokusei_List(lngListCnt)
+                    With .Zokusei_List(lngListCnt)
+                        .Code_Value = CStr(vData(5, lngCnt))    'コード値
+                        .Value_Name = CStr(vData(6, lngCnt))    'コードの名前
+                        .Value_Name_E = ""                      'コードの英字名前
+                        .Value_List = CStr(vData(5, lngCnt)) & ":" & CStr(vData(6, lngCnt)) 'リスト値
+                    End With
+                End With
+            End If
+            strPreCodeNo = CStr(vData(0, lngCnt))
+        Next lngCnt
+    Else
+    '該当レコード無はエラー
+        func_getZokuseiJohho = False
+        Erase vData
+    End If
+    
+    Erase vData
+
+    func_getZokuseiJohho = True
+    
+    Exit Function
+ErrHandler:
+
+    func_getZokuseiJohho = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_getZokuseiJohho", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Erase vData
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：統計情報用属性行初期化関数
+'
+'引　　数　：TargetSheets       I       処理対象シートオブジェクト
+'
+'戻り値　　：無し
+'
+'機能説明　：統計情報用属性の属性値に空を設定する。
+'
+'更新履歴　：：2007/11/09 SRA Y.Azuma    新規     (PH4)
+'
+'*************************************************************************
+Private Sub sub_ZokuseiInit(ByRef TargetSheets As Object)
+
+On Error Resume Next
+    
+    Dim lngRow      As Long
+    Dim lngRowMax   As Long
+    
+    lngRowMax = UBound(gZokusei)
+    
+    For lngRow = 1 To lngRowMax + 1
+        TargetSheets.Range("統計付加情報開始行").Offset(lngRow, 5).Value = ""
+    Next lngRow
+    
+    
+    
+End Sub
+
+'*************************************************************************
+'関数名　　：統計情報用属性定義シート作成関数
+'
+'引　　数　：Zokusei        I       属性情報構造体配列
+'
+'戻り値　　：Boolean
+'
+'機能説明　：シートを追加して属性情報構造体のメンバーをセルに設定してセル定義名を付ける
+'
+'更新履歴　：2007/12/20 SRA Y.Azuma    新規     (PH4)
+'更新履歴　：2008/04/04 SRA Y.Azuma    変更     コンボ表示・登録不備対応
+'
+'*************************************************************************
+Private Function func_setZokuseiDataSheet(ByRef Zokusei() As typZokusei) As Boolean
+
+On Error GoTo ErrHandler
+
+    Dim lngZouseiCnt        As Long
+    Dim lngSheetCnt         As Long
+'    Dim lngSheetMax         As Long '追加シート数
+    Dim lngZokuseiListCnt   As Long
+    Dim lngRow              As Long
+    Dim lngCol              As Long
+    
+    func_setZokuseiDataSheet = False
+    
+    
+    lngZouseiCnt = UBound(Zokusei)
+    
+'    lngSheetMax = Ceiling(lngZokuseiCnt / 256, 0)
+
+    lngSheetCnt = 0
+    
+    'ブックの保護
+    Call gCom01_BookProtect(ThisWorkbook, False)
+
+    '属性定義シートの削除
+    With ThisWorkbook
+        For lngSheetCnt = 1 To .Worksheets.Count
+            If Mid(.Worksheets(lngSheetCnt).Name, 1, Len(LIST_ZOKUSEI_SHEET)) = LIST_ZOKUSEI_SHEET Then
+                Application.DisplayAlerts = False
+                .Worksheets(lngSheetCnt).Delete
+                Application.DisplayAlerts = True
+            End If
+        Next lngSheetCnt
+    End With
+    
+    lngSheetCnt = 0
+    For lngZokuseiListCnt = 0 To lngZouseiCnt
+    
+        '256で割り切れる場合か初回のみシート追加
+        If (lngZokuseiListCnt Mod 256) = 0 Or lngZokuseiListCnt = 0 Then
+            lngSheetCnt = lngSheetCnt + 1
+            ThisWorkbook.Sheets.Add after:=ThisWorkbook.Worksheets(ThisWorkbook.Worksheets.Count)
+            With ThisWorkbook.Worksheets(ThisWorkbook.Worksheets.Count)
+                .Name = LIST_ZOKUSEI_SHEET & lngSheetCnt
+'------------<Modify Start azuma 2008/04/04 (PH4)> ★★★☆-----------------------
+                .Cells.NumberFormat = "@"
+'------------<Modify End   azuma 2008/04/04 (PH4)> ★★★☆-----------------------
+                .Visible = False
+                
+            End With
+            lngCol = 0
+        End If
+        
+        lngCol = lngCol + 1
+        With ThisWorkbook.Worksheets(ThisWorkbook.Worksheets.Count)
+            'シートにリストの値を設定する。
+            For lngRow = 0 To UBound(Zokusei(lngZokuseiListCnt).Zokusei_List)
+                .Cells(lngRow + 1, lngCol).Value = Zokusei(lngZokuseiListCnt).Zokusei_List(lngRow).Value_List
+            
+            Next lngRow
+            
+            '設定した範囲にセル定義名を行う
+            '再定義
+            ThisWorkbook.Names.Add Name:=Zokusei(lngZokuseiListCnt).DefineName, _
+             RefersToR1C1:="=" & ThisWorkbook.Worksheets(ThisWorkbook.Worksheets.Count).Name & _
+                             "!R1C" & lngCol & ":R" & lngRow & "C" & lngCol
+            
+            
+        End With
+        
+    Next lngZokuseiListCnt
+            
+    'ブックの保護
+    Call gCom01_BookProtect(ThisWorkbook, True)
+    
+
+    func_setZokuseiDataSheet = True
+    
+    Exit Function
+ErrHandler:
+
+    func_setZokuseiDataSheet = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_setZokuseiDataSheet", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+
+End Function
+

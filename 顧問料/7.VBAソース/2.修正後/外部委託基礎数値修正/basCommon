@@ -1,0 +1,233 @@
+Attribute VB_Name = "basCommon"
+Option Explicit
+'*************************************************************************
+'
+'プロジェクト名：外部委託ライセンスフィー計算システム・外部委託基礎数値修正
+'
+'オブジェクト名：basCommon
+'
+'機能概要　    ：共通機能
+'
+'更新履歴　    ：2008/06/20 SRA H.Anpo  新規作成
+'
+'*************************************************************************
+Private Const MODULE_NAME As String = "basCommon"
+
+
+'*************************************************************************
+'関数名　　：シート保護
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：メインシートを保護する
+'
+'更新履歴　：2008/06/20 SRA H.Anpo  新規作成
+'
+'*************************************************************************
+Public Sub subCmnProtectActiveSheet()
+'    ActiveSheet.Protect DrawingObjects:=True, Contents:=True, Scenarios:=True, Password:="sra"
+    gCom01_SheetProtect ThisWorkbook.Sheets(SHEET_MAIN), True
+
+End Sub
+
+
+'*************************************************************************
+'関数名　　：シート保護解除
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：メインシートを保護解除する
+'
+'更新履歴　：2008/06/20 SRA H.Anpo  新規作成
+'
+'*************************************************************************
+Public Sub subCmnUnProtectActiveSheet()
+'    ActiveSheet.Unprotect Password:="sra"
+    gCom01_SheetProtect ThisWorkbook.Sheets(SHEET_MAIN), False
+End Sub
+
+
+'*************************************************************************
+'関数名　　：オプションボタン作成
+'
+'引　　数　：ARG1   I   CellName        String  作成するセルのアドレス ex)D16
+'　　　　　：ARG2   I   LinkCellName    String  リンクセルのアドレス ex)AN1
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：メインシートのCellNameで指定されたセルにオプションボタンを作成する
+'
+'更新履歴　：2008/06/20 SRA H.Anpo  新規作成
+'
+'*************************************************************************
+Public Function fncCmnSetOptionButton(CellName As String, LinkCellName As String) As Long
+    
+On Error GoTo ErrorHandler
+    fncCmnSetOptionButton = 0
+    
+    Dim lngZoom As Long
+    Dim objX    As Object
+    
+    'ズームが100%以外の時、現在の倍率を退避後100%にする
+    lngZoom = ActiveWindow.Zoom
+    ActiveWindow.Zoom = 100
+    
+    'オプションボタン作成
+    With ThisWorkbook.Sheets(SHEET_MAIN).Range(CellName)
+        Set objX = ThisWorkbook.Sheets(SHEET_MAIN).Shapes.AddFormControl( _
+            xlOptionButton, _
+            .Left + 3, _
+            .Top - 1, _
+            10, _
+            10)
+        With objX.OLEFormat.Object
+            .Display3DShading = True
+            .Caption = ""
+            .LinkedCell = LinkCellName
+        End With
+    End With
+    
+    'ズームを退避した倍率に戻す
+    ActiveWindow.Zoom = lngZoom
+
+    Exit Function
+
+ErrorHandler:
+    MsgBox Err.Description
+    fncCmnSetOptionButton = Err.Number
+    
+End Function
+
+
+'*************************************************************************
+'関数名　　：オプションボタン削除
+'
+'引　　数　：なし
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：メインシート上のオプションボタンを全て削除する
+'
+'更新履歴　：2008/06/20 SRA H.Anpo  新規作成
+'
+'*************************************************************************
+Function fncCmnDelOptionButton() As Long
+    Dim ccc As Object
+
+On Error GoTo ErrorHandler
+    fncCmnDelOptionButton = 0
+
+    With ThisWorkbook.Sheets(SHEET_MAIN)
+        For Each ccc In .Shapes
+            If ccc.Type = msoFormControl Then
+                If ccc.FormControlType = xlOptionButton Then
+                    ccc.Delete
+                End If
+            End If
+        Next
+    End With
+
+    Exit Function
+
+ErrorHandler:
+    MsgBox Err.Description
+    fncCmnDelOptionButton = Err.Number
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：チェックボックス作成
+'
+'引　　数　：ARG1   I   CellName        String  作成するセルのアドレス ex)D16
+'　　　　　：ARG2   I   LinkCellName    String  リンクセルのアドレス ex)AP16
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：メインシートのCellNameで指定されたセルにチェックボックスを作成する
+'
+'更新履歴　：2008/06/20 SRA H.Anpo  新規作成
+'
+'*************************************************************************
+Public Function fncCmnSetCheckBox(CellName As String, LinkCellName As String) As Long
+    
+On Error GoTo ErrorHandler
+    fncCmnSetCheckBox = 0
+    
+    Dim lngZoom As Long
+    Dim objX    As Object
+    
+    'ズームが100%以外の時、現在の倍率を退避後100%にする
+    lngZoom = ActiveWindow.Zoom
+    ActiveWindow.Zoom = 100
+    
+    'チェックボックス作成
+    With ThisWorkbook.Sheets(SHEET_MAIN).Range(CellName)
+        Set objX = ThisWorkbook.Sheets(SHEET_MAIN).Shapes.AddFormControl( _
+            xlCheckBox, _
+            .Left + 14, _
+            .Top - 0.5, _
+            5, _
+            5)
+        With objX.OLEFormat.Object
+            .Display3DShading = True
+            .Caption = ""
+            .LinkedCell = LinkCellName
+        End With
+    End With
+    
+    'ズームを退避した倍率に戻す
+    ActiveWindow.Zoom = lngZoom
+    
+    Exit Function
+
+ErrorHandler:
+    MsgBox Err.Description
+    fncCmnSetCheckBox = Err.Number
+    
+End Function
+
+
+'*************************************************************************
+'関数名　　：チェックボックス削除
+'
+'引　　数　：なし
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：メインシート上のチェックボックスを全て削除する
+'
+'更新履歴　：2008/06/20 SRA H.Anpo  新規作成
+'
+'*************************************************************************
+Function fncCmnDelCheckBox() As Long
+    Dim ccc As Object
+    Dim objRange As Object
+    Dim strName As String
+
+On Error GoTo ErrorHandler
+    fncCmnDelCheckBox = 0
+
+    With ThisWorkbook.Sheets(SHEET_MAIN)
+        For Each ccc In .Shapes
+            If ccc.Type = msoFormControl Then
+                If ccc.FormControlType = xlCheckBox Then
+                    ccc.Delete
+                End If
+            End If
+        Next
+    End With
+
+    Exit Function
+
+ErrorHandler:
+    MsgBox Err.Description
+    fncCmnDelCheckBox = Err.Number
+
+End Function
+
+

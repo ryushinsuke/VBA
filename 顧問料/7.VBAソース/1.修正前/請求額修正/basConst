@@ -1,0 +1,95 @@
+Attribute VB_Name = "basConst"
+Option Explicit
+'*************************************************************************
+'
+'プロジェクト名：契約管理システム・請求額修正
+'
+'オブジェクト名：basConst
+'
+'機能概要　：グローバル定数の宣言
+'
+'更新履歴　：2007/04/17 SRA T.Ichikawa  新規作成
+'        　：2009/07/16 SRA T.Mizutani  請求額修正画面における消費税額修正
+'
+'*************************************************************************
+
+'---- シート名 -----------------------------------------------------------
+'起動時に存在するシート
+Public Const SHEET_MAIN                     As String = "メイン画面"
+Public Const SHEET_TEMP                     As String = "Template"
+Public Const SHEET_DATA                     As String = "Data"
+
+Public Const HEADER_BOTTOM_ROW              As Long = 12
+Public Const LIST_DATA_TOP_ROW              As Long = 13
+
+Public Const RNG_KOUZA_NO                   As String = "G5"
+Public Const RNG_KOUZA_NM                   As String = "I5"
+Public Const RNG_SEIKYUBI                   As String = "G7"
+
+'更新プログラムID
+Public Const PROGRAM_ID                     As String = "SEIKYU_GAKU_SHUUSEI"
+'更新ユーザーID
+Public Const USER_ID                        As String = "APL001"
+
+Public Const RNG_SV_KOUZA_NO                As String = "AN5"
+Public Const RNG_SV_SEIKYUBI                As String = "AN7"
+
+Public Const RNG_CHK_FLG_LINKCELL           As String = "AP"
+
+Public Const COLN_DATA_FLAG                 As Long = 3
+
+'一覧表示欄
+Public Const COLN_DATA_TOP                  As Long = 4
+Public Const COLN_SEIKYU_SHO_KIKAN_FROM     As Long = 6
+Public Const COLN_SEIKYU_SHO_KIKAN_TO       As Long = 8
+Public Const COLN_KAMI_SHIMO_KBN            As Long = 10
+Public Const COLN_NYUKIN_YOTEIBI            As Long = 12
+Public Const COLN_STATUS                    As Long = 14
+Public Const COLN_SEIKYU_GAKU               As Long = 16
+Public Const COLN_SHOHIZEI_GAKU             As Long = 20
+Public Const COLN_SEIKYU_SHUSEI_GAKU        As Long = 23
+Public Const COLN_SHOHIZEI_SHUUSEIGAKU      As Long = 27
+Public Const COLN_J_CHK_DEFAULT             As Long = 41
+Public Const COLN_J_CHK_FLG                 As Long = 42
+Public Const COLN_SEIKYU_ID                 As Long = 43
+Public Const COLN_HIZUKE_SHURUI             As Long = 44
+'Public Const COLN_KEISAN_FROM_YMD           As Long = 45
+
+'メッセージ区分
+Public Const MSGLVL_INFO                    As String = "1"     '情報
+Public Const MSGLVL_QUESTION                As String = "2"     '質問
+Public Const MSGLVL_WARNNING                As String = "3"     '警告
+Public Const MSGLVL_FATAL                   As String = "4"     'エラー
+
+'付加メッセージ1(項目名)
+Public Const MSG1_NUMCD                     As String = "口座番号"
+Public Const MSG1_SEIKYUBI                  As String = "請求日"
+Public Const MSG1_ICHIRAN_DISP              As String = "一覧表示欄"
+Public Const MSG1_SEIKYU_SHUSEI_GAKU        As String = "課税後請求顧問料修正額 (一覧表示欄)"
+'------------<Modify Start T.Mizutani 2009/07/16>-----------------------
+Public Const MSG1_SHOHIZEI_SHUSEI_GAKU      As String = "(内　消費税) (一覧表示欄)"
+Public Const MSG1_SHUSEI_GAKU               As String = "修正額 (一覧表示欄)"
+'------------<Modify End T.Mizutani 2009/07/16>-----------------------
+
+'付加メッセージ2
+Public Const MSG2_LEN_KOUZANO               As String = "７桁以内の値を入力して下さい。"
+Public Const MSG2_LEN_CURRENCY              As String = "１５桁以内の金額を入力して下さい｡"
+Public Const MSG2_CNG_KOUZANO               As String = "口座番号の内容が変更されています｡"
+Public Const MSG2_CNG_SEIKYUBI              As String = "請求日の内容が変更されています｡"
+Public Const MSG2_MANY_ROWS_SJ              As String = "更新対象の顧問料情報が複数存在します｡"
+'------------<Modify Start T.Mizutani 2009/07/16>-----------------------
+Public Const MSG2_CHK_SHUSEI_GAKU           As String = "修正額は両方入力するか、または、両方未入力にして下さい。"
+Public Const MSG2_SHUSEI_GAKU_NG1           As String = "課税後請求顧問料修正額 >= (内　消費税)で入力して下さい。"
+Public Const MSG2_SHUSEI_GAKU_NG2           As String = "課税後請求顧問料修正額 <= (内　消費税)で入力して下さい。"
+'------------<Modify End T.Mizutani 2009/07/16>-----------------------
+
+'---- 入力コントロール桁数 -----------------------------------------------
+Public Const LEN_NULL                       As Long = 0
+Public Const LEN_DATE                       As Long = 8
+Public Const LEN_KOUZA                      As Long = 7
+Public Const LEN_CURRENCY                   As Long = 15
+
+'ODBCエラーコード
+'[Oracle][ODBC][Ora]ORA-00054: リソース・ビジー、NOWAITが指定されていました。
+Public Const ODBC_ERRCD_RESOURCE_BUSY       As String = "ORA-00054"
+

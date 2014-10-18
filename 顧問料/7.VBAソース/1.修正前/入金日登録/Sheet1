@@ -1,0 +1,392 @@
+VERSION 1.0 CLASS
+BEGIN
+  MultiUse = -1  'True
+END
+Attribute VB_Name = "Sheet1"
+Attribute VB_GlobalNameSpace = False
+Attribute VB_Creatable = False
+Attribute VB_PredeclaredId = True
+Attribute VB_Exposed = True
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：国内顧問料計算システム・計算方法
+'
+'オブジェクト名：Sheet1
+'
+'機能概要　：メイン画面
+'
+'更新履歴　：2006/07/04 SRA 東       新規作成
+'
+'*************************************************************************
+Private Const MODULE_NAME As String = "main"
+
+
+   
+'*************************************************************************
+'関数名　　：全部入金ボタン・イベントプロシージャ
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：全部入金ボタンを押下された場合の処理
+'
+'更新履歴　：2006/08/28 SRA H.早川    新規作成
+'
+'*************************************************************************
+Private Sub cmdAll_Click()
+    
+    With Application
+        .ScreenUpdating = False
+        gCom01_SheetProtect Worksheets(MAIN_SHEETNAME), False   '画面Refresh停止/保護解除
+
+        gfunc_cmdAll Worksheets(MAIN_SHEETNAME)
+        
+        gCom01_SheetProtect Worksheets(MAIN_SHEETNAME), True
+        .ScreenUpdating = True     '保護/画面Refresh
+    End With
+End Sub
+
+'*************************************************************************
+'関数名　　：検索ボタン・イベントプロシージャ
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：検索ボタンを押下された場合の処理
+'
+'更新履歴　：2006/07/05 SRA T.Azuma    新規作成
+'
+'*************************************************************************
+Private Sub cmdSearch_Click()
+
+On Error GoTo Error_Section
+
+    If Worksheets(MAIN_SHEETNAME).cmdUp.Enabled Then        '更新可能状態なら
+        If MsgBox(gfunc_ErrorMsg(2, 10003, "", "", False), _
+                  vbQuestion + vbYesNo, ThisWorkbook.Name) = vbNo Then  '検索確認
+            Exit Sub                                                    '検索しない場合
+        End If
+    End If
+    
+    With Application
+        .ScreenUpdating = False
+        .EnableEvents = False
+    End With
+    Worksheets(MAIN_SHEETNAME).EnableCalculation = False
+    
+    gCom01_SheetProtect Worksheets(MAIN_SHEETNAME), False   '画面Refresh停止/保護解除
+
+    '検索メイン
+    Call gsub_KensakuMain(Worksheets(MAIN_SHEETNAME), True)
+
+    gCom01_SheetProtect Worksheets(MAIN_SHEETNAME), True
+    
+    GoTo Exit_Section
+
+Error_Section:
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "cmdSearch_Click", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+Exit_Section:
+    gCom01_SheetProtect Worksheets(MAIN_SHEETNAME), True
+    
+    Worksheets(MAIN_SHEETNAME).EnableCalculation = True
+    With Application
+        .EnableEvents = True
+        .ScreenUpdating = True
+    End With
+    
+End Sub
+
+
+'*************************************************************************
+'関数名　　：更新ボタン・イベントプロシージャ
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：更新ボタンを押下された場合の処理
+'
+'更新履歴　：2006/08/26 SRA H.早川    新規作成
+'
+'*************************************************************************
+Private Sub cmdUp_Click()
+
+On Error GoTo Error_Section
+
+    Dim blnRet      As Boolean
+    Dim Sisan1()    As Variant      '請求情報
+    Dim strMsg      As String
+    Dim lngRet      As Long
+    
+    Erase Sisan1
+    
+    blnRet = False
+    
+    With Application
+        .ScreenUpdating = False
+        .EnableEvents = False
+    End With
+    Worksheets(MAIN_SHEETNAME).EnableCalculation = False
+    
+    gCom01_SheetProtect Worksheets(MAIN_SHEETNAME), False    'シート保護解除
+    
+    
+    '入力チェック処理(更新時)
+    blnRet = gfuncSeikyu_UpdInputCheck(Worksheets(MAIN_SHEETNAME))
+    
+    If blnRet = False Then
+        GoTo Exit_Section   'SubEnd
+    End If
+    
+    
+    '最終処理確認
+    strMsg = gfunc_ErrorMsg(2, 1, "", "", False)
+    lngRet = MsgBox(strMsg, vbQuestion + vbOKCancel, Application.ActiveWorkbook.Name)
+    If lngRet = vbCancel Then
+        GoTo Exit_Section   'SubEnd
+    End If
+    
+    blnRet = False
+    
+    '更新処理
+    blnRet = gfuncSeikyu_DoUpdate(Worksheets(MAIN_SHEETNAME))
+    
+    If blnRet = False Then
+    '更新エラー
+        Call gfunc_ErrorMsg(1, 3, "", "", True)
+        
+        GoTo Exit_Section   'SubEnd
+        
+    Else
+    '更新成功
+    
+        '検索処理
+        Call gsub_KensakuMain(Worksheets(MAIN_SHEETNAME), True)
+    
+        'メッセージ
+        Call gfunc_ErrorMsg(1, 2, "", "", True)
+    End If
+    
+    GoTo Exit_Section   'SubEnd
+    
+Error_Section:
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "cmdUp_Click", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+Exit_Section:
+    Erase Sisan1
+    gCom01_SheetProtect Worksheets(MAIN_SHEETNAME), True    'シート保護
+    
+    Erase Sisan1
+    
+    Worksheets(MAIN_SHEETNAME).EnableCalculation = True
+    With Application
+        .EnableEvents = True
+        .ScreenUpdating = True
+    End With
+
+End Sub
+
+'------------<Modify Start azuma 2007/01/17 > -----------------------
+
+''''*************************************************************************
+''''関数名　　：信託銀行コンボフォーカス取得処理・イベントプロシージャ
+''''
+''''引　　数　：
+''''
+''''戻り値　　：なし
+''''
+''''機能説明　：セルの罫線書式変更（アクティブ状態にする）
+''''
+''''更新履歴　：2006/09/11 SRA H.早川    新規作成
+''''
+''''*************************************************************************
+'''Private Sub Combo信託銀行_GotFocus()
+''''''    Dim objX As Object, lngCnt As Long
+'''
+'''    Combo信託銀行.ShowDropButtonWhen = fmShowDropButtonWhenAlways
+'''
+''''''    With Range("信託銀行コード")
+''''''        For lngCnt = 1 To 4
+''''''            .Borders(lngCnt).Color = vbMagenta
+''''''            .Borders(lngCnt).LineStyle = xlContinuous
+''''''        Next
+''''''    End With
+'''
+'''    subCmnSetLn Range("信託銀行コード"), True
+'''
+'''End Sub
+'''
+''''*************************************************************************
+''''関数名　　：信託銀行コンボフォーカス喪失処理・イベントプロシージャ
+''''
+''''引　　数　：
+''''
+''''戻り値　　：なし
+''''
+''''機能説明　：セルの罫線書式変更（アクティブ状態を解除し、通常にする）
+''''
+''''更新履歴　：2006/09/11 SRA H.早川    新規作成
+''''
+''''*************************************************************************
+'''Private Sub Combo信託銀行_LostFocus()
+''''''    Dim objX As Object, lngCnt As Long
+''''''    Dim lngClr As Long
+'''
+'''    Combo信託銀行.ShowDropButtonWhen = fmShowDropButtonWhenNever
+'''
+''''''    lngClr = Range("口座番号").Borders(1).Color
+''''''
+''''''    With Range("信託銀行コード")
+''''''        For lngCnt = 1 To 4
+''''''            .Borders(lngCnt).Color = lngClr
+''''''            .Borders(lngCnt).LineStyle = xlDouble
+''''''        Next
+''''''    End With
+'''
+'''    subCmnSetLn Range("信託銀行コード"), False, Range("口座番号").Borders(1).Color
+'''
+'''End Sub
+'''
+''''*************************************************************************
+''''関数名　　：信託銀行コンボキー入力処理・イベントプロシージャ
+''''
+''''引　　数　：
+''''
+''''戻り値　　：なし
+''''
+''''機能説明　：ＴＡＢ、ＣＲキー処理をする。
+''''
+''''更新履歴　：2006/09/11 SRA H.早川    新規作成
+''''
+''''*************************************************************************
+'''Private Sub Combo信託銀行_KeyDown(ByVal KeyCode As MSForms.ReturnInteger, ByVal Shift As Integer)
+'''    Select Case Chr(KeyCode)
+'''    Case vbTab
+'''        If Shift = 0 Then
+'''            Range("請求日FROM").Activate
+'''        Else
+'''            Range("請求期間TO").Activate
+'''        End If
+'''    Case vbCr
+'''        Cells(Range("信託銀行コード").Row + 1, _
+'''              Range("信託銀行コード").Column).Activate
+'''    End Select
+'''End Sub
+'''
+'------------<Modify End   azuma 2007/01/17 > -----------------------
+
+'*************************************************************************
+'関数名　　：ワークシート再計算処理・イベントプロシージャ
+'
+'引　　数　：
+'
+'戻り値　　：なし
+'
+'機能説明　：更新ボタンの書式設定
+'
+'更新履歴　：2006/08/28 SRA H.早川    新規作成
+'
+'*************************************************************************
+
+Private Sub Worksheet_Calculate()
+    '更新ボタンの使用可能への変更
+    Select Case True
+    Case Not cmdUp.Enabled And Range("変更比較FLAG合計").Value > 0      '使用不可で変更行あり
+        cmdUp.Enabled = True
+    Case cmdUp.Enabled And Range("変更比較FLAG合計").Value = 0          '使用可能で変更行なし
+        cmdUp.Enabled = False
+    End Select
+
+End Sub
+
+'*************************************************************************
+'関数名　　：セル変更処理・イベントプロシージャ
+'
+'引　　数　：
+'
+'戻り値　　：なし
+'
+'機能説明　：セル変更後の書式設定
+'
+'更新履歴　：2006/07/07 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Private Sub Worksheet_Change(ByVal Target As Range)
+    
+On Error Resume Next
+    
+    Select Case Target
+    Case Range("口座番号"), Range("請求顧問料合計") _
+       , Range("消費税合計"), Range("信託銀行コード")     'なにもなし
+    Case Else
+        '日付のフォーマット
+        '　　※セルを日付型(YYYYMMDD)にすると"/"区切りで入力しないと####となる為の対策
+        If IsDate(Target.Value) = True Then
+            Target.Value = CStr(Format(Target.Value, "YYYYMMDD"))
+        End If
+    End Select
+
+'------------<Modify Start azuma 2007/01/17 > -----------------------
+    Dim strResult   As String
+    Dim blnDataFlg  As Boolean
+    
+    strResult = ""
+    
+    If Target.Row = ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range("信託銀行コード").Row And _
+    Target.Column = ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range("信託銀行コード").Column Then
+    '信託銀行コード
+        
+        strResult = func_CodeListSearch(Target.Text, ThisWorkbook.Name, DATA_SHEETNAME, SHINTAKU_BK_LIST, blnDataFlg)
+        
+        If Trim(strResult) <> "" Then
+            Target.Value = strResult
+        End If
+    End If
+    
+'------------<Modify End   azuma 2007/01/17 > -----------------------
+
+End Sub
+
+
+'------------<Modify Start azuma 2007/01/17 > -----------------------
+''''*************************************************************************
+''''関数名　　：セル位置移動処理・イベントプロシージャ
+''''
+''''引　　数　：
+''''
+''''戻り値　　：なし
+''''
+''''機能説明　：信託銀行コンボリストへの位置付け
+''''
+''''更新履歴　：2006/09/11 SRA H.早川    新規作成
+''''
+''''*************************************************************************
+'''Private Sub Worksheet_SelectionChange(ByVal Target As Range)
+'''    ''' RANGE 直接比較は実行時エラー
+'''    With Target
+'''        Select Case True
+'''        Case .Row = Range("信託銀行コード").Row And _
+'''          .Column = Range("信託銀行コード").Column
+'''            Combo信託銀行.Activate
+'''        End Select
+'''    End With
+'''
+'''End Sub
+'------------<Modify End   azuma 2007/01/17 > -----------------------
+

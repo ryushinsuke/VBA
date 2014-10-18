@@ -1,0 +1,257 @@
+Attribute VB_Name = "basCalcNyuknyotei"
+Option Explicit
+
+Const MODULE_NAME = "basCalcNyuknyotei"
+
+'*************************************************************************
+'関数名　　：fncGetNyuYoteibi
+'
+'引　　数　：
+'           lngBaseDate       I       基準年月日（：請求日）
+'           lngNyukinKbn      I       入金区分 (1:請求月月末 2:請求月翌月末 3: 期初 4: 期末 9: その他)
+'           lngKikanFrom      I       期間FROM
+'           lngKikanTo　      I       期間TO
+
+'戻り値　　：
+'
+'機能説明　：入金予定日算出
+'
+'更新履歴　：2007/01/25 SRA Iida    新規作成
+'
+'*************************************************************************
+Public Function fncGetNyuKnYoteibi(ByVal lngBaseDate As Long, _
+                                   ByVal lngNyukinkbn As Long, _
+                                   Optional lngKikanFrom As Long = 0, _
+                                   Optional lngKikanTo As Long = 0) As String
+On Error GoTo ErrorHandler
+
+    fncGetNyuKnYoteibi = ""
+    
+    Dim lngdate     As Long
+    Dim strDate     As String
+    
+    lngdate = 0
+    
+    If fncChkDate(CStr(lngBaseDate)) = False Then
+        fncGetNyuKnYoteibi = ""
+        Exit Function
+    End If
+    
+    Select Case lngNyukinkbn
+        Case 1
+            '月末算出
+            strDate = DateAdd("m", 1, Format(Left(lngBaseDate, 6), "@@@@/@@/01"))
+            strDate = DateAdd("d", -1, strDate)
+            fncGetNyuKnYoteibi = fncGetEigyoDate(strDate)
+        Case 2
+            '翌月末算出
+            strDate = DateAdd("m", 2, Format(Left(lngBaseDate, 6), "@@@@/@@/01"))
+            strDate = DateAdd("d", -1, strDate)
+            fncGetNyuKnYoteibi = fncGetEigyoDate(strDate)
+        Case 3
+            '期初
+            If lngKikanFrom <> 0 Then
+                If fncChkDate(CStr(lngKikanFrom)) = False Then
+                    fncGetNyuKnYoteibi = ""
+                    Exit Function
+                End If
+            End If
+            
+            If lngBaseDate <= lngKikanFrom Then
+                '期間FROMの1ｹ月後を算出
+                strDate = DateAdd("m", 1, Format(lngKikanFrom, "@@@@/@@/@@"))
+            Else
+                If lngBaseDate > lngKikanFrom Then
+                    '基準日の1ｹ月後を算出
+                    strDate = DateAdd("m", 1, Format(lngBaseDate, "@@@@/@@/@@"))
+                End If
+            End If
+            fncGetNyuKnYoteibi = fncGetEigyoDate(strDate)
+        Case 4
+            '期末
+            If lngKikanTo <> 0 Then
+                If fncChkDate(CStr(lngKikanTo)) = False Then
+                    fncGetNyuKnYoteibi = ""
+                    Exit Function
+                End If
+            End If
+            
+            strDate = Format(lngKikanTo, "@@@@/@@/@@")
+            fncGetNyuKnYoteibi = fncGetEigyoDate(strDate)
+            
+        Case Else
+            fncGetNyuKnYoteibi = ""
+               
+    End Select
+    Exit Function
+    
+ErrorHandler:
+    fncGetNyuKnYoteibi = ""
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "fncGetNyuKnYoteibi", Err.Number, Err.Description)
+
+End Function
+'*************************************************************************
+'関数名　　：fncGetEigyoDate
+'
+'引　　数　：
+'           strBaseDate       I       基準年月日
+'
+'戻り値　　：
+'
+'機能説明　：基準日より営業日算出
+'
+'更新履歴　：2007/01/25 SRA Iida    新規作成
+'
+'*************************************************************************
+Public Function fncGetEigyoDate(ByVal strBaseDate As String) As String
+On Error GoTo ErrorHandler
+
+    fncGetEigyoDate = ""
+
+    Dim lngRet          As Long
+    Dim strEigyoDate    As String
+    
+    '<2007/02/07> ADD S iida
+    If fncChkDate(strBaseDate) = False Then
+        fncGetEigyoDate = ""
+        Exit Function
+    End If
+    '<2007/02/07> ADD E iida
+    
+    Do
+        '休日判定
+        lngRet = fncGetHoliday(strBaseDate)
+        If lngRet = -1 Then
+            fncGetEigyoDate = ""
+            Exit Function
+        Else
+            '平日の場合、STOP
+            If lngRet = 0 Then
+                Exit Do
+            End If
+            '休日の場合、進める
+            strBaseDate = DateAdd("d", -1, strBaseDate)
+        End If
+    Loop
+    fncGetEigyoDate = Format(strBaseDate, "yyyymmdd")
+    Exit Function
+
+ErrorHandler:
+    fncGetEigyoDate = ""
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "fncGetEigyoDate", Err.Number, Err.Description)
+
+End Function
+
+'*************************************************************************
+'関数名　　：fncGetHoliday
+'
+'引　　数　：
+'           lngBaseDate       I       基準年月日
+'
+'戻り値　　：
+'
+'機能説明　：基準日が休日か判定
+'
+'更新履歴　：2007/01/25 SRA Iida    新規作成
+'更新履歴　：2007/04/13 SRA T.Ichikawa  修正    KYK_CALENDARテーブルに対応
+'
+'*************************************************************************
+Public Function fncGetHoliday(ByVal strBaseDate As String) As Long
+On Error GoTo ErrorHandler
+
+    fncGetHoliday = -1
+
+    Dim lngCol      As Long
+    Dim lngRow      As Long
+'    Dim strYM       As String      'Del 2007/04/13 T.Ichikawa
+'    Dim strDD       As String      'Del 2007/04/13 T.Ichikawa
+    Dim strSql      As String
+'    Dim strFld      As String      'Del 2007/04/13 T.Ichikawa
+    Dim strErrCode  As String
+    Dim vdata()     As Variant
+    
+'------------<Modify Start T.Ichikawa 2007/04/13 > -----------------------
+'    strYM = Format(strBaseDate, "yyyymm")
+'    strDD = Format(strBaseDate, "dd")
+'
+'    strFld = "day" & Format(strDD, "#0") & "_flg"
+'
+'    strsql = ""
+'    strsql = "SELECT " & strFld & " FROM CALENDAR "
+'    strsql = strsql & " WHERE KIJUN_DT =" & CLng(strYM)
+        
+    strSql = ""
+    strSql = strSql & "SELECT" & vbCrLf
+    strSql = strSql & "    FLG" & vbCrLf
+    strSql = strSql & "FROM" & vbCrLf
+    strSql = strSql & "    KYK_CALENDAR" & vbCrLf
+    strSql = strSql & "WHERE" & vbCrLf
+    strSql = strSql & "    DAY = " & CLng(Format(strBaseDate, "YYYYMMDD"))
+'------------<Modify End   T.Ichikawa 2007/04/13 > -----------------------
+    
+    '実行
+    Erase vdata
+    Call gclsDB.DoExequteSql(gcSELECT, strSql, vdata, lngCol, lngRow, strErrCode)
+    If lngRow > 0 Then
+    '休日フラグ取得
+        If vdata(0, 0) <> "" And (vdata(0, 0) = "0" Or vdata(0, 0) = "1") Then
+            fncGetHoliday = CLng(vdata(0, 0))
+        Else
+            fncGetHoliday = -1
+            Exit Function
+        End If
+    End If
+    Exit Function
+
+ErrorHandler:
+    fncGetHoliday = -1
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "fncGetHoliday", Err.Number, Err.Description)
+
+End Function
+
+'*************************************************************************
+'関数名　　：fncChkDate
+'
+'引　　数　：
+'            strBaseDate       I       基準年月日 (yyyy/mm/dd)
+'
+'戻り値　　：
+'
+'機能説明　：基準日が日付かチェック
+'
+'更新履歴　：2007/02/07 SRA Iida    新規作成
+'
+'*************************************************************************
+Public Function fncChkDate(ByVal strBaseDate As String) As Boolean
+On Error GoTo Exit01
+
+    fncChkDate = False
+    
+    Dim strbuf As String
+    
+    strbuf = ""
+    
+    '日付妥当チェック
+    If Trim(strBaseDate) = "" Then GoTo Exit01
+    If Len(Trim(strBaseDate)) = 8 Then
+        strbuf = Format(Trim(strBaseDate), "@@@@/@@/@@")
+    Else
+        If Len(Trim(strBaseDate)) = 10 Then
+            strbuf = Mid(Trim(strBaseDate), 1, 4) & "/" & Mid(Trim(strBaseDate), 6, 2) & "/" & Mid(Trim(strBaseDate), 9, 2)
+        Else
+            GoTo Exit01
+        End If
+    End If
+    
+    If IsDate(strbuf) = False Then GoTo Exit01
+    
+    fncChkDate = True
+    Exit Function
+
+Exit01:
+    fncChkDate = False
+
+End Function
+
+
+

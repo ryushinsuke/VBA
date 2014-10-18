@@ -1,0 +1,1341 @@
+Attribute VB_Name = "basClickRunBtn4400"
+Option Explicit
+
+'*************************************************************************
+'プロジェクト名：新契約管理システム・業務帳票作成指示
+'オブジェクト名：basClickRunBtn4400
+'機能概要　：国内新基準
+'更新履歴　：2007/11/12 SRA 吉井     新規作成
+'　　　　　：2008/02/07 SRA 吉井     PH4総合テスト障害一覧 項番17対応
+'　　　　　：2008/02/08 SRA 吉井     PH4総合テスト障害一覧 項番14対応
+'　　　　　：2008/02/14 SRA 吉井     項番17対応(仕様変更のため再修正)
+'　　　　　：2008/03/03 SRA 安保     レスポンス改善
+'　　　　　：2008/03/10 SRA 吉井     国内新基準の増減口座の判定変更(時価→元本)【案件名－増減口座判定基準変更20080215】
+'        　：2008/11/25 SRA Y.Azuma  変更   国内一覧レイアウト改善
+'
+'*************************************************************************
+
+Const MODULE_NAME = "basClickRunBtn4400"
+
+Private Const cBaseFile = gc帳票Base44
+Private Const cPreFName = gc帳票名44
+
+'------------<Modify Start azuma 2008/11/25 > 国内一覧レイアウト改善---------------
+Private Const cKIJUNBI = "基準日"
+Private Const cSAISHU = "最終項目"
+'------------<Modify End   azuma 2008/11/25 > 国内一覧レイアウト改善---------------
+
+
+'新規・増減・解約終了一覧構造体
+Private Type typIchiran
+    NenKensu            As Variant  '年金件数
+    HiNenKensu          As Variant  '非年金件数
+    KeiKensu            As Variant  '合計件数
+    NenGaku             As Variant  '年金額
+    HiNenGaku           As Variant  '非年金額
+    KeiGaku             As Variant  '合計額
+    MeisaiCnt           As Long     '明細レコード数
+    Meisai()            As Variant  '明細
+End Type
+
+Dim glngSessionID       As Long     'ORACLEセッションID(ワークテーブル用)
+
+'*************************************************************************
+'関数名　　：統計情報 国内新基準(帳票作成)
+'引　　数　：
+'           objTarget        I           対象のシート
+'戻り値　　：
+'機能説明　：
+'更新履歴　：2007/10/31 SRA             新規作成
+'更新履歴　：2007/12/04 SRA Y.Azuma    変更     (PH4)印刷エラー対策
+'
+'*************************************************************************
+Public Function fncClickRunBtn4400(ByRef objTarget As Object) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncClickRunBtn4400"
+
+On Error GoTo ErrSection
+
+    Dim strDay          As String
+    Dim strOutFName     As String
+    Dim strOutFNameOnly As String
+    
+    Dim inData1()       As Variant              '国内一覧               データ取得用
+    Dim inData2()       As typIchiran           '新規・増減・解約終了一覧   データ取得用
+                                                '   inData2(1) : 新規契約口座一覧
+                                                '   inData2(2) : 解約・終了口座一覧
+                                                '   inData2(3) : 増額口座一覧
+                                                '   inData2(4) : 減額口座一覧
+    
+    Dim strKjnLastYmd   As String   '基準月末日
+    Dim strKjnFirstYmd  As String   '基準月初日
+    Dim strZenLastYmd   As String   '前月末日
+'=== 2008/02/14 PH4総合テスト障害一覧 項番17対応 Deleted By S.Yoshii Start
+'=== 2008/02/07 PH4総合テスト障害一覧 項番17対応 Added By S.Yoshii Start
+'    Dim strZenZenLastYmd   As String   '前々月末日
+'=== 2008/02/07 PH4総合テスト障害一覧 項番17対応 Added By S.Yoshii End
+'=== 2008/02/14 PH4総合テスト障害一覧 項番17対応 Deleted By S.Yoshii End
+    Dim wDate           As Date     '日付編集用WORK
+    
+    Dim strWhereString  As String   'ワークテーブル作成SQLのWHERE文編集用
+    
+    Call subBeginProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    fncClickRunBtn4400 = False
+   
+    With objTarget
+
+        'マウスポインターをWAITにする
+        ThisWorkbook.Application.Cursor = xlWait
+
+        ' 作成選択の場合
+        If .chkMake.Value = True Then
+        
+            strDay = Trim(.Range("基準年月4400").Value)
+
+            '基準年月の月初日取得
+            strKjnFirstYmd = strDay & "01"
+            
+            '基準年月の前月末日取得
+            wDate = Mid(strKjnFirstYmd, 1, 4) & "/" & Mid(strKjnFirstYmd, 5, 2) & "/" & Mid(strKjnFirstYmd, 7, 2)
+            wDate = DateAdd("d", -1, wDate)
+            strZenLastYmd = Format(wDate, "YYYYMMDD")
+            
+'=== 2008/02/14 PH4総合テスト障害一覧 項番17対応 Deleted By S.Yoshii Start
+''=== 2008/02/07 PH4総合テスト障害一覧 項番17対応 Added By S.Yoshii Start
+'            '基準年月の前々月末日取得
+'            wDate = Mid(strZenLastYmd, 1, 4) & "/" & Mid(strZenLastYmd, 5, 2) & "/01"
+'            wDate = DateAdd("d", -1, wDate)
+'            strZenZenLastYmd = Format(wDate, "YYYYMMDD")
+''=== 2008/02/07 PH4総合テスト障害一覧 項番17対応 Added By S.Yoshii End
+'=== 2008/02/14 PH4総合テスト障害一覧 項番17対応 Deleted By S.Yoshii End
+            
+            '基準年月の月末日取得
+            wDate = Mid(strKjnFirstYmd, 1, 4) & "/" & Mid(strKjnFirstYmd, 5, 2) & "/" & Mid(strKjnFirstYmd, 7, 2)
+            wDate = DateAdd("m", 1, wDate)
+            wDate = DateAdd("d", -1, wDate)
+            strKjnLastYmd = Format(wDate, "YYYYMMDD")
+            
+            'オラクルSessionID取得
+            If fncGetSessionID(glngSessionID) = False Then
+                GoTo RtnErrSection
+            End If
+            
+
+'=== 増減口座判定基準変更20080215 2008/03/10 Modified By SRA吉井 START
+'=== 2008/02/14 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii Start
+''=== 2008/02/07 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii Start
+''            strWhereString = " WHERE KIJYUN_YMD IN ('" & strZenLastYmd & "','" & strKjnLastYmd & "') AND SETTEI_KBN = '1' "
+'            strWhereString = " WHERE KIJYUN_YMD IN ('" & strZenZenLastYmd & "','" & strZenLastYmd & "','" & strKjnLastYmd & "') AND SETTEI_KBN = '1' "
+''=== 2008/02/07 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii End
+'            strWhereString = " WHERE KIJYUN_YMD IN ('" & strZenLastYmd & "','" & strKjnLastYmd & "') AND SETTEI_KBN = '1' "
+            strWhereString = " WHERE KVKC.PRTCD = V601.PRTCD AND KVKC.KIJYUN_YMD = V601.KEJO_DATE "
+'=== 2008/02/14 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii End
+'=== 増減口座判定基準変更20080215 2008/03/10 Modified By SRA吉井 END
+            
+            'V経営帳票のデータをワークテーブルにINSERT
+'=== 増減口座判定基準変更20080215 2008/03/10 Modified By SRA吉井 START
+'=== 2008/03/03 レスポンス改善 Modified By H.Anpo Start
+'            If fncInsertTempTable(glngSessionID, strWhereString) = False Then
+'            If fncInsertTempTable4400(glngSessionID, strWhereString) = False Then
+            If fncInsertTempTable4400(glngSessionID, strWhereString, strZenLastYmd, strKjnLastYmd) = False Then
+'=== 2008/03/03 レスポンス改善 Modified By H.Anpo End
+'=== 増減口座判定基準変更20080215 2008/03/10 Modified By SRA吉井 END
+                GoTo RtnErrSection
+            End If
+
+            ' データ取得
+'=== 2008/02/14 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii Start
+''=== 2008/02/07 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii Start
+''            If fncGetDBData4400(strKjnLastYmd, strKjnFirstYmd, strZenLastYmd, inData1(), inData2()) = False Then
+'            If fncGetDBData4400(strKjnLastYmd, strKjnFirstYmd, strZenLastYmd, strZenZenLastYmd, inData1(), inData2()) = False Then
+''=== 2008/02/07 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii End
+            If fncGetDBData4400(strKjnLastYmd, strKjnFirstYmd, strZenLastYmd, inData1(), inData2()) = False Then
+'=== 2008/02/14 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii End
+                GoTo RtnErrSection
+            End If
+        
+            'ワークテーブルDELETE
+            If fncDeleteTempTable(glngSessionID) = False Then
+                GoTo RtnErrSection
+            End If
+        
+            ' 帳票ファイル取得
+            If fncGetFile4400(strDay, strOutFName) = False Then
+                GoTo RtnErrSection
+            End If
+'------------<Modify Start azuma 2007/12/04 (PH4)> ★★★☆-----------------------
+            strOutFNameOnly = strOutFName
+'------------<Modify End   azuma 2007/12/04 (PH4)> ★★★☆-----------------------
+        
+            ' フォルダをつける。
+            strOutFName = .Range("保存フォルダ").Value & "\" & strOutFName
+            
+            ' ファイルコピー
+            If fncCopyBook(cBaseFile, strOutFName) = False Then
+                GoTo RtnErrSection
+            End If
+            
+            ' ファイル作成
+            If fncMakeBook4400(strOutFName, strKjnLastYmd, inData1(), inData2()) = False Then
+                ' ファイル削除
+                Call fncDeleteFile(strOutFName)
+
+                GoTo RtnErrSection
+            End If
+
+'------------<Modify Start azuma 2007/12/04 (PH4)> ★★★☆-----------------------
+            If .chkPrint.Value = True Then
+                Call ToukeiChouhyouPrint(strOutFNameOnly)
+            End If
+            
+            Workbooks(strOutFNameOnly).Close SaveChanges:=True
+'------------<Modify End   azuma 2007/12/04 (PH4)> ★★★☆-----------------------
+        
+        End If
+    
+        ' 印刷選択の場合
+'------------<Modify Start azuma 2007/12/04 (PH4)> ★★★☆-----------------------
+        If .chkMake.Value = False And .chkPrint.Value = True Then
+'        If .chkPrint.Value = True Then
+'------------<Modify End   azuma 2007/12/04 (PH4)> ★★★☆-----------------------
+            ' ファイル印刷
+            If fncPrintBook(cPreFName, .Range("保存フォルダ").Value) = False Then
+                GoTo RtnErrSection
+            End If
+        End If
+    
+        'マウスポインターを戻す
+        ThisWorkbook.Application.Cursor = xlDefault
+    
+    End With
+   
+    fncClickRunBtn4400 = True
+    Erase inData1
+    Erase inData2
+    
+    Call subEndProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                     *
+'*******************************************************
+ErrSection:
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+'*******************************************************
+'* リターンエラーセクション                              *
+'*******************************************************
+RtnErrSection:
+
+    'ワークテーブルDELETE
+'------------<Modify Start azuma 2008/11/25 > 国内一覧レイアウト改善---------------
+    Call fncDeleteTempTable(glngSessionID)
+'    If fncDeleteTempTable(glngSessionID) = False Then
+'        GoTo RtnErrSection
+'    End If
+'------------<Modify End   azuma 2008/11/25 > 国内一覧レイアウト改善---------------
+                
+    'マウスポインターを戻す
+    ThisWorkbook.Application.Cursor = xlDefault
+                
+    fncClickRunBtn4400 = False
+    Erase inData1
+    Erase inData2
+    
+End Function
+
+'*************************************************************************
+'関数名　　：統計情報 国内新基準(帳票ファイル取得)
+'引　　数　：
+'           strDay             I           基準日
+'           strOutFName        O           出力ファイル名
+'戻り値　　：処理結果
+'機能説明　：時価未登録一覧表を出力するファイルを取得する。
+'更新履歴　：2007/10/31 SRA             新規作成
+'
+'*************************************************************************
+Public Function fncGetFile4400(ByVal strDay As String, _
+                               ByRef strOutFName As String) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncGetFile4400"
+
+On Error GoTo ErrSection
+
+    Dim strDate         As String
+    Dim strTime         As String
+
+    strOutFName = ""
+    
+    fncGetFile4400 = False
+    
+    Call gfunc_GetSvDateTime(strDate, strTime)
+       
+    ' 出力帳票ファイル
+    strOutFName = cPreFName
+    strOutFName = strOutFName & "_" & strDate
+    strOutFName = strOutFName & "_" & strTime
+    strOutFName = strOutFName & "-(" & strDay
+    strOutFName = strOutFName & ")"
+    strOutFName = strOutFName & ".xls"
+    
+    fncGetFile4400 = True
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncGetFile4400 = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+End Function
+
+'*************************************************************************
+'関数名　　：統計情報 国内新基準(帳票データ取得)
+'引　　数　：
+'           strDay             I           基準年月(YYYYMM)
+'           strData()          O           取得データ
+'戻り値　　：処理結果
+'機能説明　：時価未登録一覧表のデータを取得する。
+'
+'*************************************************************************
+'=== 2008/02/14 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii Start
+''=== 2008/02/07 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii Start
+''Public Function fncGetDBData4400( _
+''    ByVal strKjnLastYmd As String, _
+''    ByVal strKjnFirstYmd As String, _
+''    ByVal strZenLastYmd As String, _
+''    ByRef inData1() As Variant, _
+''    ByRef inData2() As typIchiran _
+'') As Boolean
+'Public Function fncGetDBData4400( _
+'    ByVal strKjnLastYmd As String, _
+'    ByVal strKjnFirstYmd As String, _
+'    ByVal strZenLastYmd As String, _
+'    ByVal strZenZenLastYmd As String, _
+'    ByRef inData1() As Variant, _
+'    ByRef inData2() As typIchiran _
+') As Boolean
+''=== 2008/02/07 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii End
+Public Function fncGetDBData4400( _
+    ByVal strKjnLastYmd As String, _
+    ByVal strKjnFirstYmd As String, _
+    ByVal strZenLastYmd As String, _
+    ByRef inData1() As Variant, _
+    ByRef inData2() As typIchiran _
+) As Boolean
+'=== 2008/02/14 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii End
+    
+    Const PROCEDURE_NAME As String = "fncGetDBData4400"
+
+On Error GoTo ErrSection
+
+    Dim strSql      As String
+    Dim vData()     As Variant
+    Dim lngCol      As Long
+    Dim lngRow      As Long
+    Dim lngRowCnt   As Long
+    Dim lngColCnt   As Long
+    Dim blnRet      As Boolean
+    
+    fncGetDBData4400 = False
+    
+    blnRet = False
+    
+    '国内一覧データ取得
+    blnRet = fncGetKokunaiIchiranData(strKjnLastYmd, inData1())
+    If blnRet <> True Then
+        Exit Function
+    End If
+    
+    
+    '新規・増減・解約終了一覧データ取得
+'=== 2008/02/14 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii Start
+''=== 2008/02/07 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii Start
+''    blnRet = fncGetShinkiZougenKaiyakuShuryouIchiranData(strKjnLastYmd, strKjnFirstYmd, strZenLastYmd, inData2())
+'    blnRet = fncGetShinkiZougenKaiyakuShuryouIchiranData(strKjnLastYmd, strKjnFirstYmd, strZenLastYmd, strZenZenLastYmd, inData2())
+''=== 2008/02/07 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii End
+    blnRet = fncGetShinkiZougenKaiyakuShuryouIchiranData(strKjnLastYmd, strKjnFirstYmd, strZenLastYmd, inData2())
+'=== 2008/02/14 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii End
+    If blnRet <> True Then
+'        Exit Function
+    End If
+    
+    fncGetDBData4400 = True
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncGetDBData4400 = False
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- エラーログ出力 End  ---------------------------------
+
+    Erase vData
+'    Erase strData
+   
+End Function
+
+
+'*************************************************************************
+'関数名　　：国内一覧データ取得
+'引　　数　：
+'           strLastDay         I           基準年月末日(YYYYMMDD)
+'           strData()          O           取得データ
+'戻り値　　：処理結果
+'機能説明　：国内一覧のデータを取得する
+'更新履歴　：2007/10/24 SRA H.Anpo   新規
+'        　：2008/11/25 SRA Y.Azuma  変更   国内一覧レイアウト改善
+'
+'*************************************************************************
+Public Function fncGetKokunaiIchiranData(ByVal strKjnLastYmd As String, ByRef inData() As Variant) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncGetKokunaiIchiranData"
+
+On Error GoTo ErrSection
+
+    Dim strSql      As String
+    Dim vData()     As Variant
+    Dim lngCol      As Long
+    Dim lngRow      As Long
+    Dim lngRowCnt   As Long
+    Dim lngColCnt   As Long
+    
+    fncGetKokunaiIchiranData = False
+    
+
+'*******************************************************
+'* SQL文作成                                           *
+'*******************************************************
+
+    strSql = ""
+    strSql = strSql & " SELECT"
+    strSql = strSql & "     RTRIM(SHOZOKU_BU),"
+    strSql = strSql & "     PRTCD,"
+    strSql = strSql & "     NAME_RJ,"
+    strSql = strSql & "     AM_NAME,"
+    strSql = strSql & "     SHU_PM_NAME,"
+    strSql = strSql & "     CNT_TYPE,"
+    strSql = strSql & "     SHINTAKU_KEIYAKU,"
+    strSql = strSql & "     JPY_JIKA_TOTAL_KOKUNAI,"
+'=== 2008/02/08 PH4総合テスト障害一覧 項番14対応 Modified By S.Yoshii Start
+'    strSql = strSql & "     SEIKYU_KIKAN_FROM,"
+'    strSql = strSql & "     SEIKYU_KIKAN_TO,"
+    strSql = strSql & "     KOMON_KEIYAKU_KIKAN_FROM,"
+    strSql = strSql & "     KOMON_KEIYAKU_KIKAN_TO,"
+'=== 2008/02/08 PH4総合テスト障害一覧 項番14対応 Modified By S.Yoshii End
+    strSql = strSql & "     SINTAKU_BANK_CD,"
+    strSql = strSql & "     SINTAKU_BANK_PRTCD,"
+    strSql = strSql & "     DATA_TYPE,"
+    strSql = strSql & "     UNYO_KEITAI,"
+    strSql = strSql & "     ZOKUSEI_4,"
+    strSql = strSql & "     SETTEI_DATE,"
+    strSql = strSql & "     KESSAN_DATE1,"
+    strSql = strSql & "     KESSAN_DATE2,"
+    strSql = strSql & "     KESSAN_KYUJITSU,"
+'------------<Modify Start azuma 2008/11/25 > 国内一覧レイアウト改善---------------
+    strSql = strSql & "     ZOKUSEI_16,"
+    strSql = strSql & "     ZOKUSEI_17,"
+    strSql = strSql & "     ZOKUSEI_19,"
+'------------<Modify End   azuma 2008/11/25 > 国内一覧レイアウト改善---------------
+    strSql = strSql & "     ZOKUSEI_1,"
+    strSql = strSql & "     AM_BUTEN,"
+    strSql = strSql & "     SHU_PM_BUTEN,"
+    strSql = strSql & "     ZOKUSEI_3,"
+    strSql = strSql & "     ZOKUSEI_12,"
+'------------<Modify Start azuma 2008/11/25 > 国内一覧レイアウト改善---------------
+    strSql = strSql & "     SHUTANTOU_KABUSHIKI,"
+    strSql = strSql & "     SHUTANTOU_CB,"
+    strSql = strSql & "     SHUTANTOU_SAIKEN,"
+    strSql = strSql & "     SHUTANTOU_WARANTO,"
+    strSql = strSql & "     SHUTANTOU_TANKI,"
+    strSql = strSql & "     SHUTANTOU_TOUSHIN,"
+    strSql = strSql & "     SHUTANTOU_GAIKABU,"
+    strSql = strSql & "     SHUTANTOU_GAISAI,"
+    strSql = strSql & "     SHUTANTOU_GAITOUSHIN"
+'''    strSql = strSql & "     ZOKUSEI_13,"
+'''    strSql = strSql & "     ZOKUSEI_15"
+'------------<Modify End   azuma 2008/11/25 > 国内一覧レイアウト改善---------------
+    strSql = strSql & " FROM"
+    strSql = strSql & "     KYK_VW_KOKUNAI_ICHIRAN"
+    strSql = strSql & " WHERE"
+    strSql = strSql & "     KIJYUN_YMD = '" & strKjnLastYmd & "'"
+    strSql = strSql & " ORDER BY"
+    strSql = strSql & "     PRTCD"
+    'データ取得
+    Call gclsDB.DoExequteSql(gcSELECT, strSql, inData, lngCol, lngRow)
+    
+    If lngRow > 0 Then
+        fncGetKokunaiIchiranData = True
+    Else
+        ' 該当データが存在しません。
+        Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3001, cPreFName, "")
+    End If
+    
+    Erase vData
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncGetKokunaiIchiranData = False
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- エラーログ出力 End  ---------------------------------
+
+    Erase vData
+   
+End Function
+
+'*************************************************************************
+'関数名　　：新規・増減・解約終了一覧データ取得
+'引　　数　：
+'           strLastDay         I           基準年月末日(YYYYMMDD)
+'           inData()           O           取得データ
+'                                          inData(1) : 新規契約口座一覧
+'                                          inData(2) : 解約・終了口座一覧
+'                                          inData(3) : 主な増額口座一覧
+'                                          inData(4) : 主な減額口座一覧
+'戻り値　　：処理結果
+'機能説明　：新規・増減・解約終了一覧のデータを取得する
+'更新履歴　：2007/11/12 SRA S.Yoshii   新規
+'　　　　　　2008/01/23 SRA S.Yoshii   修正  顧客名(NAME_RJ)にTRIM関数を使用
+'
+'*************************************************************************
+'=== 2008/02/14 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii Start
+''=== 2008/02/07 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii Start
+''Public Function fncGetShinkiZougenKaiyakuShuryouIchiranData( _
+''    ByVal strKjnLastYmd As String, _
+''    ByVal strKjnFirstYmd As String, _
+''    ByVal strZenLastYmd As String, _
+''    ByRef inData() As typIchiran) As Boolean
+'Public Function fncGetShinkiZougenKaiyakuShuryouIchiranData( _
+'    ByVal strKjnLastYmd As String, _
+'    ByVal strKjnFirstYmd As String, _
+'    ByVal strZenLastYmd As String, _
+'    ByVal strZenZenLastYmd As String, _
+'    ByRef inData() As typIchiran) As Boolean
+''=== 2008/02/07 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii End
+Public Function fncGetShinkiZougenKaiyakuShuryouIchiranData( _
+    ByVal strKjnLastYmd As String, _
+    ByVal strKjnFirstYmd As String, _
+    ByVal strZenLastYmd As String, _
+    ByRef inData() As typIchiran) As Boolean
+'=== 2008/02/14 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii End
+    
+    Const PROCEDURE_NAME As String = "fncGetShinkiZougenKaiyakuShuryouIchiranData"
+
+On Error GoTo ErrSection
+
+    Dim strSql      As String
+    Dim vData()     As Variant
+    Dim lngCol      As Long
+    Dim lngRow      As Long
+    Dim lngRowCnt   As Long
+    Dim lngColCnt   As Long
+    
+    Dim lngPrCnt    As Long
+    
+    fncGetShinkiZougenKaiyakuShuryouIchiranData = False
+    
+    ReDim inData(0)
+    
+    For lngPrCnt = 1 To 4
+    
+        ReDim Preserve inData(lngPrCnt)
+    
+        '年金・非年金の合計件数、合計金額を取得
+        If lngPrCnt = 1 Or lngPrCnt = 2 Then
+            '新規契約口座一覧、解約・終了口座一覧
+            strSql = ""
+            strSql = strSql & " SELECT"
+            strSql = strSql & "     COUNT(*), " '-- 合計件数
+            strSql = strSql & "     NVL(SUM(KVKC.JPY_JIKA_TOTAL_KOKUNAI),0)  "  '-- 合計金額
+            strSql = strSql & " FROM"
+'=== 2008/10/14 海外口座の契約日の管理 SRA水谷 Start ===
+'            strSql = strSql & "         VW_DT001D V001,"
+            strSql = strSql & "         KYK_VW_DT001D V001,"
+'=== 2008/10/14 海外口座の契約日の管理 SRA水谷 End ===
+            strSql = strSql & "         KYK_WK_KEIEI_CHOUHYOU KVKC"
+            strSql = strSql & " WHERE"
+            strSql = strSql & "         V001.PRTCD = KVKC.PRTCD"
+            strSql = strSql & " AND     KVKC.SESSION_ID = " & glngSessionID & ""
+            strSql = strSql & " AND     KVKC.DATA_TYPE IN ('101','102','103','104','105','106','107','108','109','110','111','112','113','114')　"    '-- 年金&非年金
+            
+            If lngPrCnt = 1 Then        '新規契約口座一覧
+                strSql = strSql & " AND     KVKC.KIJYUN_YMD = '" & strKjnLastYmd & "'"
+                strSql = strSql & " AND     V001.SETTEI_DATE >= '" & strKjnFirstYmd & "'"
+                strSql = strSql & " AND     V001.SETTEI_DATE <= '" & strKjnLastYmd & "'"
+            ElseIf lngPrCnt = 2 Then    '解約・終了口座一覧
+'=== 2008/02/14 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii Start
+''=== 2008/02/07 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii Start
+''                strSql = strSql & " AND     KVKC.KIJYUN_YMD = '" & strZenLastYmd & "'"
+''                strSql = strSql & " AND     V001.SETTEI_DATE <= '" & strKjnLastYmd & "'"
+''                strSql = strSql & " AND     V001.CALLOFF_DATE >= '" & strKjnFirstYmd & "'"
+''                strSql = strSql & " AND     V001.CALLOFF_DATE <= '" & strKjnLastYmd & "'"
+'                strSql = strSql & " AND   (( V001.CALLOFF_DATE = '" & strZenLastYmd & "' "
+'                strSql = strSql & "          AND  KVKC.KIJYUN_YMD = '" & strZenZenLastYmd & "') OR "
+'                strSql = strSql & "        ( V001.CALLOFF_DATE <> '" & strZenLastYmd & "' "
+'                strSql = strSql & "          AND  KVKC.KIJYUN_YMD = '" & strZenLastYmd & "')) "
+'                strSql = strSql & " AND     V001.SETTEI_DATE <= '" & strKjnLastYmd & "'"
+'                strSql = strSql & " AND     V001.CALLOFF_DATE >= '" & strZenLastYmd & "'"
+'                strSql = strSql & " AND     V001.CALLOFF_DATE < '" & strKjnLastYmd & "'"
+''=== 2008/02/07 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii End
+                strSql = strSql & " AND     KVKC.KIJYUN_YMD = '" & strZenLastYmd & "'"
+                strSql = strSql & " AND     V001.SETTEI_DATE <= '" & strKjnLastYmd & "'"
+                strSql = strSql & " AND     V001.CALLOFF_DATE >= '" & strZenLastYmd & "'"
+                strSql = strSql & " AND     V001.CALLOFF_DATE < '" & strKjnLastYmd & "'"
+'=== 2008/02/14 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii End
+            End If
+        
+        Else
+            '主な増額口座一覧、主な減額口座一覧
+            strSql = ""
+            strSql = strSql & " SELECT"
+            strSql = strSql & "     COUNT(*), " '-- 合計件数
+'=== 増減口座判定基準変更20080215 2008/03/10 Modified By SRA吉井 START
+'            strSql = strSql & "     NVL(SUM(KVKC.JPY_JIKA_TOTAL_KOKUNAI - KVKC2.JPY_JIKA_TOTAL_KOKUNAI),0)  "  '-- 増減額
+            strSql = strSql & "     NVL(SUM(KVKC.JPY_GANPON_TOTAL_KOKUNAI - KVKC2.JPY_GANPON_TOTAL_KOKUNAI),0)  "  '-- 増減額
+'=== 増減口座判定基準変更20080215 2008/03/10 Modified By SRA吉井 END
+            strSql = strSql & " FROM"
+            strSql = strSql & "         VW_DT001D V001,"
+            strSql = strSql & "         KYK_WK_KEIEI_CHOUHYOU KVKC,"
+            strSql = strSql & "         KYK_WK_KEIEI_CHOUHYOU KVKC2"
+            strSql = strSql & " WHERE"
+            strSql = strSql & "         V001.PRTCD = KVKC.PRTCD"
+            strSql = strSql & " AND     KVKC.PRTCD = KVKC2.PRTCD"
+            strSql = strSql & " AND     KVKC.SESSION_ID = " & glngSessionID & ""
+            strSql = strSql & " AND     KVKC.SESSION_ID = KVKC2.SESSION_ID"
+            strSql = strSql & " AND     KVKC.DATA_TYPE IN ('101','102','103','104','105','106','107','108','109','110','111','112','113','114')　"    '-- 年金&非年金
+            strSql = strSql & " AND     KVKC.KIJYUN_YMD = '" & strKjnLastYmd & "'"
+            strSql = strSql & " AND     KVKC2.KIJYUN_YMD = '" & strZenLastYmd & "'"
+            
+            If lngPrCnt = 3 Then        '主な増額口座一覧
+'=== 増減口座判定基準変更20080215 2008/03/10 Modified By SRA吉井 START
+'                strSql = strSql & " AND     (KVKC.JPY_JIKA_TOTAL_KOKUNAI - KVKC2.JPY_JIKA_TOTAL_KOKUNAI) >= 300"
+                strSql = strSql & " AND     (KVKC.JPY_GANPON_TOTAL_KOKUNAI - KVKC2.JPY_GANPON_TOTAL_KOKUNAI) >= 300"
+'=== 増減口座判定基準変更20080215 2008/03/10 Modified By SRA吉井 END
+            ElseIf lngPrCnt = 4 Then    '主な減額口座一覧
+'=== 増減口座判定基準変更20080215 2008/03/10 Modified By SRA吉井 START
+'                strSql = strSql & " AND     (KVKC.JPY_JIKA_TOTAL_KOKUNAI - KVKC2.JPY_JIKA_TOTAL_KOKUNAI) <= -300"
+                strSql = strSql & " AND     (KVKC.JPY_GANPON_TOTAL_KOKUNAI - KVKC2.JPY_GANPON_TOTAL_KOKUNAI) <= -300"
+'=== 増減口座判定基準変更20080215 2008/03/10 Modified By SRA吉井 END
+            End If
+        End If
+        'データ取得
+        Call gclsDB.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow)
+        If lngRow > 0 Then
+            '取得データを配列に設定
+            With inData(lngPrCnt)
+                .KeiKensu = CStr(vData(0, 0))   '合計件数
+                .KeiGaku = CStr(vData(1, 0))    '合計金額
+            End With
+        Else
+            ' 該当データが存在しません。
+    '        Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3001, cPreFName, "")
+'            Exit Function
+        End If
+    
+        '年金の件数、金額を取得
+        If lngPrCnt = 1 Or lngPrCnt = 2 Then
+            '新規契約口座一覧、解約・終了口座一覧
+            strSql = ""
+            strSql = strSql & " SELECT"
+            strSql = strSql & "     COUNT(*),"
+            strSql = strSql & "     NVL(SUM(KVKC.JPY_JIKA_TOTAL_KOKUNAI),0)"
+            strSql = strSql & " FROM"
+'=== 2008/10/14 海外口座の契約日の管理 SRA水谷 Start ===
+'            strSql = strSql & "         VW_DT001D V001,"
+            strSql = strSql & "         KYK_VW_DT001D V001,"
+'=== 2008/10/14 海外口座の契約日の管理 SRA水谷 End ===
+            strSql = strSql & "         KYK_WK_KEIEI_CHOUHYOU KVKC"
+            strSql = strSql & " WHERE"
+            strSql = strSql & "         V001.PRTCD = KVKC.PRTCD"
+            strSql = strSql & " AND     KVKC.SESSION_ID = " & glngSessionID & ""
+            strSql = strSql & " AND     KVKC.DATA_TYPE IN ('101','102','103','104','105','106','113','114')"
+            
+            If lngPrCnt = 1 Then        '新規契約口座一覧
+                strSql = strSql & " AND     KVKC.KIJYUN_YMD = '" & strKjnLastYmd & "'"
+                strSql = strSql & " AND     V001.SETTEI_DATE >= '" & strKjnFirstYmd & "'"
+                strSql = strSql & " AND     V001.SETTEI_DATE <= '" & strKjnLastYmd & "'"
+            ElseIf lngPrCnt = 2 Then    '解約・終了口座一覧
+'=== 2008/02/14 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii Start
+''=== 2008/02/07 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii Start
+''                strSql = strSql & " AND     KVKC.KIJYUN_YMD = '" & strZenLastYmd & "'"
+''                strSql = strSql & " AND     V001.SETTEI_DATE <= '" & strKjnLastYmd & "'"
+''                strSql = strSql & " AND     V001.CALLOFF_DATE >= '" & strKjnFirstYmd & "'"
+''                strSql = strSql & " AND     V001.CALLOFF_DATE <= '" & strKjnLastYmd & "'"
+'                strSql = strSql & " AND   (( V001.CALLOFF_DATE = '" & strZenLastYmd & "' "
+'                strSql = strSql & "          AND  KVKC.KIJYUN_YMD = '" & strZenZenLastYmd & "') OR "
+'                strSql = strSql & "        ( V001.CALLOFF_DATE <> '" & strZenLastYmd & "' "
+'                strSql = strSql & "          AND  KVKC.KIJYUN_YMD = '" & strZenLastYmd & "')) "
+'                strSql = strSql & " AND     V001.SETTEI_DATE <= '" & strKjnLastYmd & "'"
+'                strSql = strSql & " AND     V001.CALLOFF_DATE >= '" & strZenLastYmd & "'"
+'                strSql = strSql & " AND     V001.CALLOFF_DATE < '" & strKjnLastYmd & "'"
+''=== 2008/02/07 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii End
+                strSql = strSql & " AND     KVKC.KIJYUN_YMD = '" & strZenLastYmd & "'"
+                strSql = strSql & " AND     V001.SETTEI_DATE <= '" & strKjnLastYmd & "'"
+                strSql = strSql & " AND     V001.CALLOFF_DATE >= '" & strZenLastYmd & "'"
+                strSql = strSql & " AND     V001.CALLOFF_DATE < '" & strKjnLastYmd & "'"
+'=== 2008/02/14 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii End
+            End If
+        Else
+            '主な増額口座一覧、主な減額口座一覧
+            strSql = ""
+            strSql = strSql & " SELECT"
+            strSql = strSql & "     COUNT(*), " '-- 合計件数
+'=== 増減口座判定基準変更20080215 2008/03/10 Modified By SRA吉井 START
+'            strSql = strSql & "     NVL(SUM(KVKC.JPY_JIKA_TOTAL_KOKUNAI - KVKC2.JPY_JIKA_TOTAL_KOKUNAI),0) "  '-- 増減額
+            strSql = strSql & "     NVL(SUM(KVKC.JPY_GANPON_TOTAL_KOKUNAI - KVKC2.JPY_GANPON_TOTAL_KOKUNAI),0) "  '-- 増減額
+'=== 増減口座判定基準変更20080215 2008/03/10 Modified By SRA吉井 END
+            strSql = strSql & " FROM"
+            strSql = strSql & "         VW_DT001D V001,"
+            strSql = strSql & "         KYK_WK_KEIEI_CHOUHYOU KVKC,"
+            strSql = strSql & "         KYK_WK_KEIEI_CHOUHYOU KVKC2"
+            strSql = strSql & " WHERE"
+            strSql = strSql & "         V001.PRTCD = KVKC.PRTCD"
+            strSql = strSql & " AND     KVKC.PRTCD = KVKC2.PRTCD"
+            strSql = strSql & " AND     KVKC.SESSION_ID = " & glngSessionID & ""
+            strSql = strSql & " AND     KVKC.SESSION_ID = KVKC2.SESSION_ID"
+            strSql = strSql & " AND     KVKC.DATA_TYPE IN ('101','102','103','104','105','106','113','114')"
+            strSql = strSql & " AND     KVKC.KIJYUN_YMD = '" & strKjnLastYmd & "'"
+            strSql = strSql & " AND     KVKC2.KIJYUN_YMD = '" & strZenLastYmd & "'"
+            
+            If lngPrCnt = 3 Then        '主な増額口座一覧
+'=== 増減口座判定基準変更20080215 2008/03/10 Modified By SRA吉井 START
+'                strSql = strSql & " AND     (KVKC.JPY_JIKA_TOTAL_KOKUNAI - KVKC2.JPY_JIKA_TOTAL_KOKUNAI) >= 300"
+                strSql = strSql & " AND     (KVKC.JPY_GANPON_TOTAL_KOKUNAI - KVKC2.JPY_GANPON_TOTAL_KOKUNAI) >= 300"
+'=== 増減口座判定基準変更20080215 2008/03/10 Modified By SRA吉井 END
+            ElseIf lngPrCnt = 4 Then    '主な減額口座一覧
+'=== 増減口座判定基準変更20080215 2008/03/10 Modified By SRA吉井 START
+'                strSql = strSql & " AND     (KVKC.JPY_JIKA_TOTAL_KOKUNAI - KVKC2.JPY_JIKA_TOTAL_KOKUNAI) <= -300"
+                strSql = strSql & " AND     (KVKC.JPY_GANPON_TOTAL_KOKUNAI - KVKC2.JPY_GANPON_TOTAL_KOKUNAI) <= -300"
+'=== 増減口座判定基準変更20080215 2008/03/10 Modified By SRA吉井 END
+            End If
+        End If
+        'データ取得
+        Call gclsDB.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow)
+        If lngRow > 0 Then
+            '取得データを配列に設定
+            With inData(lngPrCnt)
+                .NenKensu = CStr(vData(0, 0))   '件数
+                .NenGaku = CStr(vData(1, 0))    '金額
+            End With
+        Else
+            ' 該当データが存在しません。
+    '        Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3001, cPreFName, "")
+'            Exit Function
+        End If
+    
+        '非年金の件数、金額を取得
+        If lngPrCnt = 1 Or lngPrCnt = 2 Then
+            '新規契約口座一覧、解約・終了口座一覧
+            strSql = ""
+            strSql = strSql & " SELECT"
+            strSql = strSql & "     COUNT(*),"
+            strSql = strSql & "     NVL(SUM(KVKC.JPY_JIKA_TOTAL_KOKUNAI),0)"
+            strSql = strSql & " FROM"
+'=== 2008/10/14 海外口座の契約日の管理 SRA水谷 Start ===
+'            strSql = strSql & "         VW_DT001D V001,"
+            strSql = strSql & "         KYK_VW_DT001D V001,"
+'=== 2008/10/14 海外口座の契約日の管理 SRA水谷 End ===
+            strSql = strSql & "         KYK_WK_KEIEI_CHOUHYOU KVKC"
+            strSql = strSql & " WHERE"
+            strSql = strSql & "         V001.PRTCD = KVKC.PRTCD"
+            strSql = strSql & " AND     KVKC.SESSION_ID = " & glngSessionID & ""
+            strSql = strSql & " AND     KVKC.DATA_TYPE IN ('107','108','109','110','111','112')"
+            
+            If lngPrCnt = 1 Then        '新規契約口座一覧
+                strSql = strSql & " AND     KVKC.KIJYUN_YMD = '" & strKjnLastYmd & "'"
+                strSql = strSql & " AND     V001.SETTEI_DATE >= '" & strKjnFirstYmd & "'"
+                strSql = strSql & " AND     V001.SETTEI_DATE <= '" & strKjnLastYmd & "'"
+            ElseIf lngPrCnt = 2 Then    '解約・終了口座一覧
+'=== 2008/02/14 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii Start
+''=== 2008/02/07 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii Start
+''                strSql = strSql & " AND     KVKC.KIJYUN_YMD = '" & strZenLastYmd & "'"
+''                strSql = strSql & " AND     V001.SETTEI_DATE <= '" & strKjnLastYmd & "'"
+''                strSql = strSql & " AND     V001.CALLOFF_DATE >= '" & strKjnFirstYmd & "'"
+''                strSql = strSql & " AND     V001.CALLOFF_DATE <= '" & strKjnLastYmd & "'"
+'                strSql = strSql & " AND   (( V001.CALLOFF_DATE = '" & strZenLastYmd & "' "
+'                strSql = strSql & "          AND  KVKC.KIJYUN_YMD = '" & strZenZenLastYmd & "') OR "
+'                strSql = strSql & "        ( V001.CALLOFF_DATE <> '" & strZenLastYmd & "' "
+'                strSql = strSql & "          AND  KVKC.KIJYUN_YMD = '" & strZenLastYmd & "')) "
+'                strSql = strSql & " AND     V001.SETTEI_DATE <= '" & strKjnLastYmd & "'"
+'                strSql = strSql & " AND     V001.CALLOFF_DATE >= '" & strZenLastYmd & "'"
+'                strSql = strSql & " AND     V001.CALLOFF_DATE < '" & strKjnLastYmd & "'"
+''=== 2008/02/07 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii End
+                strSql = strSql & " AND     KVKC.KIJYUN_YMD = '" & strZenLastYmd & "'"
+                strSql = strSql & " AND     V001.SETTEI_DATE <= '" & strKjnLastYmd & "'"
+                strSql = strSql & " AND     V001.CALLOFF_DATE >= '" & strZenLastYmd & "'"
+                strSql = strSql & " AND     V001.CALLOFF_DATE < '" & strKjnLastYmd & "'"
+'=== 2008/02/14 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii End
+            End If
+        Else
+            '主な増額口座一覧、主な減額口座一覧
+            strSql = ""
+            strSql = strSql & " SELECT"
+            strSql = strSql & "     COUNT(*), " '-- 合計件数
+'=== 増減口座判定基準変更20080215 2008/03/10 Modified By SRA吉井 START
+'            strSql = strSql & "     NVL(SUM(KVKC.JPY_JIKA_TOTAL_KOKUNAI - KVKC2.JPY_JIKA_TOTAL_KOKUNAI),0) "  '-- 増減額
+            strSql = strSql & "     NVL(SUM(KVKC.JPY_GANPON_TOTAL_KOKUNAI - KVKC2.JPY_GANPON_TOTAL_KOKUNAI),0) "  '-- 増減額
+'=== 増減口座判定基準変更20080215 2008/03/10 Modified By SRA吉井 END
+            strSql = strSql & " FROM"
+            strSql = strSql & "         VW_DT001D V001,"
+            strSql = strSql & "         KYK_WK_KEIEI_CHOUHYOU KVKC,"
+            strSql = strSql & "         KYK_WK_KEIEI_CHOUHYOU KVKC2"
+            strSql = strSql & " WHERE"
+            strSql = strSql & "         V001.PRTCD = KVKC.PRTCD"
+            strSql = strSql & " AND     KVKC.PRTCD = KVKC2.PRTCD"
+            strSql = strSql & " AND     KVKC.SESSION_ID = " & glngSessionID & ""
+            strSql = strSql & " AND     KVKC.SESSION_ID = KVKC2.SESSION_ID"
+            strSql = strSql & " AND     KVKC.DATA_TYPE IN ('107','108','109','110','111','112')"
+            strSql = strSql & " AND     KVKC.KIJYUN_YMD = '" & strKjnLastYmd & "'"
+            strSql = strSql & " AND     KVKC2.KIJYUN_YMD = '" & strZenLastYmd & "'"
+            
+            If lngPrCnt = 3 Then        '主な増額口座一覧
+'=== 増減口座判定基準変更20080215 2008/03/10 Modified By SRA吉井 START
+'                strSql = strSql & " AND     (KVKC.JPY_JIKA_TOTAL_KOKUNAI - KVKC2.JPY_JIKA_TOTAL_KOKUNAI) >= 300"
+                strSql = strSql & " AND     (KVKC.JPY_GANPON_TOTAL_KOKUNAI - KVKC2.JPY_GANPON_TOTAL_KOKUNAI) >= 300"
+'=== 増減口座判定基準変更20080215 2008/03/10 Modified By SRA吉井 END
+            ElseIf lngPrCnt = 4 Then    '主な減額口座一覧
+'=== 増減口座判定基準変更20080215 2008/03/10 Modified By SRA吉井 START
+'                strSql = strSql & " AND     (KVKC.JPY_JIKA_TOTAL_KOKUNAI - KVKC2.JPY_JIKA_TOTAL_KOKUNAI) <= -300"
+                strSql = strSql & " AND     (KVKC.JPY_GANPON_TOTAL_KOKUNAI - KVKC2.JPY_GANPON_TOTAL_KOKUNAI) <= -300"
+'=== 増減口座判定基準変更20080215 2008/03/10 Modified By SRA吉井 END
+            End If
+        End If
+        'データ取得
+        Call gclsDB.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow)
+        If lngRow > 0 Then
+            '取得データを配列に設定
+            With inData(lngPrCnt)
+                .HiNenKensu = CStr(vData(0, 0))   '件数
+                .HiNenGaku = CStr(vData(1, 0))    '金額
+            End With
+        Else
+            ' 該当データが存在しません。
+    '        Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3001, cPreFName, "")
+'            Exit Function
+        End If
+        
+        '明細情報を取得
+        strSql = ""
+        strSql = strSql & " SELECT"
+        strSql = strSql & "         TRIM(KVKC.SHOZOKU_BU),"                                             '部店
+        strSql = strSql & "         KVKC.PRTCD,"                                                        '口座番号
+        strSql = strSql & "         TRIM(KVKC.NAME_RJ),"
+        strSql = strSql & "         ("
+        strSql = strSql & "             SELECT"
+        strSql = strSql & "                 KCV.VALUE_NAME"
+        strSql = strSql & "             FROM"
+        strSql = strSql & "                 KYK_CODE_VALUE  KCV"
+        strSql = strSql & "             WHERE"
+        strSql = strSql & "                 KCV.CODE_NO     = '40'"
+        strSql = strSql & "             AND TRIM(KCV.CODE_VALUE)  = TRIM(KVKC.CNT_TYPE)"
+        strSql = strSql & "             AND KCV.SAKUJO_FLG  = '0'"
+        strSql = strSql & "         )                               CNT_TYPE,"                          '形態
+        strSql = strSql & "         ("
+        strSql = strSql & "             SELECT"
+        strSql = strSql & "                 RTRIM(V301.NAME_J)"
+        strSql = strSql & "             FROM"
+        strSql = strSql & "                 VW_DT301D V301"
+        strSql = strSql & "             WHERE"
+        strSql = strSql & "                 V301.CD_KBN     = '88'"
+        strSql = strSql & "             AND TRIM(V301.CD_1)       = KVKC.SHINTAKU_KEIYAKU"
+        strSql = strSql & "         )                               SHINTAKU_KEIYAKU,"                  '信託契約
+        strSql = strSql & "         ("
+        strSql = strSql & "             SELECT"
+        strSql = strSql & "                 KCV.VALUE_NAME"
+        strSql = strSql & "             FROM"
+        strSql = strSql & "                 KYK_CODE_VALUE  KCV"
+        strSql = strSql & "             WHERE"
+        strSql = strSql & "                 TRIM(KCV.CODE_NO)     = '41'"
+        strSql = strSql & "             AND TRIM(KCV.CODE_VALUE)  = TRIM(KVKC.DATA_TYPE)"
+        strSql = strSql & "             AND KCV.SAKUJO_FLG  = '0'"
+        strSql = strSql & "         )                               DATA_TYPE,"                         '協会報告区分
+        If lngPrCnt = 1 Or lngPrCnt = 2 Then
+            '新規契約口座一覧、解約・終了口座一覧
+            strSql = strSql & "         NVL(KVKC.JPY_JIKA_TOTAL_KOKUNAI,0),"                            '時価総額
+        Else
+            '主な増額口座一覧、主な減額口座一覧
+'=== 増減口座判定基準変更20080215 2008/03/10 Modified By SRA吉井 START
+'            strSql = strSql & "         NVL(KVKC.JPY_JIKA_TOTAL_KOKUNAI - KVKC2.JPY_JIKA_TOTAL_KOKUNAI,0),"   '時価総額
+            strSql = strSql & "         NVL(KVKC.JPY_GANPON_TOTAL_KOKUNAI - KVKC2.JPY_GANPON_TOTAL_KOKUNAI,0),"   '時価総額
+'=== 増減口座判定基準変更20080215 2008/03/10 Modified By SRA吉井 END
+        End If
+        strSql = strSql & "         ("
+        strSql = strSql & "             SELECT"
+        strSql = strSql & "                 RTRIM(V301.NAME_J)"
+        strSql = strSql & "             FROM    "
+        strSql = strSql & "                 VW_DT301D  V301"
+        strSql = strSql & "             WHERE"
+        strSql = strSql & "                 V301.CD_KBN     = '87'"
+        strSql = strSql & "             AND V301.CD_1       = KVKC.UNYO_KEITAI"
+        strSql = strSql & "         )                               UNYO_KEITAI"                        '運用形態
+        strSql = strSql & " FROM"
+'=== 2008/10/14 海外口座の契約日の管理 SRA水谷 Start ===
+'        strSql = strSql & "         VW_DT001D V001,"
+        strSql = strSql & "         KYK_VW_DT001D V001,"
+'=== 2008/10/14 海外口座の契約日の管理 SRA水谷 End ===
+        strSql = strSql & "         KYK_WK_KEIEI_CHOUHYOU KVKC"
+        If lngPrCnt = 1 Or lngPrCnt = 2 Then
+            '新規契約口座一覧、解約・終了口座一覧
+            strSql = strSql & " WHERE"
+            strSql = strSql & "         V001.PRTCD = KVKC.PRTCD"
+            strSql = strSql & " AND     KVKC.SESSION_ID = " & glngSessionID & ""
+            strSql = strSql & " AND     KVKC.DATA_TYPE IN ('101','102','103','104','105','106','107','108','109','110','111','112','113','114')"  '年金 & 非年金
+            
+            If lngPrCnt = 1 Then        '新規契約口座一覧
+                strSql = strSql & " AND     KVKC.KIJYUN_YMD = '" & strKjnLastYmd & "'"
+                strSql = strSql & " AND     V001.SETTEI_DATE >= '" & strKjnFirstYmd & "'"
+                strSql = strSql & " AND     V001.SETTEI_DATE <= '" & strKjnLastYmd & "'"
+            ElseIf lngPrCnt = 2 Then    '解約・終了口座一覧
+'=== 2008/02/14 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii Start
+''=== 2008/02/07 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii Start
+''                strSql = strSql & " AND     KVKC.KIJYUN_YMD = '" & strZenLastYmd & "'"
+''                strSql = strSql & " AND     V001.SETTEI_DATE <= '" & strKjnLastYmd & "'"
+''                strSql = strSql & " AND     V001.CALLOFF_DATE >= '" & strKjnFirstYmd & "'"
+''                strSql = strSql & " AND     V001.CALLOFF_DATE <= '" & strKjnLastYmd & "'"
+'                strSql = strSql & " AND   (( V001.CALLOFF_DATE = '" & strZenLastYmd & "' "
+'                strSql = strSql & "          AND  KVKC.KIJYUN_YMD = '" & strZenZenLastYmd & "') OR "
+'                strSql = strSql & "        ( V001.CALLOFF_DATE <> '" & strZenLastYmd & "' "
+'                strSql = strSql & "          AND  KVKC.KIJYUN_YMD = '" & strZenLastYmd & "')) "
+'                strSql = strSql & " AND     V001.SETTEI_DATE <= '" & strKjnLastYmd & "'"
+'                strSql = strSql & " AND     V001.CALLOFF_DATE >= '" & strZenLastYmd & "'"
+'                strSql = strSql & " AND     V001.CALLOFF_DATE < '" & strKjnLastYmd & "'"
+''=== 2008/02/07 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii End
+                strSql = strSql & " AND     KVKC.KIJYUN_YMD = '" & strZenLastYmd & "'"
+                strSql = strSql & " AND     V001.SETTEI_DATE <= '" & strKjnLastYmd & "'"
+                strSql = strSql & " AND     V001.CALLOFF_DATE >= '" & strZenLastYmd & "'"
+                strSql = strSql & " AND     V001.CALLOFF_DATE < '" & strKjnLastYmd & "'"
+'=== 2008/02/14 PH4総合テスト障害一覧 項番17対応 Modified By S.Yoshii End
+            End If
+        Else
+            strSql = strSql & "        ,KYK_WK_KEIEI_CHOUHYOU KVKC2"
+            strSql = strSql & " WHERE"
+            strSql = strSql & "         V001.PRTCD = KVKC.PRTCD"
+            strSql = strSql & " AND     KVKC.PRTCD = KVKC2.PRTCD"
+            strSql = strSql & " AND     KVKC.SESSION_ID = " & glngSessionID & ""
+            strSql = strSql & " AND     KVKC.SESSION_ID = KVKC2.SESSION_ID"
+            strSql = strSql & " AND     KVKC.DATA_TYPE IN ('101','102','103','104','105','106','107','108','109','110','111','112','113','114')"  '年金&非年金
+            strSql = strSql & " AND     KVKC.KIJYUN_YMD = '" & strKjnLastYmd & "'"
+            strSql = strSql & " AND     KVKC2.KIJYUN_YMD = '" & strZenLastYmd & "'"
+            
+            If lngPrCnt = 3 Then        '主な増額口座一覧
+'=== 増減口座判定基準変更20080215 2008/03/10 Modified By SRA吉井 START
+'                strSql = strSql & " AND     (KVKC.JPY_JIKA_TOTAL_KOKUNAI - KVKC2.JPY_JIKA_TOTAL_KOKUNAI) >= 300"
+                strSql = strSql & " AND     (KVKC.JPY_GANPON_TOTAL_KOKUNAI - KVKC2.JPY_GANPON_TOTAL_KOKUNAI) >= 300"
+'=== 増減口座判定基準変更20080215 2008/03/10 Modified By SRA吉井 END
+            ElseIf lngPrCnt = 4 Then    '主な減額口座一覧
+'=== 増減口座判定基準変更20080215 2008/03/10 Modified By SRA吉井 START
+'                strSql = strSql & " AND     (KVKC.JPY_JIKA_TOTAL_KOKUNAI - KVKC2.JPY_JIKA_TOTAL_KOKUNAI) <= -300"
+                strSql = strSql & " AND     (KVKC.JPY_GANPON_TOTAL_KOKUNAI - KVKC2.JPY_GANPON_TOTAL_KOKUNAI) <= -300"
+'=== 増減口座判定基準変更20080215 2008/03/10 Modified By SRA吉井 END
+            End If
+        End If
+        
+        strSql = strSql & " ORDER BY"
+        strSql = strSql & "         KVKC.PRTCD"
+        
+        'データ取得
+        Call gclsDB.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow)
+        If lngRow > 0 Then
+            '取得データを配列に設定
+            With inData(lngPrCnt)
+                .Meisai = vData '明細
+                .MeisaiCnt = lngRow
+            End With
+        Else
+            With inData(lngPrCnt)
+                ReDim .Meisai(0)
+                .MeisaiCnt = 0
+            End With
+'            Exit Function
+        End If
+    
+    Next lngPrCnt
+    
+    Erase vData
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncGetShinkiZougenKaiyakuShuryouIchiranData = False
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- エラーログ出力 End  ---------------------------------
+
+    Erase vData
+   
+End Function
+
+
+
+
+'*************************************************************************
+'関数名　　：統計情報 国内新基準(帳票作成)
+'引　　数　：
+'           strOutFName        I           出力ファイル名
+'           strKjnLastYmd      I           基準日(月末日)
+'           strData()          I           出力データ
+'戻り値　　：処理結果
+'機能説明　：統計情報 国内新基準のBOOKを作成する。
+'更新履歴　：2007/12/04 SRA Y.Azuma    変更     (PH4)印刷エラー対策
+'          ：2008/11/25 SRA Y.Azuma    変更     国内一覧レイアウト改善
+'
+'*************************************************************************
+Public Function fncMakeBook4400( _
+    ByVal strOutFName As String, _
+    ByVal strKjnLastYmd As String, _
+    ByRef inData1() As Variant, _
+    ByRef inData2() As typIchiran _
+    ) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncMakeBook4400"
+
+On Error GoTo ErrSection
+
+    Dim lngRowCnt       As Long
+    Dim strDesRange     As String
+    Dim lngDataMax      As Long
+    Dim vntArray2()     As Variant
+    Dim lngRet          As Long
+    Dim lngCnt          As Long
+    
+    Dim lngStartRowIchiran  As Long
+    Dim lngMeiTopRow          As Long
+    Dim lngMeiRowCnt          As Long
+    
+    Call subBeginProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    lngRowCnt = 0
+    
+    ' ファイルOpen
+    Workbooks.Open Filename:=strOutFName
+    
+    fncMakeBook4400 = False
+    
+Application.DisplayAlerts = False
+    
+    
+    '============================================
+    ' 国内一覧
+    '============================================
+    '配列の添え字の階層を変更 array(X,Y) -> array(Y,X)
+    lngRet = fncKsCmnArrayIdxChange(inData1, vntArray2)
+    
+    lngRowCnt = UBound(inData1, 2)
+'    strDesRange = "A" & lngStartRowIchiran & ":U" & lngStartRowIchiran + lngRowCnt
+    
+    With Workbooks(Workbooks.Count).Worksheets("国内一覧")
+    
+        lngStartRowIchiran = .Range("一覧_明細TOP").Row
+'------------<Modify Start azuma 2008/11/25 > 国内一覧レイアウト改善---------------
+        strDesRange = Cells(lngStartRowIchiran, .Range(cKIJUNBI).Column).Address & ":" & Cells(lngStartRowIchiran + lngRowCnt, .Range(cSAISHU).Column).Address
+'''        strDesRange = Cells(lngStartRowIchiran, .Range("基準日").Column).Address & ":" & Cells(lngStartRowIchiran + lngRowCnt, .Range("一覧_受託変更旧ＮＡＭNo.").Column).Address
+'------------<Modify End   azuma 2008/11/25 > 国内一覧レイアウト改善---------------
+    
+        '行を追加
+        .Rows(lngStartRowIchiran & ":" & lngStartRowIchiran).Copy
+        .Rows(lngStartRowIchiran & ":" & lngStartRowIchiran + lngRowCnt).Insert Shift:=xlDown
+        
+        'シートにデータをセット
+        .Range("基準日") = "基準日＜" & strKjnLastYmd & "＞"
+        .Range(strDesRange) = vntArray2
+         
+        '不要な行を削除
+        .Range(lngStartRowIchiran + lngRowCnt + 1 & ":" & lngStartRowIchiran + lngRowCnt + 1).Delete
+        
+        'カーソル位置を移動する。
+        .Activate     ' シートが２個以上の場合要る。
+        .Range("A1").Activate
+    End With
+    
+    '============================================
+    ' 新規・増減・解約終了一覧
+    '============================================
+    '明細の最大行を求める
+    lngDataMax = 0
+    For lngCnt = 1 To 4
+        If lngDataMax < inData2(lngCnt).MeisaiCnt Then
+            lngDataMax = inData2(lngCnt).MeisaiCnt
+        End If
+    Next lngCnt
+    
+    'デフォルトのMAX行を超える場合は新規行を追加する
+    With Workbooks(Workbooks.Count).Worksheets("新規・増減・解約終了一覧")
+        lngMeiTopRow = .Range("新規_明細TOP").Row
+        lngMeiRowCnt = .Range("新規_明細END").Row - .Range("新規_明細TOP").Row + 1
+        If lngDataMax > lngMeiRowCnt Then
+                '行を追加
+                .Rows(lngMeiTopRow & ":" & lngMeiTopRow).Copy
+                .Rows(lngMeiTopRow & ":" & lngMeiTopRow + (lngDataMax - lngMeiRowCnt - 1)).Insert Shift:=xlDown
+        End If
+    End With
+    
+    '============================================
+    ' 新規契約口座一覧
+    '============================================
+    ReDim vntArray2(0)
+    '配列の添え字の階層を変更 array(X,Y) -> array(Y,X)
+    lngRet = fncKsCmnArrayIdxChange(inData2(1).Meisai, vntArray2)
+    
+    With Workbooks(Workbooks.Count).Worksheets("新規・増減・解約終了一覧")
+    
+        'シートにデータをセット
+        .Range("新規_タイトル") = Mid(strKjnLastYmd, 1, 4) & "/" & Mid(strKjnLastYmd, 5, 2)
+        .Range("新規_年金件数").Value = inData2(1).NenKensu
+        .Range("新規_非年金件数").Value = inData2(1).HiNenKensu
+        .Range("新規_合計件数").Value = inData2(1).KeiKensu
+        .Range("新規_年金額").Value = inData2(1).NenGaku
+        .Range("新規_非年金額").Value = inData2(1).HiNenGaku
+        .Range("新規_合計額").Value = inData2(1).KeiGaku
+        
+        If inData2(1).MeisaiCnt > 0 Then
+'            strDesRange = "G" & lngMeiTopRow & ":O" & lngMeiTopRow + inData2(1).MeisaiCnt - 1
+            strDesRange = Cells(lngMeiTopRow, .Range("新規_部店").Column).Address & ":" & Cells(lngMeiTopRow + inData2(1).MeisaiCnt - 1, .Range("新規_運用形態").Column).Address
+            .Range(strDesRange) = vntArray2
+        End If
+        
+    End With
+    
+    '============================================
+    ' 解約・終了口座一覧
+    '============================================
+    ReDim vntArray2(0)
+    '配列の添え字の階層を変更 array(X,Y) -> array(Y,X)
+    lngRet = fncKsCmnArrayIdxChange(inData2(2).Meisai, vntArray2)
+    
+    With Workbooks(Workbooks.Count).Worksheets("新規・増減・解約終了一覧")
+    
+        'シートにデータをセット
+        .Range("終了_タイトル") = Mid(strKjnLastYmd, 1, 4) & "/" & Mid(strKjnLastYmd, 5, 2)
+        .Range("終了_年金件数").Value = inData2(2).NenKensu
+        .Range("終了_非年金件数").Value = inData2(2).HiNenKensu
+        .Range("終了_合計件数").Value = inData2(2).KeiKensu
+        .Range("終了_年金額").Value = inData2(2).NenGaku
+        .Range("終了_非年金額").Value = inData2(2).HiNenGaku
+        .Range("終了_合計額").Value = inData2(2).KeiGaku
+        
+        If inData2(2).MeisaiCnt > 0 Then
+'            strDesRange = "R" & lngMeiTopRow & ":Z" & lngMeiTopRow + inData2(2).MeisaiCnt - 1
+            strDesRange = Cells(lngMeiTopRow, .Range("終了_部店").Column).Address & ":" & Cells(lngMeiTopRow + inData2(2).MeisaiCnt - 1, .Range("終了_運用形態").Column).Address
+            .Range(strDesRange) = vntArray2
+        End If
+    
+    End With
+    
+    '============================================
+    ' 主な増額口座一覧
+    '============================================
+    ReDim vntArray2(0)
+    '配列の添え字の階層を変更 array(X,Y) -> array(Y,X)
+    lngRet = fncKsCmnArrayIdxChange(inData2(3).Meisai, vntArray2)
+    
+    With Workbooks(Workbooks.Count).Worksheets("新規・増減・解約終了一覧")
+    
+        'シートにデータをセット
+        .Range("増額_タイトル") = Mid(strKjnLastYmd, 1, 4) & "/" & Mid(strKjnLastYmd, 5, 2)
+        .Range("増額_年金件数").Value = inData2(3).NenKensu
+        .Range("増額_非年金件数").Value = inData2(3).HiNenKensu
+        .Range("増額_合計件数").Value = inData2(3).KeiKensu
+        .Range("増額_年金額").Value = inData2(3).NenGaku
+        .Range("増額_非年金額").Value = inData2(3).HiNenGaku
+        .Range("増額_合計額").Value = inData2(3).KeiGaku
+        
+        If inData2(3).MeisaiCnt > 0 Then
+'            strDesRange = "AC" & lngMeiTopRow & ":AJ" & lngMeiTopRow + inData2(3).MeisaiCnt - 1
+            strDesRange = Cells(lngMeiTopRow, .Range("増額_部店").Column).Address & ":" & Cells(lngMeiTopRow + inData2(3).MeisaiCnt - 1, .Range("増額_運用形態").Column).Address
+            .Range(strDesRange) = vntArray2
+        End If
+        
+    End With
+    
+    '============================================
+    ' 主な減額口座一覧
+    '============================================
+    ReDim vntArray2(0)
+    '配列の添え字の階層を変更 array(X,Y) -> array(Y,X)
+    lngRet = fncKsCmnArrayIdxChange(inData2(4).Meisai, vntArray2)
+    
+    With Workbooks(Workbooks.Count).Worksheets("新規・増減・解約終了一覧")
+    
+        'シートにデータをセット
+        .Range("減額_タイトル") = Mid(strKjnLastYmd, 1, 4) & "/" & Mid(strKjnLastYmd, 5, 2)
+        .Range("減額_年金件数").Value = inData2(4).NenKensu
+        .Range("減額_非年金件数").Value = inData2(4).HiNenKensu
+        .Range("減額_合計件数").Value = inData2(4).KeiKensu
+        .Range("減額_年金額").Value = inData2(4).NenGaku
+        .Range("減額_非年金額").Value = inData2(4).HiNenGaku
+        .Range("減額_合計額").Value = inData2(4).KeiGaku
+        
+        If inData2(4).MeisaiCnt > 0 Then
+'            strDesRange = "AM" & lngMeiTopRow & ":AT" & lngMeiTopRow + inData2(4).MeisaiCnt - 1
+            strDesRange = Cells(lngMeiTopRow, .Range("減額_部店").Column).Address & ":" & Cells(lngMeiTopRow + inData2(4).MeisaiCnt - 1, .Range("減額_運用形態").Column).Address
+            .Range(strDesRange) = vntArray2
+        End If
+        
+    End With
+    
+    '式を値に変換
+    If fncForMulaToValueInAllSheets(Workbooks(Workbooks.Count)) = False Then
+        GoTo ErrSection
+    End If
+
+    'カーソル位置を移動する。
+    With Workbooks(Workbooks.Count).Worksheets("国内一覧")
+        .Activate
+        .Range("A1").Activate
+    End With
+    
+    ActiveWindow.ScrollRow = 1
+    ActiveWindow.ScrollColumn = 1
+    
+'------------<Modify Start azuma 2007/12/04 (PH4)> ★★★☆-----------------------
+    Workbooks(Workbooks.Count).Save
+'    Workbooks(Workbooks.Count).Close SaveChanges:=True
+'------------<Modify End   azuma 2007/12/04 (PH4)> ★★★☆-----------------------
+    
+Application.DisplayAlerts = True
+    
+    fncMakeBook4400 = True
+    
+    Call subEndProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+Application.DisplayAlerts = True
+
+    Workbooks(Workbooks.Count).Close SaveChanges:=True
+    fncMakeBook4400 = False
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- エラーログ出力 End  ---------------------------------
+   
+End Function
+
+
+'*************************************************************************
+'関数名　　：ワークテーブル作成
+'引　　数　：
+'           lngSessionID        I           セッションID
+'           strWhereString      I           WHERE文の文字列
+'                                           例) "WHERE  KIJYUN_YMD IN ('20070331','20070228')"
+'戻り値　　：処理結果
+'機能説明　：ワークテーブルにV経営帳票のデータをINSERTする
+'更新履歴　：2008/03/03 SRA H.Anpo   新規
+'
+'*************************************************************************
+Public Function fncInsertTempTable4400( _
+    ByVal lngSessionID As Long, _
+    ByVal strWhereString As String, _
+    ByVal strZenLastYmd As String, _
+    ByVal strKjnLastYmd As String _
+    ) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncInsertTempTable4400"
+
+On Error GoTo ErrSection
+
+    Dim strSql      As String
+    
+    fncInsertTempTable4400 = False
+    
+    cnAdo.BeginTrans
+    
+    strSql = ""
+'=== 増減口座判定基準変更20080215 2008/03/10 Modified By SRA吉井 START
+'    strSql = strSql & " INSERT INTO KYK_WK_KEIEI_CHOUHYOU (SESSION_ID,KIJYUN_YMD,PRTCD,DATA_TYPE,SHOZOKU_BU,NAME_RJ,CNT_TYPE,SHUKEI_KOKYAKU_TYP,SHINTAKU_KEIYAKU,JPY_JIKA_TOTAL_KOKUNAI,UNYO_KEITAI) "
+'    strSql = strSql & " SELECT " & lngSessionID & ", KIJYUN_YMD,PRTCD,DATA_TYPE,SHOZOKU_BU,NAME_RJ,CNT_TYPE,SHUKEI_KOKYAKU_TYP,SHINTAKU_KEIYAKU,JPY_JIKA_TOTAL_KOKUNAI,UNYO_KEITAI FROM KYK_VW_KEIEI_CHOUHYOU KVKC "
+    strSql = strSql & " INSERT INTO KYK_WK_KEIEI_CHOUHYOU (SESSION_ID,KIJYUN_YMD,PRTCD,DATA_TYPE,SHOZOKU_BU, "
+    strSql = strSql & " NAME_RJ,CNT_TYPE,SHUKEI_KOKYAKU_TYP,SHINTAKU_KEIYAKU,JPY_JIKA_TOTAL_KOKUNAI,UNYO_KEITAI, "
+    strSql = strSql & " JPY_GANPON_TOTAL_KOKUNAI) SELECT " & lngSessionID & ",KVKC.*,V601.JPY_GANPON_TOTAL_KOKUNAI "
+    strSql = strSql & " FROM (SELECT KIJYUN_YMD,PRTCD,DATA_TYPE,SHOZOKU_BU,NAME_RJ,CNT_TYPE,SHUKEI_KOKYAKU_TYP, "
+    strSql = strSql & " SHINTAKU_KEIYAKU,JPY_JIKA_TOTAL_KOKUNAI,UNYO_KEITAI FROM KYK_VW_KEIEI_CHOUHYOU WHERE "
+    strSql = strSql & " KIJYUN_YMD IN ('" & strZenLastYmd & "','" & strKjnLastYmd & "') AND SETTEI_KBN = '1') KVKC, "
+    strSql = strSql & " (SELECT PRTCD,KEJO_DATE,SUM(BC_U_ZAN) / 1000000 JPY_GANPON_TOTAL_KOKUNAI FROM VW_KYK601R "
+    strSql = strSql & " WHERE KANJOU_CD LIKE '301%' AND KEJO_DATE IN ('" & strZenLastYmd & "','" & strKjnLastYmd & "') "
+    strSql = strSql & " GROUP BY PRTCD,KEJO_DATE) V601 "
+'=== 増減口座判定基準変更20080215 2008/03/10 Modified By SRA吉井 END
+    strSql = strSql & strWhereString
+    cnAdo.Execute strSql
+    
+    cnAdo.CommitTrans
+    
+    fncInsertTempTable4400 = True
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncInsertTempTable4400 = False
+
+    cnAdo.RollbackTrans
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- エラーログ出力 End  ---------------------------------
+
+End Function
+

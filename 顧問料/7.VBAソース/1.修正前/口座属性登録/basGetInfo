@@ -1,0 +1,371 @@
+Attribute VB_Name = "basGetInfo"
+'*************************************************************************
+'関数名　　：丸め方法取得処理
+'
+'引　　数　：
+'           strKozaNo       I       口座番号
+'           vdata()         O       取得結果
+'           lngRow          O       取得件数
+'
+'戻り値　　：Boolean
+'
+'機能説明　：丸め方法を取得する
+'
+'更新履歴　：2006/08/15 SRA K.Nishihama    新規作成
+'更新履歴　：2006/10/31 SRA IIDA　　　　    丸めタイミング2,3を削除（仕様修正)
+'*************************************************************************
+Public Function func_GetMarumeInfo(ByVal strKozaNo As String _
+                                  , ByRef vData() As Variant _
+                                  , ByRef lngRow As Long) As Boolean
+    Dim strSql      As String
+    Dim lngCol      As Long
+    Dim lngCnt      As Long
+    Dim strErrCode  As String
+    
+    func_GetMarumeInfo = False
+    
+    strSql = ""
+    strSql = strSql & " SELECT"
+    strSql = strSql & "     MARUME_TIMING,"  'vData(0,0)
+    strSql = strSql & "     MARUME_HOHHOH,"  'vData(1,0)
+    strSql = strSql & "     TOHROKU_YMD   "  'vData(2,0)
+    strSql = strSql & " FROM"
+    strSql = strSql & "     KYK_MARUME_HOHHOH"
+    strSql = strSql & " WHERE"
+    strSql = strSql & "     KOHZA_NO = '" & strKozaNo & "'"
+    '2006/10/31 ADD S
+    strSql = strSql & " AND MARUME_TIMING NOT IN(2,3) "
+    '2006/10/31 ADD E
+    strSql = strSql & " AND SAKUJO_FLG = '0'"
+    
+    'データ取得
+    Call gclsdb.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow, strErrCode)
+    
+    If Trim(strErrCode) <> "" Then
+        Exit Function
+    End If
+    
+    func_GetMarumeInfo = True
+    
+    Exit Function
+
+ErrHandler:
+    func_GetMarumeInfo = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_GetMarumeInfo", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+'    Erase vdata
+    MsgBox "Error:func_GetMarumeInfo" & vbCrLf & Err.Description
+
+End Function
+
+'*************************************************************************
+'関数名　　：合算口座取得処理
+'
+'引　　数　：
+'           strKozaNo       I       口座番号
+'           vdata()         O       取得結果
+'           lngRow          O       取得件数
+'
+'戻り値　　：Boolean
+'
+'機能説明　：合算口座を取得する
+'
+'更新履歴　：2006/08/15 SRA K.Nishihama    新規作成
+'
+'*************************************************************************
+Public Function func_GetGassanInfo(ByVal strKozaNo As String _
+                                  , ByRef vData() As Variant _
+                                  , ByRef lngRow As Long) As Boolean
+    Dim strSql      As String
+    Dim lngCol      As Long
+    Dim lngCnt      As Long
+    Dim strErrCode  As String
+    
+    func_GetGassanInfo = False
+    
+    strSql = ""
+    strSql = strSql & " SELECT"
+    strSql = strSql & "     GASSAN_OYA_KOHZA_NO,"    'vData(0,0)
+    strSql = strSql & "     GASSAN_KAISHI_YMD,"      'vData(1,0)
+    strSql = strSql & "     GASSAN_SHURYOH_YMD,"     'vData(2,0)
+    strSql = strSql & "     TOHROKU_YMD       "      'vData(3,0)
+    strSql = strSql & " FROM"
+    strSql = strSql & "     KYK_GASSAN_KOHZA"
+    strSql = strSql & " WHERE"
+    strSql = strSql & "     GASSAN_KO_KOHZA_NO = '" & strKozaNo & "'"
+    strSql = strSql & " AND SAKUJO_FLG = '0'"
+    
+    'データ取得
+    Call gclsdb.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow, strErrCode)
+    
+    If Trim(strErrCode) <> "" Then
+        Exit Function
+    End If
+    
+    func_GetGassanInfo = True
+    
+    Exit Function
+
+ErrHandler:
+    func_GetGassanInfo = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_GetGassanInfo", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+'    Erase vdata
+    MsgBox "Error:func_GetGassanInfo" & vbCrLf & Err.Description
+
+End Function
+
+'*************************************************************************
+'関数名　　：口座属性取得処理
+'
+'引　　数　：
+'           strKozaNo       I       口座番号
+'           vdata()         O       取得結果
+'           lngRow          O       取得件数
+'
+'戻り値　　：Boolean
+'
+'機能説明　：口座属性を取得する
+'
+'更新履歴　：2006/08/15 SRA K.Nishihama    新規作成
+'更新履歴　：2007/02/14 SRA Y.Azuma        変更     (PH2)QANo.209 上期成功報酬対応
+'更新履歴　：2007/03/08 SRA T.Ichikawa     変更     (PH3)QANo. ０円請求書文言出力追加
+'更新履歴　：2007/11/09 SRA Y.Azuma        変更     (PH4)
+'更新履歴　：2008/10/14 SRA T.Mizutani     変更     海外口座の契約日の管理
+'
+'*************************************************************************
+Public Function func_GetKohzaInfo(ByVal strKozaNo As String _
+                                , ByRef vData() As Variant _
+                                , ByRef lngRow As Long) As Boolean
+    Dim strSql      As String
+    Dim lngCol      As Long
+    Dim lngCnt      As Long
+    Dim strErrCode  As String
+    
+    func_GetKohzaInfo = False
+    
+'------------<Modify Start azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+'    strSql = ""
+'    strSql = strSql & " SELECT"
+''------------<Modify Start Ichikawa 2007/03/08 > -----------------------
+''    strSql = strSql & "     ANBUN_HOHHOH,      "        'vData(0,0)
+''    strSql = strSql & "     SAITEI_HOSHOH_GAKU,"        'vData(1,0)
+''    strSql = strSql & "     RATE_KOHJYO_KBN,   "        'vData(2,0)
+''    strSql = strSql & "     RATE_KOHJYO_WARIAI,"        'vData(3,0)
+''    strSql = strSql & "     GASSAN_TAISHOH_KBN,"        'vData(4,0)
+''    strSql = strSql & "     T21_ENCHOH_KBN,    "        'vData(5,0)
+''    strSql = strSql & "     SEIKOH_HOHSHU_KBN, "        'vData(6,0)
+''    strSql = strSql & "     SEIKOH_HOHSHU_TYPE,"        'vData(7,0)
+''    strSql = strSql & "     TOHROKU_YMD       "         'vData(8,0)
+'''------------<Modify Start azuma 2007/02/14 > -----------------------
+''    strSql = strSql & "    ,KAMIKI_MISHU_KAKEME_RATE"   'vData(9,0)
+'''------------<Modify End   azuma 2007/02/14 > -----------------------
+''    strSql = strSql & " FROM"
+''    strSql = strSql & "     KYK_KOHZA_ZOKUSEI"
+''    strSql = strSql & " WHERE"
+''    strSql = strSql & "     KOHZA_NO = '" & strKozaNo & "'"
+''    strSql = strSql & " AND SAKUJO_FLG = '0'"
+'
+'
+'    strSql = strSql & "     A.ANBUN_HOHHOH,      "        'vData(0,0)
+'    strSql = strSql & "     A.SAITEI_HOSHOH_GAKU,"        'vData(1,0)
+'    strSql = strSql & "     A.RATE_KOHJYO_KBN,   "        'vData(2,0)
+'    strSql = strSql & "     A.RATE_KOHJYO_WARIAI,"        'vData(3,0)
+'    strSql = strSql & "     A.GASSAN_TAISHOH_KBN,"        'vData(4,0)
+'    strSql = strSql & "     A.T21_ENCHOH_KBN,    "        'vData(5,0)
+'    strSql = strSql & "     A.SEIKOH_HOHSHU_KBN, "        'vData(6,0)
+'    strSql = strSql & "     A.SEIKOH_HOHSHU_TYPE,"        'vData(7,0)
+'    strSql = strSql & "     A.TOHROKU_YMD,       "        'vData(8,0)
+'    strSql = strSql & "     A.KAMIKI_MISHU_KAKEME_RATE,"  'vData(9,0)
+'    strSql = strSql & "     B.MONGON_KBN,        "        'vData(10,0)
+'    strSql = strSql & "     B.MONGON,            "        'vData(11,0)
+'    strSql = strSql & "     B.TOHROKU_YMD        "        'vData(12,0)
+'    strSql = strSql & " FROM"
+'    strSql = strSql & "     KYK_KOHZA_ZOKUSEI A,"
+'
+''------------<Modify Start Ichikawa 2007/03/30 > -----------------------
+''    strSql = strSql & "     KYK_SEIKYUSHO_MONGON B"
+'
+'    strSql = strSql & "    (SELECT"
+'    strSql = strSql & "         KOHZA_NO,"
+'    strSql = strSql & "         MONGON_KBN,"
+'    strSql = strSql & "         MONGON,"
+'    strSql = strSql & "         TOHROKU_YMD"
+'    strSql = strSql & "     FROM"
+'    strSql = strSql & "         KYK_SEIKYUSHO_MONGON"
+'    strSql = strSql & "     WHERE"
+'    strSql = strSql & "         MONGON_KBN = '" & ZEROYEN_MONGON_KBN & "'"
+'    strSql = strSql & "     AND SAKUJO_FLG = '0'"
+'    strSql = strSql & "    ) B"
+''------------<Modify End   Ichikawa 2007/03/30 > -----------------------
+'
+'    strSql = strSql & " WHERE"
+'    strSql = strSql & "     A.KOHZA_NO = B.KOHZA_NO (+)"
+'    strSql = strSql & " AND A.KOHZA_NO = '" & strKozaNo & "'"
+'    strSql = strSql & " AND A.SAKUJO_FLG = '0'"
+''------------<Modify End   Ichikawa 2007/03/08 > -----------------------
+
+    strSql = ""
+    strSql = strSql & " SELECT"
+    strSql = strSql & "     A.ANBUN_HOHHOH,"              'vData(0,0)
+    strSql = strSql & "     A.SAITEI_HOSHOH_GAKU,"        'vData(1,0)
+    strSql = strSql & "     A.RATE_KOHJYO_KBN,"           'vData(2,0)
+    strSql = strSql & "     A.RATE_KOHJYO_WARIAI,"        'vData(3,0)
+    strSql = strSql & "     A.GASSAN_TAISHOH_KBN,"        'vData(4,0)
+    strSql = strSql & "     A.T21_ENCHOH_KBN,"            'vData(5,0)
+    strSql = strSql & "     A.SEIKOH_HOHSHU_KBN,"         'vData(6,0)
+    strSql = strSql & "     A.SEIKOH_HOHSHU_TYPE,"        'vData(7,0)
+    strSql = strSql & "     A.TOHROKU_YMD,"               'vData(8,0)
+    strSql = strSql & "     A.KAMIKI_MISHU_KAKEME_RATE,"  'vData(9,0)
+    strSql = strSql & "     B.MONGON_KBN,"                'vData(10,0)
+    strSql = strSql & "     B.MONGON,"                    'vData(11,0)
+    strSql = strSql & "     B.TOHROKU_YMD,"               'vData(12,0)
+    strSql = strSql & "     A.SEIKYUU_NAME1,"             'vData(13,0)
+    strSql = strSql & "     A.SEIKYUU_NAME2,"             'vData(14,0)
+    strSql = strSql & "     A.SEIKYUU_NAME3,"             'vData(15,0)
+    strSql = strSql & "     A.SEIKYUU_KAI,"               'vData(16,0)
+    strSql = strSql & "     A.DATA_TYPE,"                 'vData(17,0)
+    strSql = strSql & "     A.SHINTAKU_KEIYAKU,"          'vData(18,0)
+    strSql = strSql & "     A.YOBI_NAME,"                 'vData(19,0)
+    strSql = strSql & "     A.YUUBIN,"                    'vData(20,0)
+    strSql = strSql & "     A.JYUUSHO1,"                  'vData(21,0)
+    strSql = strSql & "     A.JYUUSHO2,"                  'vData(22,0)
+    strSql = strSql & "     A.TANTOU_BU,"                 'vData(23,0)
+    strSql = strSql & "     A.TANTOUSHA,"                 'vData(24,0)
+    strSql = strSql & "     A.KATAGAKI,"                  'vData(25,0)
+    strSql = strSql & "     A.DAIHYOUSHA,"                'vData(26,0)
+    strSql = strSql & "     A.TEL_NO,"                    'vData(27,0)
+    strSql = strSql & "     A.FAX_NO,"                    'vData(28,0)
+    strSql = strSql & "     A.E_MAIL,"                    'vData(29,0)
+    strSql = strSql & "     A.KEI_YOBI_NAME,"             'vData(30,0)
+    strSql = strSql & "     A.KEI_YUUBIN,"                'vData(31,0)
+    strSql = strSql & "     A.KEI_JYUUSHO1,"              'vData(32,0)
+    strSql = strSql & "     A.KEI_JYUUSHO2,"              'vData(33,0)
+    strSql = strSql & "     A.KEI_TANTOU_BU,"             'vData(34,0)
+    strSql = strSql & "     A.KEI_TANTOUSHA,"             'vData(35,0)
+    strSql = strSql & "     A.KEI_KATAGAKI,"              'vData(36,0)
+    strSql = strSql & "     A.KEI_DAIHYOUSHA,"            'vData(37,0)
+    strSql = strSql & "     A.KEI_TEL_NO,"                'vData(38,0)
+    strSql = strSql & "     A.KEI_FAX_NO,"                'vData(39,0)
+    strSql = strSql & "     A.KEI_E_MAIL,"                'vData(40,0)
+    strSql = strSql & "     A.KEIYAKUGAI_FROM,"           'vData(41,0)
+    '------------<Add Start 海外口座の契約日の管理 mizutani 2008/10/14 > -----------------------
+    'strSql = strSql & "     A.KEIYAKUGAI_TO"              'vData(42,0)
+    strSql = strSql & "     A.KEIYAKUGAI_TO,"             'vData(42,0)
+    strSql = strSql & "     A.KEIYAKU_YMD"                'vData(43,0)
+    '------------<Add Start 海外口座の契約日の管理 mizutani 2008/10/14 > -----------------------
+    strSql = strSql & " FROM"
+    strSql = strSql & "     " & TBL_KOHZA_ZOKUSEI & " A,"
+    strSql = strSql & "    (SELECT"
+    strSql = strSql & "         KOHZA_NO,"
+    strSql = strSql & "         MONGON_KBN,"
+    strSql = strSql & "         MONGON,"
+    strSql = strSql & "         TOHROKU_YMD"
+    strSql = strSql & "     FROM"
+    strSql = strSql & "         KYK_SEIKYUSHO_MONGON"
+    strSql = strSql & "     WHERE"
+    strSql = strSql & "         MONGON_KBN = '" & ZEROYEN_MONGON_KBN & "'"
+    strSql = strSql & "     AND SAKUJO_FLG = '0'"
+    strSql = strSql & "    ) B"
+    strSql = strSql & " WHERE"
+    strSql = strSql & "     A.KOHZA_NO = B.KOHZA_NO (+)"
+    strSql = strSql & " AND A.KOHZA_NO = '" & strKozaNo & "'"
+    strSql = strSql & " AND A.SAKUJO_FLG = '0'"
+'------------<Modify End   azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+    
+    'データ取得
+    Call gclsdb.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow, strErrCode)
+    
+    If Trim(strErrCode) <> "" Then
+        Exit Function
+    End If
+    
+    func_GetKohzaInfo = True
+    
+    Exit Function
+
+ErrHandler:
+    func_GetKohzaInfo = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_GetKohzaInfo", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+'    Erase vdata
+    MsgBox "Error:func_GetKohzaInfo" & vbCrLf & Err.Description
+
+End Function
+
+'*************************************************************************
+'関数名　　：属性情報取得処理
+'
+'引　　数　：
+'           strKozaNo       I       口座番号
+'           vdata()         O       取得結果
+'           lngRow          O       取得件数
+'
+'戻り値　　：Boolean
+'
+'機能説明　：統計付加情報用属性を口座コードテーブルから取得する
+'
+'更新履歴　：2007/11/09 SRA Y.Azuma    新規     (PH4)
+'*************************************************************************
+Public Function func_GetZokuseiInfo(ByVal strKozaNo As String _
+                                  , ByRef vData() As Variant _
+                                  , ByRef lngRow As Long) As Boolean
+    Dim strSql      As String
+    Dim lngCol      As Long
+    Dim lngCnt      As Long
+    Dim strErrCode  As String
+    
+    func_GetZokuseiInfo = False
+    
+    strSql = ""
+    strSql = strSql & "   SELECT TO_NUMBER(CODE_NO)-1000 CODE_NO "
+    strSql = strSql & "         ,CODE_VALUE"
+    strSql = strSql & "         ,TOHROKU_YMD"
+    strSql = strSql & "     FROM " & TBL_KOHZA_CODE
+    strSql = strSql & "    WHERE KOHZA_NO = '" & strKozaNo & "'"
+    strSql = strSql & "      AND SAKUJO_FLG = '0'"
+    strSql = strSql & " ORDER BY CODE_NO"
+    
+    'データ取得
+    Call gclsdb.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow, strErrCode)
+    
+    If Trim(strErrCode) <> "" Then
+        Exit Function
+    End If
+    
+    func_GetZokuseiInfo = True
+    
+    Exit Function
+
+ErrHandler:
+    func_GetZokuseiInfo = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_GetZokuseiInfo", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+'    Erase vdata
+
+End Function
+

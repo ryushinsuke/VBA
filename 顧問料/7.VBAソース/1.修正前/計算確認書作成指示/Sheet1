@@ -1,0 +1,164 @@
+VERSION 1.0 CLASS
+BEGIN
+  MultiUse = -1  'True
+END
+Attribute VB_Name = "Sheet1"
+Attribute VB_GlobalNameSpace = False
+Attribute VB_Creatable = False
+Attribute VB_PredeclaredId = True
+Attribute VB_Exposed = True
+Option Explicit
+'*************************************************************************
+'
+'プロジェクト名：外部委託ライセンスフィー算出システム・計算確認書作成指示
+'
+'オブジェクト名：Sheet1
+'
+'機能概要　：メイン画面
+'
+'更新履歴　：2008/06/30 SRA 東       新規作成
+'
+'*************************************************************************
+Private Const MODULE_NAME As String = "main"
+
+
+'*************************************************************************
+'関数名　　：実行ボタン・イベントプロシージャ
+'
+'引　　数　：
+'
+'戻り値　　：
+'
+'機能説明　：実行ボタン押下時の処理
+'
+'更新履歴　：2008/06/30 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Private Sub cmdExecute_Click()
+    
+On Error GoTo Error_Section
+
+    Const PROCEDURE_NAME    As String = "cmdExecute_Click"
+    Dim lngEndRow           As Long
+    Dim lngErrorCnt         As Long
+'*******************************************************
+'* 関数開始　                                        　*
+'*******************************************************
+
+    'ブック保護の解除
+    Call gCom01_BookProtect(ThisWorkbook, False)
+    
+    With ThisWorkbook
+        'エラーシートの非表示
+        .Worksheets(ERROR_SHEETNAME).Visible = False
+        
+        'エラーシートのクリアと罫線削除
+        With .Worksheets(ERROR_SHEETNAME).Rows("2:65536")
+            .ClearContents
+            .Borders(xlDiagonalDown).LineStyle = xlNone
+            .Borders(xlDiagonalUp).LineStyle = xlNone
+            .Borders(xlEdgeLeft).LineStyle = xlNone
+            .Borders(xlEdgeTop).LineStyle = xlNone
+            .Borders(xlEdgeBottom).LineStyle = xlNone
+            .Borders(xlEdgeRight).LineStyle = xlNone
+            .Borders(xlInsideVertical).LineStyle = xlNone
+            .Borders(xlInsideHorizontal).LineStyle = xlNone
+        End With
+        
+        'ブック保護の実施
+        Call gCom01_BookProtect(ThisWorkbook, True)
+        
+        '*******************
+        '*** 実行メイン ****
+        '*******************
+ 
+        '画面の更新中止
+        .Application.ScreenUpdating = False
+        .Application.DisplayStatusBar = False
+
+        '実行メイン処理
+        Call gsub_ExecuteMain(.Worksheets(MAIN_SHEETNAME))
+        
+        'エラーがある場合(エラーシート書き込みがある)エラーシートを表示する。
+        If func_GetEndRow(.Name, ERROR_SHEETNAME, lngErrorCnt) >= 2 Then
+            On Error Resume Next
+            Call gCom01_BookProtect(ThisWorkbook, False)
+            .Worksheets(ERROR_SHEETNAME).Visible = True
+            .Worksheets(ERROR_SHEETNAME).Select
+            With .Worksheets(ERROR_SHEETNAME).Application.ActiveWindow
+                .ScrollRow = 1
+                .ScrollColumn = 1
+            End With
+            .Worksheets(ERROR_SHEETNAME).Cells(1, 1).Select
+            Call gCom01_BookProtect(ThisWorkbook, True)
+            On Error GoTo Error_Section
+        End If
+        
+        '画面の更新有効
+        .Application.ScreenUpdating = True
+        .Application.DisplayStatusBar = True
+
+    End With
+    
+Exit Sub
+    
+Error_Section:
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'@    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+    With ThisWorkbook
+        .Application.ScreenUpdating = True
+        .Application.DisplayStatusBar = True
+    End With
+
+End Sub
+
+'*************************************************************************
+'関数名　　：参照ボタン・イベントプロシージャ
+'
+'引　　数　：
+'
+'戻り値　　：
+'
+'機能説明　：参照ボタン押下時の処理
+'
+'更新履歴　：2008/06/30 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Private Sub cmdRef_Click()
+    
+On Error GoTo Error_Section
+    
+    Const PROCEDURE_NAME As String = "cmdRef_Click"
+    Dim strSaveFolder    As String
+    Dim strMsg           As String
+    
+    strSaveFolder = ""
+    strMsg = gfunc_ErrorMsg(3, 20060, "", "", False)
+
+    '保存先フォルダーの指定
+    Call GetFolder(strMsg, strSaveFolder)
+    
+    If Trim(strSaveFolder) <> "" Then
+        ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range("保存フォルダ").Value = strSaveFolder
+    End If
+    
+Exit Sub
+    
+Error_Section:
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'@    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+End Sub

@@ -1,0 +1,302 @@
+Attribute VB_Name = "basUserObject"
+Option Explicit
+
+'*************************************************************************
+'関数名　　：メニューボタン押下時処理共通
+'
+'引　　数　：
+'           PNo             I       ボタン番号
+'
+'戻り値　　：なし
+'
+'機能説明　：シート上のボタンを押下された場合の処理
+'
+'更新履歴　：2006/??/?? SRA             新規作成
+'更新履歴　：2008/06/16 SRA Y.Azuma     変更   外部委託ライセンスフィー算出対応
+'
+'*************************************************************************
+Public Sub gDynaInsBtnX_Click(PNo As Long)
+    Dim strBnm As String
+'-----------<Added オンラインおよびオンラインバッチ起動時の定時バッチチェック対応 2008/03/21 SRA市川 Start > -----------
+    Dim blnBCResult     As Boolean
+    Dim strSystemNm1    As String
+    Dim strErrMsg       As String
+    Dim lngRow          As Long
+'-----------<Added オンラインおよびオンラインバッチ起動時の定時バッチチェック対応 2008/03/21 SRA市川 Start > -----------
+    
+    
+    Dim strSheetName        As String   '<----------- Modify azuma 2008/6/16 外部委託ライセンスフィー算出★★★
+    Dim strMainName         As String   '<----------- Modify azuma 2008/6/16 外部委託ライセンスフィー算出★★★
+    
+'------------<Modify Start azuma 2008/6/16 > 外部委託ライセンスフィー算出★★★-----------------------
+    
+    Select Case PNo \ 100
+    Case 0
+        strSheetName = SHEET_BUTTONLIST
+        strMainName = SHEET_MAIN
+    Case 1
+        strSheetName = SHEET_BUTTONLIST2
+        strMainName = SHEET_MAIN2
+    End Select
+    
+    strBnm = Worksheets(strMainName).Shapes(SHEET_BUTTON_PFix & Trim(Str(PNo))). _
+                    OLEFormat.Object.Caption
+
+    Application.ScreenUpdating = False
+    Select Case strBnm
+        Case SHEET_BUTTON_Menu
+            Call gCom01_OpenWorkBook(ThisWorkbook.Name, True)
+        Case SHEET_BUTTON_KOKUNAI
+            Worksheets(SHEET_MAIN).Visible = True
+            Worksheets(SHEET_MAIN2).Visible = False
+            Worksheets(SHEET_MAIN).Select
+            Exit Sub
+        Case SHEET_BUTTON_LICENSE
+            Worksheets(SHEET_MAIN2).Visible = True
+            Worksheets(SHEET_MAIN).Visible = False
+            Worksheets(SHEET_MAIN2).Select
+            Exit Sub
+        Case Else
+            Application.ScreenUpdating = True
+    
+'-----------<Added オンラインおよびオンラインバッチ起動時の定時バッチチェック対応 2008/03/21 SRA市川 Start > -----------
+            '【ボタンリスト】シートのバッチチェック列が"○"の場合
+            With Worksheets(strSheetName)
+                For lngRow = SHEET_BUTTON_DataSRow To 65536
+                    If strBnm = Trim(.Cells(lngRow, SHEET_BUTTON_DataNmCol)) Then
+                        If Trim(.Cells(lngRow, SHEET_BUTTON_BatChkCol)) = "○" Then
+                            If func_BatchCheck(strBnm, blnBCResult, strSystemNm1, strErrMsg, False) = False Then
+                                'バッチチェックでシステムエラー等が発生した場合、処理を続行する
+                            End If
+                            
+                            'バッチチェックNGの場合、確認メッセージを表示する
+                            If blnBCResult = False Then
+                                If MsgBox("「" & strSystemNm1 & "」が実行中です。「" & strBnm & "」を起動しますか？", vbYesNo + vbExclamation) = vbNo Then
+                                    Exit Sub
+                                End If
+                            End If
+                        End If
+                        
+                        Exit For
+                    End If
+                Next
+            End With
+''            With Worksheets(SHEET_BUTTONLIST)
+''                For lngRow = SHEET_BUTTON_DataSRow To 99999
+''                    If strBnm = Trim(.Cells(lngRow, SHEET_BUTTON_DataNmCol)) Then
+''                        If Trim(.Cells(lngRow, SHEET_BUTTON_BatChkCol)) = "○" Then
+''                            If func_BatchCheck(strBnm, blnBCResult, strSystemNm1, strErrMsg, False) = False Then
+''                                'バッチチェックでシステムエラー等が発生した場合、処理を続行する
+''                            End If
+''
+''                            'バッチチェックNGの場合、確認メッセージを表示する
+''                            If blnBCResult = False Then
+''                                If MsgBox("「" & strSystemNm1 & "」が実行中です。「" & strBnm & "」を起動しますか？", vbYesNo + vbExclamation) = vbNo Then
+''                                    Exit Sub
+''                                End If
+''                            End If
+''                        End If
+''
+''                        Exit For
+''                    End If
+''                Next
+''            End With
+'-----------<Added オンラインおよびオンラインバッチ起動時の定時バッチチェック対応 2008/03/21 SRA市川 End   > -----------
+            
+            Call gCom01_OpenWorkBook(strBnm & ".xls")
+        End Select
+        
+    
+''    strBnm = Worksheets(SHEET_MAIN).Shapes(SHEET_BUTTON_PFix & Trim(Str(PNo))). _
+''                    OLEFormat.Object.Caption
+''
+''    If strBnm = SHEET_BUTTON_Menu Then
+''        Call gCom01_OpenWorkBook(ThisWorkbook.Name, True)
+''    Else
+''
+''
+'''-----------<Added オンラインおよびオンラインバッチ起動時の定時バッチチェック対応 2008/03/21 SRA市川 Start > -----------
+''        '【ボタンリスト】シートのバッチチェック列が"○"の場合
+''        With Worksheets(SHEET_BUTTONLIST)
+''            For lngRow = SHEET_BUTTON_DataSRow To 99999
+''                If strBnm = Trim(.Cells(lngRow, SHEET_BUTTON_DataNmCol)) Then
+''                    If Trim(.Cells(lngRow, SHEET_BUTTON_BatChkCol)) = "○" Then
+''                        If func_BatchCheck(strBnm, blnBCResult, strSystemNm1, strErrMsg, False) = False Then
+''                            'バッチチェックでシステムエラー等が発生した場合、処理を続行する
+''                        End If
+''
+''                        'バッチチェックNGの場合、確認メッセージを表示する
+''                        If blnBCResult = False Then
+''                            If MsgBox("「" & strSystemNm1 & "」が実行中です。「" & strBnm & "」を起動しますか？", vbYesNo + vbExclamation) = vbNo Then
+''                                Exit Sub
+''                            End If
+''                        End If
+''                    End If
+''
+''                    Exit For
+''                End If
+''            Next
+''        End With
+'''-----------<Added オンラインおよびオンラインバッチ起動時の定時バッチチェック対応 2008/03/21 SRA市川 End   > -----------
+''
+''        Call gCom01_OpenWorkBook(strBnm & ".xls")
+''    End If
+
+'------------<Modify End   azuma 2008/6/16 > 外部委託ライセンスフィー算出★★★-----------------------
+    
+End Sub
+''' 50個分のクリックイベントプロシージャを用意しておく
+Public Sub gDynaInsBtn1_Click():  gDynaInsBtnX_Click 1: End Sub
+Public Sub gDynaInsBtn2_Click():  gDynaInsBtnX_Click 2: End Sub
+Public Sub gDynaInsBtn3_Click():  gDynaInsBtnX_Click 3: End Sub
+Public Sub gDynaInsBtn4_Click():  gDynaInsBtnX_Click 4: End Sub
+Public Sub gDynaInsBtn5_Click():  gDynaInsBtnX_Click 5: End Sub
+Public Sub gDynaInsBtn6_Click():  gDynaInsBtnX_Click 6: End Sub
+Public Sub gDynaInsBtn7_Click():  gDynaInsBtnX_Click 7: End Sub
+Public Sub gDynaInsBtn8_Click():  gDynaInsBtnX_Click 8: End Sub
+Public Sub gDynaInsBtn9_Click():  gDynaInsBtnX_Click 9: End Sub
+
+Public Sub gDynaInsBtn10_Click():  gDynaInsBtnX_Click 10: End Sub
+Public Sub gDynaInsBtn11_Click():  gDynaInsBtnX_Click 11: End Sub
+Public Sub gDynaInsBtn12_Click():  gDynaInsBtnX_Click 12: End Sub
+Public Sub gDynaInsBtn13_Click():  gDynaInsBtnX_Click 13: End Sub
+Public Sub gDynaInsBtn14_Click():  gDynaInsBtnX_Click 14: End Sub
+Public Sub gDynaInsBtn15_Click():  gDynaInsBtnX_Click 15: End Sub
+Public Sub gDynaInsBtn16_Click():  gDynaInsBtnX_Click 16: End Sub
+Public Sub gDynaInsBtn17_Click():  gDynaInsBtnX_Click 17: End Sub
+Public Sub gDynaInsBtn18_Click():  gDynaInsBtnX_Click 18: End Sub
+Public Sub gDynaInsBtn19_Click():  gDynaInsBtnX_Click 19: End Sub
+
+Public Sub gDynaInsBtn20_Click():  gDynaInsBtnX_Click 20: End Sub
+Public Sub gDynaInsBtn21_Click():  gDynaInsBtnX_Click 21: End Sub
+Public Sub gDynaInsBtn22_Click():  gDynaInsBtnX_Click 22: End Sub
+Public Sub gDynaInsBtn23_Click():  gDynaInsBtnX_Click 23: End Sub
+Public Sub gDynaInsBtn24_Click():  gDynaInsBtnX_Click 24: End Sub
+Public Sub gDynaInsBtn25_Click():  gDynaInsBtnX_Click 25: End Sub
+Public Sub gDynaInsBtn26_Click():  gDynaInsBtnX_Click 26: End Sub
+Public Sub gDynaInsBtn27_Click():  gDynaInsBtnX_Click 27: End Sub
+Public Sub gDynaInsBtn28_Click():  gDynaInsBtnX_Click 28: End Sub
+Public Sub gDynaInsBtn29_Click():  gDynaInsBtnX_Click 29: End Sub
+
+Public Sub gDynaInsBtn30_Click():  gDynaInsBtnX_Click 30: End Sub
+Public Sub gDynaInsBtn31_Click():  gDynaInsBtnX_Click 31: End Sub
+Public Sub gDynaInsBtn32_Click():  gDynaInsBtnX_Click 32: End Sub
+Public Sub gDynaInsBtn33_Click():  gDynaInsBtnX_Click 33: End Sub
+Public Sub gDynaInsBtn34_Click():  gDynaInsBtnX_Click 34: End Sub
+Public Sub gDynaInsBtn35_Click():  gDynaInsBtnX_Click 35: End Sub
+Public Sub gDynaInsBtn36_Click():  gDynaInsBtnX_Click 36: End Sub
+Public Sub gDynaInsBtn37_Click():  gDynaInsBtnX_Click 37: End Sub
+Public Sub gDynaInsBtn38_Click():  gDynaInsBtnX_Click 38: End Sub
+Public Sub gDynaInsBtn39_Click():  gDynaInsBtnX_Click 39: End Sub
+
+Public Sub gDynaInsBtn40_Click():  gDynaInsBtnX_Click 40: End Sub
+Public Sub gDynaInsBtn41_Click():  gDynaInsBtnX_Click 41: End Sub
+Public Sub gDynaInsBtn42_Click():  gDynaInsBtnX_Click 42: End Sub
+Public Sub gDynaInsBtn43_Click():  gDynaInsBtnX_Click 43: End Sub
+Public Sub gDynaInsBtn44_Click():  gDynaInsBtnX_Click 44: End Sub
+Public Sub gDynaInsBtn45_Click():  gDynaInsBtnX_Click 45: End Sub
+Public Sub gDynaInsBtn46_Click():  gDynaInsBtnX_Click 46: End Sub
+Public Sub gDynaInsBtn47_Click():  gDynaInsBtnX_Click 47: End Sub
+Public Sub gDynaInsBtn48_Click():  gDynaInsBtnX_Click 48: End Sub
+Public Sub gDynaInsBtn49_Click():  gDynaInsBtnX_Click 49: End Sub
+
+Public Sub gDynaInsBtn50_Click():  gDynaInsBtnX_Click 50: End Sub
+
+
+
+'------------<Modify Start azuma 2008/6/16 > 外部委託ライセンスフィー算出★★★-----------------------
+Public Sub gDynaInsBtn101_Click():  gDynaInsBtnX_Click 101: End Sub
+Public Sub gDynaInsBtn102_Click():  gDynaInsBtnX_Click 102: End Sub
+Public Sub gDynaInsBtn103_Click():  gDynaInsBtnX_Click 103: End Sub
+Public Sub gDynaInsBtn104_Click():  gDynaInsBtnX_Click 104: End Sub
+Public Sub gDynaInsBtn105_Click():  gDynaInsBtnX_Click 105: End Sub
+Public Sub gDynaInsBtn106_Click():  gDynaInsBtnX_Click 106: End Sub
+Public Sub gDynaInsBtn107_Click():  gDynaInsBtnX_Click 107: End Sub
+Public Sub gDynaInsBtn108_Click():  gDynaInsBtnX_Click 108: End Sub
+Public Sub gDynaInsBtn109_Click():  gDynaInsBtnX_Click 109: End Sub
+
+Public Sub gDynaInsBtn110_Click():  gDynaInsBtnX_Click 110: End Sub
+Public Sub gDynaInsBtn111_Click():  gDynaInsBtnX_Click 111: End Sub
+Public Sub gDynaInsBtn112_Click():  gDynaInsBtnX_Click 112: End Sub
+Public Sub gDynaInsBtn113_Click():  gDynaInsBtnX_Click 113: End Sub
+Public Sub gDynaInsBtn114_Click():  gDynaInsBtnX_Click 114: End Sub
+Public Sub gDynaInsBtn115_Click():  gDynaInsBtnX_Click 115: End Sub
+Public Sub gDynaInsBtn116_Click():  gDynaInsBtnX_Click 116: End Sub
+Public Sub gDynaInsBtn117_Click():  gDynaInsBtnX_Click 117: End Sub
+Public Sub gDynaInsBtn118_Click():  gDynaInsBtnX_Click 118: End Sub
+Public Sub gDynaInsBtn119_Click():  gDynaInsBtnX_Click 119: End Sub
+
+Public Sub gDynaInsBtn120_Click():  gDynaInsBtnX_Click 120: End Sub
+Public Sub gDynaInsBtn121_Click():  gDynaInsBtnX_Click 121: End Sub
+Public Sub gDynaInsBtn122_Click():  gDynaInsBtnX_Click 122: End Sub
+Public Sub gDynaInsBtn123_Click():  gDynaInsBtnX_Click 123: End Sub
+Public Sub gDynaInsBtn124_Click():  gDynaInsBtnX_Click 124: End Sub
+Public Sub gDynaInsBtn125_Click():  gDynaInsBtnX_Click 125: End Sub
+Public Sub gDynaInsBtn126_Click():  gDynaInsBtnX_Click 126: End Sub
+Public Sub gDynaInsBtn127_Click():  gDynaInsBtnX_Click 127: End Sub
+Public Sub gDynaInsBtn128_Click():  gDynaInsBtnX_Click 128: End Sub
+Public Sub gDynaInsBtn129_Click():  gDynaInsBtnX_Click 129: End Sub
+
+Public Sub gDynaInsBtn130_Click():  gDynaInsBtnX_Click 130: End Sub
+Public Sub gDynaInsBtn131_Click():  gDynaInsBtnX_Click 131: End Sub
+Public Sub gDynaInsBtn132_Click():  gDynaInsBtnX_Click 132: End Sub
+Public Sub gDynaInsBtn133_Click():  gDynaInsBtnX_Click 133: End Sub
+Public Sub gDynaInsBtn134_Click():  gDynaInsBtnX_Click 134: End Sub
+Public Sub gDynaInsBtn135_Click():  gDynaInsBtnX_Click 135: End Sub
+Public Sub gDynaInsBtn136_Click():  gDynaInsBtnX_Click 136: End Sub
+Public Sub gDynaInsBtn137_Click():  gDynaInsBtnX_Click 137: End Sub
+Public Sub gDynaInsBtn138_Click():  gDynaInsBtnX_Click 138: End Sub
+Public Sub gDynaInsBtn139_Click():  gDynaInsBtnX_Click 139: End Sub
+
+Public Sub gDynaInsBtn140_Click():  gDynaInsBtnX_Click 140: End Sub
+Public Sub gDynaInsBtn141_Click():  gDynaInsBtnX_Click 141: End Sub
+Public Sub gDynaInsBtn142_Click():  gDynaInsBtnX_Click 142: End Sub
+Public Sub gDynaInsBtn143_Click():  gDynaInsBtnX_Click 143: End Sub
+Public Sub gDynaInsBtn144_Click():  gDynaInsBtnX_Click 144: End Sub
+Public Sub gDynaInsBtn145_Click():  gDynaInsBtnX_Click 145: End Sub
+Public Sub gDynaInsBtn146_Click():  gDynaInsBtnX_Click 146: End Sub
+Public Sub gDynaInsBtn147_Click():  gDynaInsBtnX_Click 147: End Sub
+Public Sub gDynaInsBtn148_Click():  gDynaInsBtnX_Click 148: End Sub
+Public Sub gDynaInsBtn149_Click():  gDynaInsBtnX_Click 149: End Sub
+
+Public Sub gDynaInsBtn150_Click():  gDynaInsBtnX_Click 150: End Sub
+
+'*************************************************************************
+'関数名　　：メニューボタン削除
+'
+'引　　数　：
+'           strSheetName        I       削除対象シート名
+'
+'戻り値　　：なし
+'
+'機能説明　：シート上のボタンを削除する。
+'
+'更新履歴　：2008/06/16 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Sub gDelButton(ByVal strSheetName As String)
+
+On Error Resume Next
+    
+    Dim obj         As Variant
+    Dim strObjName  As String
+    
+    With Worksheets(strSheetName)
+    
+        For Each obj In .Shapes
+            strObjName = obj.Name
+            If Trim(strObjName) <> "" Then
+                If CStr(Mid(strObjName, 1, 11)) = SHEET_BUTTON_PFix Then
+                    .Shapes(strObjName).DrawingObject.Delete
+                End If
+            End If
+        Next
+        
+    End With
+    
+    Set obj = Nothing
+    
+End Sub
+
+'------------<Modify End   azuma 2008/6/16 > 外部委託ライセンスフィー算出★★★-----------------------
+

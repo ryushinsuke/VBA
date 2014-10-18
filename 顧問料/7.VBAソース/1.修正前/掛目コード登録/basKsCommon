@@ -1,0 +1,132 @@
+Attribute VB_Name = "basKsCommon"
+Option Explicit
+
+Const MODULE_NAME = "basKsCommon"
+
+
+'Public Const TEMPLATE_SHEETNAME = "Template"
+Public Const MAIN_SHEETNAME = "main"
+Public Const DATA_SHEETNAME = "data"
+
+Public Const ROWS = 10  '明細行数
+
+Public strFugou() As String     '符号テーブル
+Const DIM1_MIN = 0
+Const DIM1_MAX = 3
+
+''*************************************************************************
+''関数名　　：掛目コードのフォーマット
+''
+''引　　数　：
+''           strInputCode    I   掛目コード
+''
+''戻り値　　：
+''
+''機能説明　：掛目コードをゼロパディングする。
+''
+''更新履歴　：2006/11/30 SRA Y.Azuma    新規作成
+''
+''*************************************************************************
+'Public Function gfunc_KakemeFormat(ByVal strInputCode As String) As String
+'
+'    gfunc_KakemeFormat = CStr(Right("000" & strInputCode, 3))
+'
+'End Function
+
+
+'*************************************************************************
+'関数名　　：符号テーブル作成
+'
+'引　　数　：
+'
+'戻り値　　：
+'
+'機能説明　：符号テーブルを作成する。
+'
+'更新履歴　：2006/11/30 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Sub sub_SetFugouTable()
+
+    Dim lngD1   As Long
+    Dim vList   As Variant
+    
+    
+    vList = Array("0:＜", "1:≦", "2:＞", "3:≧")
+
+    
+    ReDim strFugou(DIM1_MIN To DIM1_MAX, 1)
+    
+    For lngD1 = DIM1_MIN To DIM1_MAX
+        strFugou(lngD1, 0) = Mid(vList(lngD1), 1, 1)
+        strFugou(lngD1, 1) = Mid(vList(lngD1), 3, 1)
+    Next lngD1
+
+End Sub
+
+'*************************************************************************
+'関数名　　：符号文字取得
+'
+'引　　数　：
+'           strIndex        I           符号のインデックス(DBの値)
+'
+'戻り値　　：符号文字
+'
+'機能説明　：符号テーブルから符号文字を検索しその文字を返す。
+'
+'更新履歴　：2006/11/30 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Function func_GetFugouChar(ByVal strIndex As String) As String
+
+    Dim lngD1   As Long
+    Dim strBuff As String
+    
+    strBuff = ""
+    
+'    Call sub_SetFugouTable
+    
+    For lngD1 = DIM1_MIN To DIM1_MAX
+        If strFugou(lngD1, 0) = strIndex Then
+            strBuff = strFugou(lngD1, 1)
+            Exit For
+        End If
+    Next lngD1
+    
+    func_GetFugouChar = strBuff
+    
+End Function
+
+'*************************************************************************
+'関数名　　：符号インデックス取得
+'
+'引　　数　：
+'           strFugou        I       符号文字( ex. ≦)
+'
+'戻り値　　：符号のインデックス
+'
+'機能説明　：符号テーブルから符号文字を検索しその文字を返す。
+'
+'更新履歴　：2006/11/30 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Function func_GetFugouIndex(ByVal strChar As String) As String
+
+    Dim lngD1   As Long
+    Dim strBuff As String
+    
+    strBuff = ""
+    
+'    Call sub_SetFugouTable
+    
+    For lngD1 = DIM1_MIN To DIM1_MAX
+        If strFugou(lngD1, 1) = strChar Then
+            strBuff = strFugou(lngD1, 0)
+            Exit For
+        End If
+    Next lngD1
+    
+    func_GetFugouIndex = strBuff
+
+End Function
+

@@ -1,0 +1,388 @@
+Attribute VB_Name = "basUpdate"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：外部委託ライセンスフィー算出システム・支払額修正
+'
+'オブジェクト名：basUpdate
+'
+'機能概要　：外部委託支払計算額情報更新
+'
+'更新履歴　：2008/06/18 SRA吉井   新規作成
+'
+'*************************************************************************
+
+Private Const MODULE_NAME As String = "basUpdate"
+
+'外部委託支払計算情報レコード
+Private Type TypeRecKsj
+    GI_no                   As String   '外部委託先番号
+    GI_Shiharai_id          As String   '支払期間ID
+    Shiharai_flg            As String   '支払フラグ
+    Keisan_Tobi             As Long     '計算TO日
+    Shuuseigaku_saiyou_flg  As Boolean  '修正額採用フラグ
+    Kazei_Mae_Shuseigaku    As Currency '課税前支払額修正額
+    Shohizei_Shuuseigaku    As Currency '消費税修正額
+    Kazei_Go_Shuseigaku     As Currency '課税後支払額修正額
+End Type
+Private mrecKsj As TypeRecKsj
+
+'*************************************************************************
+'
+'関数名　　：更新ボタン処理
+'
+'引　数　　：なし
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：更新ボタン処理
+'
+'更新履歴　：2008/06/20 SRA吉井   新規作成
+'
+'*************************************************************************
+Function fncUpdate() As Long
+    
+    Const PROCEDURE_NAME As String = "fncUpdate"
+    
+On Error GoTo ErrorHandler
+
+    Dim lngRet      As Long
+    Dim lngRow      As Long
+    Dim lngErrRow   As Long
+    Dim lngErrCol   As Long
+    Dim strErrMsg   As String
+    
+    Dim strGINo     As String
+    Dim strGIShiharaiId As String
+    Dim strShiharaiFlg As String
+
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+
+    fncUpdate = 0
+    
+    '入力チェック
+    lngRet = fncChkIchiranDisp(lngRow, lngErrRow, lngErrCol)
+    If lngRet <> 0 Then
+        Sheets(SHEET_MAIN).Cells(lngErrRow, lngErrCol).Select
+        fncUpdate = lngRet
+        Exit Function
+    End If
+    
+    '更新処理
+    With Sheets(SHEET_MAIN)
+        strGINo = Left(.Range(RNG_SV_GI_NO).Value, 1)
+        strGIShiharaiId = .Cells(lngRow, COLN_GI_SHIHARAI_ID)
+        strShiharaiFlg = .Cells(lngRow, COLN_SHIHARAI_FLG)
+    End With
+    
+    '22001 更新確認
+    If MsgBox(fncKsCmnMessageDisp(MSGLVL_QUESTION, 22001, "", , False), vbQuestion + vbYesNo, "確認") = vbNo Then
+        Exit Function
+    End If
+
+    '更新実行
+    lngRet = fncExecUpdate(strGINo, strGIShiharaiId, strShiharaiFlg)
+    If lngRet <> 0 Then
+        fncUpdate = lngRet
+        Exit Function
+    End If
+    
+    '22000 正常終了メッセージ
+    fncKsCmnMessageDisp MSGLVL_INFO, 22000, "", , True
+    
+    '外部委託支払計算情報を再表示させる
+    Call fncSearch
+    
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+
+ErrorHandler:
+    fncUpdate = Err.Number
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+
+'*************************************************************************
+'
+'関数名　　：一覧表示欄チェック
+'
+'引　数　　：ARG1   O   TopRow      long    一覧表示欄の開始行番号
+'　　　　　：ARG2   O   ErrRow      long    エラー発生行番号
+'　　　　　：ARG3   O   ErrCol      long    エラー発生列番号
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：一覧表示欄の課税後外部委託支払計算修正額の妥当性をチェックする
+'
+'更新履歴　：2008/06/20 SRA吉井   新規作成
+'
+'*************************************************************************
+Public Function fncChkIchiranDisp(ByRef TopRow As Long, _
+                                  ByRef ErrRow As Long, _
+                                  ByRef ErrCol As Long) As Long
+
+    Const PROCEDURE_NAME As String = "fncChkIchiranDisp"
+
+On Error GoTo ErrHandler
+    
+    Dim lngRow  As Long
+    Dim lngCol  As Long
+    Dim lngCnt  As Long
+    Dim lngRet  As Long
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    fncChkIchiranDisp = 0
+    
+    '変更チェック
+    '検索ボタン押下後、外部委託先番号、送付日が変更されたかをチェックする
+    lngRet = fncChkDataChange(ErrRow, ErrCol)
+    If lngRet <> 0 Then
+        fncChkIchiranDisp = lngRet
+        Exit Function
+    End If
+    
+    With Sheets(SHEET_MAIN)
+        TopRow = LIST_DATA_TOP_ROW
+        lngRow = TopRow
+        
+        Do While .Cells(lngRow, COLN_DATA_FLAG) <> vbNullString
+            
+            '課税後外部委託支払計算修正額チェック
+            lngRet = fncChkShuseiGakuFormat(.Cells(lngRow, COLN_SHIHARAI_SHUSEI_GAKU), MSG1_SHIHARAI_SHUSEI_GAKU)
+            If lngRet <> 0 Then
+                ErrRow = lngRow
+                ErrCol = COLN_SHIHARAI_SHUSEI_GAKU
+                fncChkIchiranDisp = lngRet
+                Exit Function
+            End If
+            
+            lngRow = lngRow + 1
+        Loop
+    End With
+        
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+
+ErrHandler:
+    fncChkIchiranDisp = Err.Number
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+
+'*************************************************************************
+'
+'関数名　　：更新処理
+'
+'引　数　　：ARG1   I   GI_no           String 外部委託先番号
+'　　　　　：ARG2   I   GI_Shiharai_id  String 支払期間ID
+'　　　　　：ARG3   I   Shiharai_flg    String 支払フラグ
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：時価情報を基に資産時価テーブルを更新する
+'
+'更新履歴　：2008/06/20 SRA吉井   新規作成
+'
+'*************************************************************************
+Public Function fncExecUpdate(ByVal GI_no As String, _
+                              ByVal GI_Shiharai_id As String, _
+                              ByVal Shiharai_flg As String) As Long
+
+    Const PROCEDURE_NAME As String = "fncExecUpdate"
+
+On Error GoTo ErrHandler
+    
+    Dim strSql      As String
+    Dim recSel      As ADODB.Recordset
+    Dim lngRow      As Long
+    
+    Dim vntRec()    As Variant
+    Dim lngCol      As Long
+    Dim lngRecCnt   As Long
+    Dim strErrCd    As String
+    Dim blnRet      As Boolean
+    Dim lngUpdCnt   As Long     '更新件数カウント用(0件の場合エラーメッセージを出力する)
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    fncExecUpdate = 0
+    
+    lngUpdCnt = 0
+        
+    'トランザクション開始
+    fncKsCmnBeginTrans
+        
+    '支払情報データの先頭行取得
+    lngRow = LIST_DATA_TOP_ROW
+        
+    With mrecKsj
+
+        Do While Sheets(SHEET_MAIN).Cells(lngRow, COLN_DATA_FLAG) <> vbNullString
+        
+            If Sheets(SHEET_MAIN).Cells(lngRow, COLN_J_CHK_DEFAULT) <> False Or Sheets(SHEET_MAIN).Cells(lngRow, COLN_J_CHK_FLG) <> False Then
+            
+                '支払済チェック
+                If Sheets(SHEET_MAIN).Cells(lngRow, COLN_STATUS) = "支払済" Then
+                    '22013 支払済のデータは更新できません。
+                    fncKsCmnMessageDisp MSGLVL_WARNNING, 22013, MSG1_ICHIRAN_DISP, "", True
+                    fncExecUpdate = 22013
+                    'ロールバック
+                    GoTo RollBackExit
+                End If
+            
+                .GI_no = GI_no    '外部委託先番号
+                .GI_Shiharai_id = GI_Shiharai_id  '支払期間ID
+                .Shiharai_flg = Shiharai_flg  '支払フラグ
+                .Keisan_Tobi = Sheets(SHEET_MAIN).Cells(lngRow, COLN_GI_SHIHARAI_KIKAN_TO)  '計算TO日
+                '修正額採用フラグ
+                If Sheets(SHEET_MAIN).Cells(lngRow, COLN_J_CHK_FLG) = True Then
+                    .Shuuseigaku_saiyou_flg = True
+                Else
+                    .Shuuseigaku_saiyou_flg = False
+                End If
+                
+                
+                '課税後外部委託支払計算修正額がブランクの場合
+                If Trim(Sheets(SHEET_MAIN).Cells(lngRow, COLN_SHIHARAI_SHUSEI_GAKU)) = vbNullString Then
+                    .Kazei_Mae_Shuseigaku = 0   '課税前支払額修正額
+                    .Kazei_Go_Shuseigaku = 0    '課税後支払額修正額
+                Else
+                    .Kazei_Mae_Shuseigaku = Trim(Sheets(SHEET_MAIN).Cells(lngRow, COLN_SHIHARAI_SHUSEI_GAKU)) - Trim(Sheets(SHEET_MAIN).Cells(lngRow, COLN_SHOHIZEI_SHUSEI_GAKU)) '課税前支払額修正額
+                    .Kazei_Go_Shuseigaku = Trim(Sheets(SHEET_MAIN).Cells(lngRow, COLN_SHIHARAI_SHUSEI_GAKU)) '課税後支払額修正額
+                End If
+                
+                '消費税修正額がブランクの場合
+                If Trim(Sheets(SHEET_MAIN).Cells(lngRow, COLN_SHOHIZEI_SHUSEI_GAKU)) = vbNullString Then
+                    .Shohizei_Shuuseigaku = 0
+                Else
+                    .Shohizei_Shuuseigaku = Trim(Sheets(SHEET_MAIN).Cells(lngRow, COLN_SHOHIZEI_SHUSEI_GAKU))
+                End If
+            
+                'ODBCエラーのコードをセット
+                '[Oracle][ODBC][Ora]ORA-00054: リソース・ビジー、NOWAITが指定されていました。
+                strErrCd = ODBC_ERRCD_RESOURCE_BUSY
+                
+                strSql = ""
+                strSql = strSql & "SELECT" & vbCrLf
+                strSql = strSql & "    *" & vbCrLf
+                strSql = strSql & "FROM" & vbCrLf
+                strSql = strSql & "    KYK_GI_SHIHARAI_KEISAN_SUM" & vbCrLf
+                strSql = strSql & "WHERE" & vbCrLf
+                strSql = strSql & "    GI_NO = '" & .GI_no & "'" & vbCrLf
+                strSql = strSql & "AND GI_SHIHARAI_KIKAN_ID = '" & .GI_Shiharai_id & "'" & vbCrLf
+                strSql = strSql & "AND SHIHARAI_FLG = '" & .Shiharai_flg & "'" & vbCrLf
+                strSql = strSql & "AND KEISAN_TO_YMD = " & .Keisan_Tobi & vbCrLf
+                strSql = strSql & "AND SAKUJO_FLG = '0'" & vbCrLf
+                strSql = strSql & "FOR UPDATE NOWAIT" & vbCrLf
+    
+                blnRet = fncKsCmnDoExequteSql(MainMenu.gcSELECT, strSql, vntRec, lngCol, lngRecCnt, strErrCd)
+                If blnRet = False Then
+                    If strErrCd = ODBC_ERRCD_RESOURCE_BUSY Then
+                        'リソース・ビジー
+                        '22010 他のユーザーにより更新されています。
+                        fncKsCmnMessageDisp MSGLVL_WARNNING, 22010, MSG1_ICHIRAN_DISP, "", True
+                        fncExecUpdate = 22010
+                    Else
+                        fncExecUpdate = strErrCd
+                    End If
+                
+                    'ロールバック
+                    GoTo RollBackExit
+                End If
+                
+                If lngRecCnt > 1 Then
+                    '更新対象データが外部委託支払計算合計に複数件ある
+                    fncKsCmnMessageDisp MSGLVL_WARNNING, 22008, MSG1_ICHIRAN_DISP, MSG2_MANY_ROWS_SJ, True
+                    fncExecUpdate = 22008
+                    'ロールバック
+                    GoTo RollBackExit
+                End If
+            
+                If lngRecCnt = 0 Then
+                    '22011 他ユーザにより削除されています。
+                    fncKsCmnMessageDisp MSGLVL_WARNNING, 22011, MSG1_ICHIRAN_DISP, "", True
+                    fncExecUpdate = 22011
+                    'ロールバック
+                    GoTo RollBackExit
+                
+                Else
+                
+                    strSql = ""
+                    strSql = strSql & "UPDATE KYK_GI_SHIHARAI_KEISAN_SUM" & vbCrLf
+                    strSql = strSql & "SET" & vbCrLf
+                    strSql = strSql & "    KOHSHIN_YMD = TO_CHAR(SYSDATE,'YYYY/MM/DD')," & vbCrLf
+                    strSql = strSql & "    KOHSHIN_PGM_ID      = '" & PROGRAM_ID & "'," & vbCrLf
+                    strSql = strSql & "    KOHSHIN_TANTOHSHA   = '" & USER_ID & "'," & vbCrLf
+                    
+                    If .Shuuseigaku_saiyou_flg = False Then
+                        strSql = strSql & "    SHUUSEIGAKU_SAIYOU_FLG = '0'," & vbCrLf
+                    Else
+                        strSql = strSql & "    SHUUSEIGAKU_SAIYOU_FLG = '1'," & vbCrLf
+                    End If
+                    
+                    If Trim(Sheets(SHEET_MAIN).Cells(lngRow, COLN_SHIHARAI_SHUSEI_GAKU)) = vbNullString Then
+                        strSql = strSql & "    KAZEI_MAE_SHUUSEIGAKU = NULL," & vbCrLf
+                    Else
+                        strSql = strSql & "    KAZEI_MAE_SHUUSEIGAKU = " & .Kazei_Mae_Shuseigaku & "," & vbCrLf
+                    End If
+                    
+                    If Trim(Sheets(SHEET_MAIN).Cells(lngRow, COLN_SHOHIZEI_SHUSEI_GAKU)) = vbNullString Then
+                        strSql = strSql & "    SHOHIZEI_SHUUSEIGAKU = NULL," & vbCrLf
+                    Else
+                        strSql = strSql & "    SHOHIZEI_SHUUSEIGAKU = " & .Shohizei_Shuuseigaku & "," & vbCrLf
+                    End If
+                    
+                    If Trim(Sheets(SHEET_MAIN).Cells(lngRow, COLN_SHIHARAI_SHUSEI_GAKU)) = vbNullString Then
+                        strSql = strSql & "    KAZEI_GO_SHUUSEIGAKU = NULL" & vbCrLf
+                    Else
+                        strSql = strSql & "    KAZEI_GO_SHUUSEIGAKU = " & .Kazei_Go_Shuseigaku & vbCrLf
+                    End If
+                    
+                    strSql = strSql & "WHERE" & vbCrLf
+                    strSql = strSql & "    GI_NO = '" & .GI_no & "'" & vbCrLf
+                    strSql = strSql & "AND GI_SHIHARAI_KIKAN_ID = '" & .GI_Shiharai_id & "'" & vbCrLf
+                    strSql = strSql & "AND SHIHARAI_FLG = '" & .Shiharai_flg & "'" & vbCrLf
+                    strSql = strSql & "AND KEISAN_TO_YMD = " & .Keisan_Tobi & vbCrLf
+                    
+                    blnRet = fncKsCmnDoExequteSql(MainMenu.gcUPDATE, strSql, vntRec, lngCol, lngRecCnt, strErrCd)
+                    If blnRet = False Then
+                        fncExecUpdate = strErrCd
+                        'ロールバック
+                        GoTo RollBackExit
+                    End If
+                    
+                    lngUpdCnt = lngUpdCnt + 1
+                End If
+                
+            End If
+            
+            lngRow = lngRow + 1
+        Loop
+    End With
+    
+    '更新件数が0の場合
+    If lngUpdCnt = 0 Then
+        '22012 更新対象のデータがありません。
+        fncKsCmnMessageDisp MSGLVL_WARNNING, 22012, MSG1_ICHIRAN_DISP, "", True
+        fncExecUpdate = 22012
+        'ロールバック
+        GoTo RollBackExit
+    End If
+    
+    'コミット
+    fncKsCmnCommitTrans
+        
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+    
+ErrHandler:
+    fncExecUpdate = Err.Number
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+RollBackExit:
+    'ロールバック
+    fncKsCmnRollbackTrans
+End Function
+

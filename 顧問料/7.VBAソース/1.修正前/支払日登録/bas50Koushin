@@ -1,0 +1,348 @@
+Attribute VB_Name = "bas50Koushin"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：外部委託ライセンスフィー算出システム・支払日登録
+'
+'オブジェクト名：bas50Koushin
+'
+'機能概要　：更新処理
+'
+'更新履歴　：2008/06/13 SRA吉井   新規作成
+'
+'*************************************************************************
+
+Const MODULE_NAME = "bas50Koushin"
+Const UPDATE_USER = "APL001"
+Const UPDATE_PGM_ID = "支払日登録"
+
+'*************************************************************************
+'関数名　　：入力チェック処理(更新時)
+'
+'引　数　　：TargetSheets        I           チェック対象のシート
+'
+'戻り値　　：Boolean
+'
+'機能説明　：メインシートの更新時入力チェックを行う
+'
+'更新履歴　：2008/06/13 SRA吉井   新規作成
+'更新履歴　：2008/08/08 SRA Y.Azuma    変更   連結障害対応(No.24)
+'
+'*************************************************************************
+Public Function gfuncShiharai_UpdInputCheck(ByRef TargetSheets As Object) As Boolean
+
+On Error GoTo ErrorSection
+
+    Dim lngCnt          As Long
+    Dim lngCntSt        As String
+    Dim strDate         As String
+    Dim strTime         As String
+    
+    gfuncShiharai_UpdInputCheck = False
+    
+'------------<Modify Start azuma 2008/08/08 > 連結障害対応(No.24)-----------------------
+    lngCntSt = DATA_TOP_ROW
+'    lngCntSt = lngDataTopRow
+'------------<Modify End   azuma 2008/08/08 > 連結障害対応(No.24)-----------------------
+        
+    lngCnt = lngCntSt
+    With TargetSheets
+        Do While (.Cells(lngCnt, DTCol.支払期間ID) <> vbNullString)
+            If .Cells(lngCnt, DTCol.支払ChkLink) Then
+                strDate = .Cells(lngCnt, DTCol.支払日)
+                If gfunc_CheckDate(strDate) = False Then
+                    '"支払日：入力に誤りがあります。"
+                    subCmnSetFocus .Cells(lngCnt, DTCol.支払日) 'フォーカス位置付け
+                    Call gfunc_ErrorMsg(3, 3, "支払日(ｾﾙ位置:" & lngCnt - lngCntSt + 1 & "行目)", "")
+                    Exit Function
+                End If
+            End If
+
+            lngCnt = lngCnt + 1
+        Loop
+    End With
+
+    gfuncShiharai_UpdInputCheck = True
+
+    Exit Function
+    
+ErrorSection:
+    gfuncShiharai_UpdInputCheck = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gfuncShiharai_UpdInputCheck", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+'*************************************************************************
+'関数名　　：更新処理(メイン)
+'
+'引　数　　：TargetSheets        I           チェック対象のシート
+'
+'戻り値　　：Boolean
+'
+'機能説明　：更新
+'
+'更新履歴　：2008/06/13 SRA吉井   新規作成
+'更新履歴　：2008/08/08 SRA Y.Azuma    変更   連結障害対応(No.24)
+'
+'*************************************************************************
+Public Function gfuncShiharai_DoUpdate(ByRef TargetSheets As Object) As Boolean
+
+On Error GoTo ErrorSection
+
+    Dim lngCnt              As Long
+    Dim lngCntSt            As Long
+    Dim strDtWhere          As String
+    
+    Dim strError            As String
+    Dim lngWork             As Long
+    Dim lngStatus           As Long         '更新済みチェックのステータス
+    Dim lngMsgId            As Long         'エラーメッセージID
+    
+    gfuncShiharai_DoUpdate = False
+    
+    'トランザクション開始
+    cnAdo.BeginTrans
+    
+'------------<Modify Start azuma 2008/08/08 > 連結障害対応(No.24)-----------------------
+    lngCntSt = DATA_TOP_ROW
+'    lngCntSt = lngDataTopRow
+'------------<Modify End   azuma 2008/08/08 > 連結障害対応(No.24)-----------------------
+        
+    lngCnt = lngCntSt
+    With TargetSheets
+        Do While (.Cells(lngCnt, DTCol.支払期間ID) <> vbNullString)
+
+            If .Cells(lngCnt, DTCol.変更比較Flag) Then          '変更明細行なら
+                '更新済みチェックと排他処理
+                If func_UpdateCheck(TargetSheets, lngCnt, strDtWhere, lngStatus) = False Then
+                    If lngStatus = 1 Or lngStatus = 2 Then
+                        '0:正常,1:ロック,2:削除済,-1:その他
+                        Select Case lngStatus
+                            Case 1                '他セッションからのロック
+                                lngMsgId = 1522
+                            Case 2                '削除済み
+                                lngMsgId = 1523
+                        End Select
+                        
+                        subCmnSetFocus .Cells(lngCnt, DTCol.支払日) 'フォーカス位置付け
+                    
+                        'エラーメッセージ出力
+                        Call gfunc_ErrorMsg(3, lngMsgId, "(ｾﾙ位置:" & lngCnt - lngCntSt + 1 & "行目)", "")
+                    End If
+                    
+                    GoTo RollbackSection
+                    Exit Function
+                End If
+                
+                '更新
+                If func_UpdKYK_GI_SHIHARAI_KANRI(TargetSheets, lngCnt, strDtWhere, strError) = False Then
+                    GoTo RollbackSection
+                    Exit Function
+                End If
+            End If
+            
+            lngCnt = lngCnt + 1
+        Loop
+    End With
+    
+    'コミット
+    cnAdo.CommitTrans
+
+    gfuncShiharai_DoUpdate = True
+    
+    Exit Function
+    
+RollbackSection:
+    'ロールバック
+    cnAdo.RollbackTrans
+    gfuncShiharai_DoUpdate = False
+    Exit Function
+    
+ErrorSection:
+    gfuncShiharai_DoUpdate = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gfuncShiharai_DoUpdate", Err.Number, Err.Description)
+    On Error GoTo 0
+    On Error Resume Next
+    'ロールバック
+    cnAdo.RollbackTrans
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+'*************************************************************************
+'関数名　　：トランザクションチェック処理
+'
+'引　数　　：TargetSheets    I       処理対象ワークシート
+'　　　　　　lngDtRow        I       明細対象行
+'　　　　　　strDtWhere      O       対象特定Where式
+'　　　　　　lngStatus       O       エラーステータス(0:正常,1:ロック,2:削除済,-1:その他)
+'
+'戻り値　　：Boolean
+'
+'機能説明　：支払管理テーブルの排他・ロックチェック
+'
+'更新履歴　：2008/06/13 SRA吉井   新規作成
+'
+'*************************************************************************
+Private Function func_UpdateCheck(ByRef TargetSheets As Object _
+                                , ByRef lngDtRow As Long _
+                                , ByRef strDtWhere As String _
+                                , ByRef lngStatus As Long) As Boolean
+On Error GoTo ErrorSection
+
+    Dim vData()                 As Variant
+    Dim strSql                  As String
+    Dim lngCol                  As Long
+    Dim lngRow                  As Long
+    Dim lngCnt                  As Long
+    Dim strErrCode              As String
+    Dim blnRet                  As Boolean
+    Const strLockErrCd          As String = "ORA-00054"
+
+    func_UpdateCheck = False
+    
+    lngStatus = -1
+    
+    '外部委託先
+    With TargetSheets
+        strDtWhere = " GI_NO='" & func_ChkQuoteshon(Left(.Cells(lngDtRow, DTCol.外部委託先), 1), "'") & "'" & _
+                     " AND GI_SHIHARAI_KIKAN_ID=" & .Cells(lngDtRow, DTCol.支払期間ID) & _
+                     " AND SHIHARAI_FLG='" & .Cells(lngDtRow, DTCol.支払フラグ) & "'"
+    End With
+        
+    strSql = ""
+    strSql = strSql & " SELECT"
+    strSql = strSql & "     SAKUJO_FLG"
+    strSql = strSql & " FROM"
+    strSql = strSql & "     KYK_GI_SHIHARAI_KANRI"
+    strSql = strSql & " WHERE " & strDtWhere
+    strSql = strSql & " FOR UPDATE NOWAIT"
+
+    'データ取得
+    strErrCode = strLockErrCd
+    blnRet = gclsdb.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow, strErrCode)
+    
+    If Not blnRet Then
+        If strErrCode = strLockErrCd Then
+        '他セッションからのロック状態
+            lngStatus = 1
+        Else
+        'その他エラー
+            lngStatus = -1
+        End If
+        Exit Function
+    End If
+
+    '削除フラグの確認
+    If lngRow > 0 Then
+        If CStr(vData(0, 0)) <> "0" Then
+            '削除フラグが"0"以外の場合、他ユーザーから更新済み
+            lngStatus = 2
+            Exit Function
+        End If
+    End If
+    
+    lngStatus = 0
+    func_UpdateCheck = True
+
+    Exit Function
+
+ErrorSection:
+    func_UpdateCheck = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_UpdateCheck", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+'*************************************************************************
+'関数名　　：支払管理テーブル更新処理
+'
+'引　数　　：TargetSheets    I       処理対象ワークシート
+'　　　　　　lngDtRow        I       明細対象行
+'　　　　　　strDtWhere      I       対象特定Where式
+'　　　　　　strError        O       エラーコード
+'
+'戻り値　　：Boolean
+'
+'機能説明　：支払管理テーブルへ更新を行う
+'
+'更新履歴　：22008/06/13 SRA吉井   新規作成
+'
+'*************************************************************************
+Private Function func_UpdKYK_GI_SHIHARAI_KANRI(ByVal TargetSheets As Object _
+                                             , ByVal lngDtRow As Long _
+                                             , ByRef strDtWhere As String _
+                                             , ByRef strError As String) As Boolean
+On Error GoTo ErrorSection
+
+    Dim vData()                 As Variant
+    Dim strSql                  As String
+    Dim lngCol                  As Long
+    Dim lngRow                  As Long
+    Dim lngCnt                  As Long
+    Dim strErrCode              As String
+    Dim blnRet                  As Boolean
+
+    func_UpdKYK_GI_SHIHARAI_KANRI = False
+    
+    With TargetSheets
+        strSql = " UPDATE KYK_GI_SHIHARAI_KANRI SET" & _
+                      " KOHSHIN_YMD = SYSDATE" & _
+                     ", KOHSHIN_PGM_ID = '" & UPDATE_PGM_ID & "'" & _
+                     ", KOHSHIN_TANTOHSHA = '" & UPDATE_USER & "'"
+        If .Cells(lngDtRow, DTCol.支払ChkLink) Then
+            '支払済とする更新
+            strSql = strSql & ", STATUS = '2'" & _
+                              ", SHIHARAI_YMD = '" & .Cells(lngDtRow, DTCol.支払日) & "'"
+        Else
+            '送付済とする更新
+            strSql = strSql & ", STATUS = '1'" & _
+                              ", SHIHARAI_YMD = Null"
+        End If
+    
+        strSql = strSql & " WHERE " & strDtWhere
+
+    End With
+    
+    '実行
+    blnRet = gclsdb.DoExequteSql(gcINSERT, strSql, vData, lngCol, lngRow, strErrCode)
+    
+    If blnRet = False Then
+        If Trim(strErrCode) <> "" Then
+            strError = strErrCode
+        End If
+        Exit Function
+    End If
+    
+    Erase vData
+    func_UpdKYK_GI_SHIHARAI_KANRI = True
+
+    Exit Function
+
+ErrorSection:
+    func_UpdKYK_GI_SHIHARAI_KANRI = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_UpdKYK_GI_SHIHARAI_KANRI", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Erase vData
+
+End Function

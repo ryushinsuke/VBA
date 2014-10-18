@@ -1,0 +1,54 @@
+VERSION 5.00
+Begin {C62A69F0-16DC-11CE-9E98-00AA00574A4F} frmKeisan 
+   Caption         =   "未収顧問料計算処理"
+   ClientHeight    =   1110
+   ClientLeft      =   45
+   ClientTop       =   330
+   ClientWidth     =   4710
+   OleObjectBlob   =   "frmKeisan.frx":0000
+   StartUpPosition =   2  '画面の中央
+End
+Attribute VB_Name = "frmKeisan"
+Attribute VB_GlobalNameSpace = False
+Attribute VB_Creatable = False
+Attribute VB_PredeclaredId = True
+Attribute VB_Exposed = False
+Option Explicit
+
+Dim mlngJavaRetCd As Long
+
+Private Sub UserForm_Activate()
+    DoEvents
+    '未収顧問料計算処理(ストアドJAVA)を実行
+'------------<Modify Start azuma 2007/11/19 (PH4)> ★★★☆-----------------------
+'------------<Modify Start azuma 2009/03/10 > 未収顧問料IFの項目追加(セル完全修飾対応)---------------
+'    With Sheets(SHEET_MAIN)
+    With ThisWorkbook.Sheets(SHEET_MAIN)
+'------------<Modify End   azuma 2009/03/10 > 未収顧問料IFの項目追加(セル完全修飾対応)---------------
+        mlngJavaRetCd = fncExecMishuKomon(.Range(RNG_KIJYUNBI).Value, .Range(RNG_KOHZA_NO).Value)
+    End With
+'    mlngJavaRetCd = fncExecMishuKomon(Sheets(SHEET_MAIN).Range(RNG_KIJYUNBI).Value)
+'------------<Modify End   azuma 2007/11/19 (PH4)> ★★★☆-----------------------
+    
+    '呼び側でUNLOADする
+    Me.Hide
+    
+End Sub
+
+Private Sub UserForm_QueryClose(Cancel As Integer, CloseMode As Integer)
+    
+    'フォームの×ボタンでフォームを閉じさせない
+    If CloseMode = vbFormControlMenu Then
+        Cancel = True   'Unloadをキャンセル
+        Exit Sub
+    End If
+
+End Sub
+
+'プロパティ
+'ストアドJAVAの実行結果
+Property Get JavaRetCd() As Long
+    JavaRetCd = mlngJavaRetCd
+End Property
+
+

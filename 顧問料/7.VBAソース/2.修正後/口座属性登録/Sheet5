@@ -1,0 +1,513 @@
+VERSION 1.0 CLASS
+BEGIN
+  MultiUse = -1  'True
+END
+Attribute VB_Name = "Sheet5"
+Attribute VB_GlobalNameSpace = False
+Attribute VB_Creatable = False
+Attribute VB_PredeclaredId = True
+Attribute VB_Exposed = True
+
+
+'*************************************************************************
+'関数名　　：セル変更処理・イベントプロシージャ
+'
+'引　　数　：
+'
+'戻り値　　：なし
+'
+'機能説明　：セル変更後の書式設定
+'
+'更新履歴　：2007/11/09 SRA Y.Azuma     新規     (PH4)
+'
+'*************************************************************************
+Private Sub Worksheet_Change(ByVal Target As Range)
+On Error Resume Next
+    
+    If blnKensaku = True Then
+        Exit Sub
+    End If
+    
+    If Target = Range("カウント対象FROM") Or Target = Range("カウント対象TO") Then
+        '日付のフォーマット
+        '　　※セルを日付型(YYYYMMDD)にすると"/"区切りで入力しないと####となる為の対策
+        If IsDate(Target.Value) = True Then
+            Target.Value = CStr(Format(Target.Value, "YYYYMMDD"))
+        End If
+    End If
+
+End Sub
+
+'*************************************************************************
+'関数名　　：検索ボタン・イベントプロシージャ
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：検索ボタンを押下された場合の処理
+'
+'更新履歴　：2007/11/09 SRA Y.Azuma     新規     (PH4)
+'
+'*************************************************************************
+Private Sub cmdSearch_Click()
+
+On Error GoTo Error_Section
+
+    blnKensaku = True
+
+    '検索メイン
+    Application.ScreenUpdating = False
+    Call g_subButtonInitialize
+    Call gsub_KensakuMain(Worksheets(MAIN_SHEETNAME2))
+    Application.ScreenUpdating = True
+    
+    blnKensaku = False
+    
+    Exit Sub
+
+Error_Section:
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "cmdSearch_Click", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Application.ScreenUpdating = True
+    
+    '更新ボタンの無効化
+    CmdUpdate.Enabled = True
+    
+    blnKensaku = False
+    
+End Sub
+
+'*************************************************************************
+'関数名　　：更新ボタン・イベントプロシージャ
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：更新ボタンを押下された場合の処理
+'
+'更新履歴　：2007/11/09 SRA Y.Azuma     新規     (PH4)
+'
+'*************************************************************************
+Private Sub cmdUpdate_Click()
+
+On Error GoTo Error_Section
+
+    Dim blnRet      As Boolean
+    Dim strMsg      As String
+    Dim lngRet      As Long
+    
+    blnRet = False
+    
+    Application.ScreenUpdating = False
+    
+    '入力チェック処理(更新時)
+    blnRet = gfuncKohza_UpdInputCheck2(Worksheets(MAIN_SHEETNAME2))
+    
+    If blnRet = False Then
+        Application.ScreenUpdating = True
+        Exit Sub
+    End If
+    
+    '最終処理確認
+    strMsg = gfunc_ErrorMsg(2, 1600, "", "", False)
+    lngRet = MsgBox(strMsg, vbQuestion + vbOKCancel, Application.ActiveWorkbook.Name)
+    If lngRet = vbCancel Then
+        Exit Sub
+    End If
+    
+    blnRet = False
+    
+    '更新処理
+    blnRet = gfuncKohza_DoUpdate2(Worksheets(MAIN_SHEETNAME2))
+    
+    If blnRet = False Then
+        '更新エラー
+        Call gfunc_ErrorMsg(1, 1601, "", "", True)
+        Application.ScreenUpdating = True
+        Exit Sub
+    Else
+        '更新成功
+         Application.ScreenUpdating = True
+'------------<顧問バック更改対応 2013/04/16 GUT張 START> ------------
+        '削除ボタンの有効化
+        Cmddelete.Enabled = True
+        '未更新マークの非表示
+        Worksheets(MAIN_SHEETNAME2).OLEObjects("lblMikoushin_kaigai").Visible = False
+'------------<顧問バック更改対応 2013/04/16 GUT張 END> ------------
+        'メッセージ
+        Call gfunc_ErrorMsg(1, 1602, "", "", True)
+    End If
+    
+    Application.ScreenUpdating = True
+    
+    Exit Sub
+Error_Section:
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "cmdUp_Click", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Application.ScreenUpdating = True
+
+End Sub
+
+'------------<顧問バック更改対応 2013/04/16 GUT凌 START> ------------
+'*************************************************************************
+'関数名　　：海外新規ボタン・イベントプロシージャ
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：海外新規ボタンを押下された場合の処理
+'
+'更新履歴　：2013/04/16 GUT 凌 新規作成 顧問バック更改対応
+'
+'*************************************************************************
+Private Sub cmdKaigaisinki1_Click()
+On Error GoTo Error_Section
+
+    blnKensaku = True
+
+    '検索メイン
+    Application.ScreenUpdating = False
+    
+    Call g_subButtonInitialize
+    Call gsub_cmdKaigaisinki(Worksheets(MAIN_SHEETNAME2))
+    
+    Application.ScreenUpdating = True
+    
+    blnKensaku = False
+    
+    Exit Sub
+
+Error_Section:
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "cmdSearch_Click", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Application.ScreenUpdating = True
+    
+    '更新ボタンの無効化
+    CmdUpdate.Enabled = False
+    
+    blnKensaku = False
+
+'Call gsub_cmdKaigaisinki(Worksheets(MAIN_SHEETNAME2))
+
+End Sub
+'------------<顧問バック更改対応 2013/04/16 GUT凌 END> ------------
+
+'------------<顧問バック更改対応 2013/04/18 GUT董 START> ------------
+'*************************************************************************
+'関数名　　：削除ボタン・イベントプロシージャ
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：削除ボタンを押下された場合の処理
+'
+'更新履歴　：2013/04/18 GUT 董 新規作成 顧問バック更改対応
+'
+'*************************************************************************
+
+Private Sub CmdDelete_Click()
+On Error GoTo Error_Section
+
+    Dim blnRet      As Boolean
+    Dim strMsg      As String
+    Dim lngRet      As Long
+    
+    blnRet = False
+    
+    Application.ScreenUpdating = False
+    
+    '入力チェック処理(削除時)
+    blnRet = gfuncKohza_DelInputCheck(Worksheets(MAIN_SHEETNAME2))
+    
+    If blnRet = False Then
+        Application.ScreenUpdating = True
+        Exit Sub
+    End If
+    
+    '最終処理確認
+    strMsg = gfunc_ErrorMsg(2, 28084, "", "", False)
+    lngRet = MsgBox(strMsg, vbQuestion + vbOKCancel, Application.ActiveWorkbook.Name)
+    If lngRet = vbCancel Then
+        Exit Sub
+    End If
+    
+    blnRet = False
+    
+    '削除処理
+    blnRet = gfuncKohza_DoDelete(Worksheets(MAIN_SHEETNAME2))
+    
+    If blnRet = False Then
+        '削除エラー
+        Call gfunc_ErrorMsg(1, 1601, "", "", True)
+        Application.ScreenUpdating = True
+        Exit Sub
+    Else
+        '削除成功
+        Call g_subButtonInitialize
+        ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Range("口座番号") = ""
+        '更新ボタンの無効化
+        ThisWorkbook.Worksheets(MAIN_SHEETNAME2).CmdUpdate.Enabled = False
+        '削除ボタンの無効化
+        ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Cmddelete.Enabled = False
+        ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Range("口座番号").Select
+        Application.ScreenUpdating = True
+        'メッセージ
+        Call gfunc_ErrorMsg(1, 1602, "", "", True)
+    End If
+    
+    Application.ScreenUpdating = True
+    
+    Exit Sub
+Error_Section:
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "cmdDelete_Click", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Application.ScreenUpdating = True
+
+End Sub
+'------------<顧問バック更改対応 2013/04/18 GUT董 END> ------------
+
+'------------<顧問バック更改対応 2013/04/18 GUT張 START> ------------
+'*************************************************************************
+'関数名　　：ファンド名情報に新規ボタン・イベントプロシージャ
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：ファンド名情報に新規ブタンを押下された場合の処理
+'
+'更新履歴　：2013/04/18 GUT 張 新規作成 顧問バック更改対応
+'
+'*************************************************************************
+Private Sub CmdSinnki1_Click()
+    Dim lngAddRow       As Long
+    Dim lngSheetRowLast As Long
+    Dim strTop          As String
+    Dim objCheckBox     As Object
+
+    Call gCom01_SheetProtect(Worksheets(MAIN_SHEETNAME2), False)    'シートの保護解除
+    lngAddRow = ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Range("ファンド名情報開始行").Row
+    lngSheetRowLast = ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Range("契約形態情報開始行1").End(xlUp).Row
+    Call gCom01_BookProtect(ThisWorkbook, False)    'ブックの保護解除
+    
+    strTop = "B" & lngSheetRowLast + 1
+    '行追加
+    Call gKsC_fncKsCmnInsRow(ThisWorkbook.Worksheets(MAIN_SHEETNAME2), lngSheetRowLast + 1, 7)
+    '対象設定
+    With ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Range(strTop)
+            Set objCheckBox = Worksheets(MAIN_SHEETNAME2).Shapes.AddFormControl( _
+            xlCheckBox, _
+            .Left + 25, _
+            .Top, _
+            13.5, _
+            10)
+            With objCheckBox.OLEFormat.Object
+                .Display3DShading = True
+                .Caption = ""
+            End With
+    End With
+    With ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Range("ファンド名情報開始行")
+        '対象設定
+        .Offset(lngSheetRowLast - lngAddRow + 1, 0).Value = "."
+        '適用日設定
+        .Offset(lngSheetRowLast - lngAddRow + 1, 1).Value = ""
+        '顧客名（カナ/英）正式設定
+        .Offset(lngSheetRowLast - lngAddRow + 1, 4).Value = ""
+        '顧客名（漢/英）正式設定
+        .Offset(lngSheetRowLast - lngAddRow + 1, 8).Value = ""
+        '顧客名（カナ/英）略式設定
+        .Offset(lngSheetRowLast - lngAddRow + 1, 12).Value = ""
+        '顧客名（漢/英）略式設定
+        .Offset(lngSheetRowLast - lngAddRow + 1, 16).Value = ""
+        'AB列にファンド名情報設定
+        .Offset(lngSheetRowLast - lngAddRow + 1, 25).Value = "ファンド名"
+    End With
+    ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Range("ファンド名情報開始行").Offset(lngSheetRowLast - lngAddRow + 1, 0).Select
+    Call gCom01_SheetProtect(ThisWorkbook.Worksheets(MAIN_SHEETNAME2), True)    'シートの保護
+End Sub
+
+'*************************************************************************
+'関数名　　：ファンド名情報に削除ボタン・イベントプロシージャ
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：ファンド名情報に削除ブタンを押下された場合の処理
+'
+'更新履歴　：2013/04/18 GUT 張 新規作成 顧問バック更改対応
+'
+'*************************************************************************
+Private Sub CmdSakujyo1_Click()
+    Dim objCheckBox     As Object
+    Dim lngSheetRowLast As Long
+    Dim intDelRow       As Integer
+    Dim lngAddRow       As Long
+    
+    Call gCom01_SheetProtect(Worksheets(MAIN_SHEETNAME2), False)    'シートの保護解除
+    lngAddRow = ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Range("ファンド名情報開始行").Row
+    lngSheetRowLast = ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Range("契約形態情報開始行1").End(xlUp).Row
+    With ThisWorkbook.Worksheets(MAIN_SHEETNAME2)
+        For Each objCheckBox In ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Shapes
+            If objCheckBox.Type = msoFormControl Then
+                If objCheckBox.FormControlType = xlCheckBox Then
+                    intDelRow = objCheckBox.BottomRightCell.Row - 1
+                    strTaisyou = "AB" & intDelRow
+                    If (objCheckBox.ControlFormat.Value = 1) And (.Range(strTaisyou) = "ファンド名") Then
+                        '明細行の削除処理
+                        .Rows(intDelRow).Delete Shift:=xlUp
+                        objCheckBox.Delete
+                    End If
+               End If
+            End If
+        Next
+    End With
+    lngSheetRowLast = ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Range("契約形態情報開始行1").End(xlUp).Row
+    
+    ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Range("ファンド名情報開始行").Offset(lngSheetRowLast - lngAddRow, 0).Select
+    Call gCom01_SheetProtect(ThisWorkbook.Worksheets(MAIN_SHEETNAME2), True)    'シートの保護
+
+End Sub
+
+'*************************************************************************
+'関数名　　：契約形態情報に新規ボタン・イベントプロシージャ
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：契約形態情報に新規ブタンを押下された場合の処理
+'
+'更新履歴　：2013/04/18 GUT 張 新規作成 顧問バック更改対応
+'
+'*************************************************************************
+Private Sub CmdSinnki2_Click()
+    Dim lngAddRow        As Long
+    Dim lngCnt           As Long
+    Dim lngSheetRowLast  As Long
+    Dim lngSheetRowLast1 As Long
+    Dim strTop           As String
+    Dim strNaiyou        As String
+    Dim objCheckBox      As Object
+    
+    Call gCom01_SheetProtect(Worksheets(MAIN_SHEETNAME2), False)    'シートの保護解除
+    'コード値テーブルから契約形態内容用属性の一覧取得
+    lngSheetRowLast1 = ThisWorkbook.Worksheets(DATA_SHEETNAME).Range("F65535").End(xlUp).Row
+    For lngCnt = 0 To lngSheetRowLast1 - 2
+        strNaiyou = strNaiyou & ThisWorkbook.Worksheets(DATA_SHEETNAME).Cells(2 + lngCnt, 6).Value & ","
+    Next
+    
+    lngAddRow = ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Range("契約形態情報開始行").Row
+    lngSheetRowLast = ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Range("B65535").End(xlUp).Row
+        
+    strTop = "B" & lngSheetRowLast + 1
+    '行追加
+    Call gKsC_fncKsCmnInsRow(ThisWorkbook.Worksheets(MAIN_SHEETNAME2), lngSheetRowLast + 1, 11)
+    '対象設定
+    With ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Range(strTop)
+            Set objCheckBox = Worksheets(MAIN_SHEETNAME2).Shapes.AddFormControl( _
+            xlCheckBox, _
+            .Left + 25, _
+            .Top, _
+            13.5, _
+            10)
+            With objCheckBox.OLEFormat.Object
+                .Display3DShading = True
+                .Caption = ""
+            End With
+    End With
+    With ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Range("契約形態情報開始行")
+        '対象設定
+        .Offset(lngSheetRowLast - lngAddRow + 1, 0).Value = "."
+        '適用日設定
+        .Offset(lngSheetRowLast - lngAddRow + 1, 1).Value = ""
+        '内容設定
+        .Offset(lngSheetRowLast - lngAddRow + 1, 4).Select
+        With .Offset(lngSheetRowLast - lngAddRow + 1, 4).Validation
+            .Delete
+            .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:=xlBetween, Formula1:=strNaiyou
+            .IgnoreBlank = False
+            .InCellDropdown = True
+            .InputTitle = ""
+            .ErrorTitle = ""
+            .InputMessage = ""
+            .ErrorMessage = ""
+            .IMEMode = xlIMEModeNoControl
+            .ShowInput = True
+            .ShowError = False
+        End With
+        .Offset(lngSheetRowLast - lngAddRow + 1, 4).Value = ""
+        'AB列に契約形態情報設定
+        .Offset(lngSheetRowLast - lngAddRow + 1, 25).Value = "契約形態"
+    End With
+    ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Range("契約形態情報開始行").Offset(lngSheetRowLast - lngAddRow + 1, 0).Select
+    Call gCom01_SheetProtect(ThisWorkbook.Worksheets(MAIN_SHEETNAME2), True)    'シートの保護
+End Sub
+
+'*************************************************************************
+'関数名　　：契約形態情報に削除ボタン・イベントプロシージャ
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：契約形態情報に削除ブタンを押下された場合の処理
+'
+'更新履歴　：2013/04/18 GUT 張 新規作成 顧問バック更改対応
+'
+'*************************************************************************
+Private Sub CmdSakujyo2_Click()
+    Dim objCheckBox     As Object
+    Dim lngSheetRowLast As Long
+    Dim intDelRow       As Integer
+    Dim lngAddRow       As Long
+    Dim strTaisyou     As String
+    
+    Call gCom01_SheetProtect(Worksheets(MAIN_SHEETNAME2), False)    'シートの保護解除
+    lngAddRow = ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Range("契約形態情報開始行").Row
+    lngSheetRowLast = ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Range("B65535").End(xlUp).Row
+    With ThisWorkbook.Worksheets(MAIN_SHEETNAME2)
+        For Each objCheckBox In ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Shapes
+            If objCheckBox.Type = msoFormControl Then
+                If objCheckBox.FormControlType = xlCheckBox Then
+                    intDelRow = objCheckBox.BottomRightCell.Row - 1
+                    strTaisyou = "AB" & intDelRow
+                    If (objCheckBox.ControlFormat.Value = 1) And (.Range(strTaisyou) = "契約形態") Then
+                        '明細行の削除処理
+                        .Rows(intDelRow).Delete Shift:=xlUp
+                        objCheckBox.Delete
+                    End If
+               End If
+            End If
+        Next
+    End With
+    lngSheetRowLast = ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Range("B65535").End(xlUp).Row
+    
+    ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Range("契約形態情報開始行").Offset(lngSheetRowLast - lngAddRow, 0).Select
+    Call gCom01_SheetProtect(ThisWorkbook.Worksheets(MAIN_SHEETNAME2), True)    'シートの保護
+End Sub
+'------------<顧問バック更改対応 2013/04/18 GUT張 END> ------------

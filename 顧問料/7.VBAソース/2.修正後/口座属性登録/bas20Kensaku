@@ -1,0 +1,1684 @@
+Attribute VB_Name = "bas20Kensaku"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：国内顧問料計算システム・計算方法
+'
+'オブジェクト名：bas20Kensaku
+'
+'機能概要　：検索ボタン処理
+'
+'更新履歴　：2006/08/09 SRA 西濱       新規作成
+'
+'*************************************************************************
+
+Const MODULE_NAME = "bas20Kensaku"
+
+'*************************************************************************
+'関数名　　：検索処理メイン処理
+'
+'引　　数　：
+'           objTarget        I           対象のシート
+'
+'戻り値　　：
+'
+'機能説明　：
+'
+'更新履歴　：2006/08/09 SRA K.Nishihama    新規作成
+'　　　　　　2006/10/03 SRA T.Sato         修正
+'　　　　　　   障害管理表:175対応
+'更新履歴　：2007/11/09 SRA Y.Azuma        変更     (PH4)
+'更新履歴　：2007/12/20 SRA Y.Azuma        変更     (PH4)連結バグ対応
+'          ：2013/04/15 GUT 董 顧問バック更改対応
+'
+'*************************************************************************
+Public Sub gsub_KensakuMain(ByRef objTarget As Object)
+
+On Error GoTo ErrorSection
+
+    With objTarget
+        
+'***** DELETE T.Sato 2006.10.03 *****
+'        '口座番号に全角あるいは小文字で入力された場合、半角大文字へ変換する
+'        Worksheets(MAIN_SHEETNAME).Range("口座番号").Value2 = _
+'        StrConv(Trim(.Range("口座番号")), vbNarrow + vbUpperCase)
+'***** DELETE End *****
+    
+        '入力チェック処理(検索時)
+'------------<Modify Start azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+        If gfuncKohza_SearchInputCheck(objTarget) = False Then
+            '更新ボタンの無効化
+            .CmdUpdate.Enabled = False
+'------------<顧問バック更改対応 2013/04/16 GUT董 START> ------------
+            Worksheets(MAIN_SHEETNAME2).Cmddelete.Enabled = False
+'------------<顧問バック更改対応 2013/04/16 GUT董 END> ------------
+            Call gCom01_SheetProtect(objTarget, False)
+            .Range("口座名称カナ").Value = ""
+            .Range("口座名称漢字").Value = ""
+            Call gCom01_SheetProtect(objTarget, True)
+            Exit Sub
+        End If
+        
+        '検索口座が親かどうか？
+        If Left(objTarget.Range("口座番号"), 1) = "G" Then
+            '更新ボタンの無効化
+            .CmdUpdate.Enabled = False
+'------------<顧問バック更改対応 2013/04/16 GUT董 START> ------------
+            Worksheets(MAIN_SHEETNAME2).Cmddelete.Enabled = False
+'------------<顧問バック更改対応 2013/04/16 GUT董 END> ------------
+            Exit Sub
+         End If
+        
+        '検索処理とデータ設定
+        If gfuncKohza_DoSearch(objTarget) = False Then
+            '更新ボタンの無効化
+            .CmdUpdate.Enabled = False
+'------------<顧問バック更改対応 2013/04/16 GUT董 START> ------------
+            Worksheets(MAIN_SHEETNAME2).Cmddelete.Enabled = False
+'------------<顧問バック更改対応 2013/04/16 GUT董 END> ------------
+            'システムエラー
+            Call gfunc_ErrorMsg(4, 1603, "", "")
+            Exit Sub
+        End If
+'        If gfuncKohza_SearchInputCheck(Worksheets(MAIN_SHEETNAME)) = False Then
+'            '更新ボタンの無効化
+'            .CmdUpdate.Enabled = False
+'            Call gCom01_SheetProtect(Worksheets(MAIN_SHEETNAME), False)
+'            Worksheets(MAIN_SHEETNAME).Range("口座名称").Value2 = ""
+'            Call gCom01_SheetProtect(Worksheets(MAIN_SHEETNAME), True)
+'            Exit Sub
+'        End If
+'
+'        '検索口座が親かどうか？
+'        If Left(Worksheets(MAIN_SHEETNAME).Range("口座番号"), 1) = "G" Then
+'            '更新ボタンの無効化
+'            .CmdUpdate.Enabled = False
+'            Exit Sub
+'         End If
+'
+'        '検索処理とデータ設定
+'        If gfuncKohza_DoSearch(Worksheets(MAIN_SHEETNAME)) = False Then
+'            '更新ボタンの無効化
+'            .CmdUpdate.Enabled = False
+'            'システムエラー
+'            Call gfunc_ErrorMsg(4, 1603, "", "")
+'            Exit Sub
+'        End If
+'------------<Modify End   azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+        
+        '更新ボタンの有効化
+'------------<Modify Start azuma 2007/12/20 (PH4)> ★★★☆-----------------------
+        If Worksheets(MAIN_SHEETNAME).Visible = True Then
+'------------<顧問バック更改対応 2013/04/15 GUT董 START> ------------
+            ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range("口座番号").Select
+'------------<顧問バック更改対応 2013/04/15 GUT董 END> ------------
+            Worksheets(MAIN_SHEETNAME).CmdUpdate.Enabled = True
+        ElseIf Worksheets(MAIN_SHEETNAME2).Visible = True Then
+            Worksheets(MAIN_SHEETNAME2).CmdUpdate.Enabled = True
+'------------<顧問バック更改対応 2013/04/15 GUT董 START> ------------
+            ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Range("口座番号").Select
+            '削除ボタンの有効化
+            Worksheets(MAIN_SHEETNAME2).Cmddelete.Enabled = True
+'------------<顧問バック更改対応 2013/04/15 GUT董 END> ------------
+        End If
+'        '更新ボタンの有効化
+'        .CmdUpdate.Enabled = True
+'------------<Modify End   azuma 2007/12/20 (PH4)> ★★★☆-----------------------
+    
+    End With
+    
+    Exit Sub
+    
+ErrorSection:
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gsub_KensakuMain", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Sub
+
+'*************************************************************************
+'関数名　　：入力チェック処理(検索時)
+'
+'引　　数　：
+'           TargetSheets        I           チェック対象のシート
+'
+'戻り値　　：
+'
+'機能説明　：
+'
+'更新履歴　：2006/08/09 SRA K.Nishihama    新規作成
+'          ：2013/04/15 GUT 董 顧問バック更改対応
+'
+'*************************************************************************
+Public Function gfuncKohza_SearchInputCheck(ByRef TargetSheets As Object) As Boolean
+On Error GoTo ErrorSection
+    Dim strKozaNo       As String
+    Dim strKikan        As String
+    Dim strDate         As String
+    Dim strTime         As String
+    
+    gfuncKohza_SearchInputCheck = False
+    strKozaNo = ""
+    
+'１．【口座番号】
+    strKozaNo = Trim(TargetSheets.Range("口座番号"))
+
+    '①入力ﾁｪｯｸ
+      If Trim(strKozaNo) = "" Then
+        '"口座番号：口座番号が未入力です。"
+        Call gfunc_ErrorMsg(3, 1200, "口座番号", "7桁で入力して下さい。")
+        TargetSheets.Range("口座番号").Select
+        Exit Function
+      End If
+    
+    '②桁数ﾁｪｯｸ
+    If Len(strKozaNo) >= 8 Then
+        '"口座番号：入力に誤りがあります。"
+        Call gfunc_ErrorMsg(3, 1201, "口座番号", "7桁で入力して下さい。")
+        TargetSheets.Range("口座番号").Select
+        Exit Function
+    Else
+        '8桁未満はゼロパディングする。
+        strKozaNo = gfunc_KozaNoFormat(strKozaNo)
+        TargetSheets.Range("口座番号").Value = strKozaNo
+    End If
+    
+    '③口座の存在チェック("G"で始まる親口座が入力された場合は合算口座テーブルをチェック)
+    If Left(strKozaNo, 1) <> "G" Then
+        If func_KozaNoExist(TargetSheets, strKozaNo) = False Then
+            '"該当する口座番号が存在しません。"
+            Call gfunc_ErrorMsg(3, 1202, "口座番号", "")
+            TargetSheets.Range("口座番号").Select
+            Exit Function
+        End If
+    Else
+'------------<顧問バック更改対応 2013/04/15 GUT董 START> ------------
+'        If func_GassanSearch(TargetSheets) = False Then
+        If func_GKozaNoExist(TargetSheets, strKozaNo) = False Then
+'------------<顧問バック更改対応 2013/04/15 GUT董 END> ------------
+            '"該当する口座番号が存在しません。"
+            Call gfunc_ErrorMsg(3, 1202, "口座番号", "")
+            TargetSheets.Range("口座番号").Select
+            Exit Function
+        End If
+    End If
+    
+    '検索時の口座番号を取得
+    Worksheets(TIMESTAMP_SHEETNAME).Range("検索時口座ＮＯ") = gfunc_KozaNoFormat(strKozaNo)
+    gfuncKohza_SearchInputCheck = True
+
+    Exit Function
+    
+ErrorSection:
+    
+    gfuncKohza_SearchInputCheck = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gfuncKohza_SearchInputCheck", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+'*************************************************************************
+'関数名　　：親口座番号の合算親口座名取得処理
+'
+'引　　数　：
+'
+'戻り値　　：Boolean
+'
+'機能説明　：親口座番号の合算親口座名取得
+'
+'更新履歴　：2006/08/22 SRA K.Nishihama    新規作成
+'更新履歴　：2007/11/09 SRA Y.Azuma        変更     (PH4)
+'*************************************************************************
+Private Function func_GassanSearch(ByRef TargetSheets As Object) As Boolean
+    
+    Dim strSql      As String
+    Dim vData()     As Variant
+    Dim lngCol      As Long
+    Dim lngRow      As Long
+    Dim strData1    As String
+
+    Dim strDate As String
+    Dim strTime As String
+
+    func_GassanSearch = False
+
+    With TargetSheets
+        strSql = ""
+        strSql = strSql & " SELECT GASSAN_KOHZA_MEI                        "
+        strSql = strSql & " FROM   KYK_GASSAN_KOHZA                        "
+        strSql = strSql & " WHERE  GASSAN_OYA_KOHZA_NO = '" & .Range("口座番号") & "'"
+    End With
+    
+    'データ取得
+    Call gclsdb.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow)
+  
+    Call gCom01_SheetProtect(TargetSheets, False)
+'------------<Modify Start azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+    If lngRow > 0 Then
+        Call gCom01_BookProtect(ThisWorkbook, False)    'ブックの保護解除
+        Call gCom01_SheetProtect(ThisWorkbook.Worksheets(MAIN_SHEETNAME), False)
+        ThisWorkbook.Worksheets(MAIN_SHEETNAME).Visible = True
+        ThisWorkbook.Worksheets(MAIN_SHEETNAME).Select
+        ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Visible = False
+        ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range("口座名称カナ") = vData(0, 0)
+        ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range("口座名称漢字") = vData(0, 0)
+        ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range("口座番号") = TargetSheets.Range("口座番号")
+        ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range("口座番号").Select
+        ThisWorkbook.Worksheets(MAIN_SHEETNAME).OLEObjects("optKohza_zokusei").Object.Value = True
+        ActiveWindow.ScrollRow = Worksheets(MAIN_SHEETNAME).Range("口座属性").Row
+        Call gCom01_SheetProtect(ThisWorkbook.Worksheets(MAIN_SHEETNAME), True)
+        Call gCom01_BookProtect(ThisWorkbook, True)    'ブックの保護
+    Else
+        TargetSheets.Range("口座名称カナ").Value = ""
+        TargetSheets.Range("口座名称漢字").Value = ""
+    End If
+'    If lngRow > 0 Then
+'        TargetSheets.Range("口座名称") = vData(0, 0)
+'    Else
+'        TargetSheets.Range("口座名称") = ""
+'    End If
+'------------<Modify End   azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+    Call gCom01_SheetProtect(TargetSheets, True)
+    
+    Erase vData
+
+    'データありの場合のみ正常
+    If lngRow > 0 Then
+        func_GassanSearch = True
+    End If
+    
+    Exit Function
+
+ErrHandler:
+    func_GassanSearch = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_GassanSearch", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Erase vData
+'    MsgBox "Error:func_KozaNoExist" & vbCrLf & Err.Description
+
+End Function
+
+'*************************************************************************
+'関数名　　：口座番号の存在チェック処理
+'
+'引　　数　：
+'           strKozaNo   I       口座番号
+'
+'戻り値　　：Boolean
+'
+'機能説明　：口座番号の存在チェック
+'
+'更新履歴　：2006/08/11 SRA K.Nishihama    新規作成
+'修正履歴　：2006/10/31 SRA IIDA           口座閉鎖日の条件削除（仕様修正）
+'更新履歴　：2007/11/09 SRA Y.Azuma        変更     (PH4)
+'更新履歴　：2008/01/16 SRA Y.Azuma    変更     (PH4)特殊文字バグ対応
+'更新履歴　：2010/03/12 SRA T.Mizutani     変更 海外口座一覧の出力改善
+'          ：2013/04/15 GUT 董 顧問バック更改対応
+'*************************************************************************
+Private Function func_KozaNoExist(ByRef TargetSheets As Object, ByVal strKozaNo As String) As Boolean
+    Dim strSql      As String
+    Dim vData()     As Variant
+    Dim lngCol      As Long
+    Dim lngRow      As Long
+    Dim strData1    As String   '口座名称カナ
+    Dim strData2    As String   '口座名称漢字
+'------------<顧問バック更改対応 2013/04/15 GUT董 START> ------------
+'    Dim strData3    As String   '口座開設区分
+
+'    Dim strDate As String
+'    Dim strTime As String
+
+    Dim intFlg1            As Integer
+    Dim intFlg2            As Integer
+    
+    Dim vKokyakumei()      As Variant      'ファンド名(適用日管理)データ
+    Dim lngKokyakumeiCnt   As Long         'ファンド名(適用日管理)データ件数
+
+    intFlg1 = 0
+    intFlg2 = 0
+'------------<顧問バック更改対応 2013/04/15 GUT董 END> ------------
+    func_KozaNoExist = False
+
+'------------<顧問バック更改対応 2013/04/15 GUT董 START> ------------
+    'サーバ日付の取得
+'    Call gfunc_GetSvDateTime(strDate, strTime)
+    
+'------------<顧問バック更改対応 2013/04/15 GUT董 END> ------------
+'------------<Modify Start azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+'------------<顧問バック更改対応 2013/04/15 GUT董 START> ------------
+'   strSql = ""
+'   strSql = strSql & " SELECT NAME_E"                       '口座名称カナ
+'   strSql = strSql & "       ,NAME_J"                       '口座名称漢字
+'   strSql = strSql & "       ,SETTEI_KBN"                   '口座開設区分
+'   strSql = strSql & " FROM   " & TBL_VW_DT001D
+'------------<顧問バック更改対応 2013/04/15 GUT董 END> ------------
+'------------<Modify Start T.Mizutani 2010/3/12 (海外口座一覧の出力改善)> ------------
+
+'   strSql = strSql & " WHERE  SETTEI_KBN IN ('1','2') "     '国内・海外本開設
+''------------<Modify Start azuma 2008/01/16 (PH4)> ★★★☆-----------------------
+'   strSql = strSql & " AND    PRTCD = '" & func_ChkQuoteshon(strKozaNo, "'") & "'" '入力された口座番号
+''   strSql = strSql & " AND    PRTCD = '" & strKozaNo & "'"  '入力された口座番号
+''------------<Modify End   azuma 2008/01/16 (PH4)> ★★★☆-----------------------
+'------------<顧問バック更改対応 2013/04/15 GUT董 START> ------------
+'   strSql = strSql & " WHERE  PRTCD = '" & func_ChkQuoteshon(strKozaNo, "'") & "'" '入力された口座番号
+'------------<顧問バック更改対応 2013/04/15 GUT董 END> ------------
+   
+'------------<Modify End   T.Mizutani 2010/3/12 (海外口座一覧の出力改善)> ------------
+'   strSql = ""
+'   strSql = strSql & " SELECT NAME_RJ                        "              '略称を表示
+'   strSql = strSql & " FROM   VW_DT001D                      "
+'   strSql = strSql & " WHERE  SETTEI_KBN = '1'               "              '国内本開設
+'   strSql = strSql & " AND    PRTCD = '" & strKozaNo & "'"                  '入力された口座番号
+'   '2006/10/27 DEL S
+''  '2006/10/16 UPDATE S
+''  strSql = strSql & " AND   (CALLOFF_DATE = '0'       "                    '閉鎖されていない口座
+''  'strSql = strSql & " AND   (CALLOFF_SHORI_DATE = '0'       "              '閉鎖されていない口座
+''   strSql = strSql & " OR     CALLOFF_DATE >= '" & strDate & "') "    '閉鎖予定日が本日以降
+'   'strSql = strSql & " OR     CALLOFF_SHORI_DATE >= '" & strDate & "') "    '閉鎖予定日が本日以降
+'   '2006/10/27 DEL E
+'------------<Modify End   azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+    
+'------------<顧問バック更改対応 2013/04/15 GUT董 START> ------------
+'    'データ取得
+'    Call gclsdb.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow)
+
+'    strData1 = ""
+'    '取得データがある場合を名称をセルに設定
+'------------<顧問バック更改対応 2013/04/15 GUT董 END> ------------
+'------------<Modify Start azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+'    If lngRow > 0 Then
+'         strData1 = vData(0, 0)
+'    Else
+'        strData1 = ""
+'    End If
+'------------<顧問バック更改対応 2013/04/15 GUT董 START> ------------
+'    If lngRow > 0 Then
+'         strData1 = Trim(vData(0, 0))
+'         strData2 = Trim(vData(1, 0))
+'         strData3 = Trim(vData(2, 0))
+    '入力口座番号チェック処理
+    If func_GetKomonnInfo(strKozaNo) = False Then
+        '入力口座番号チェック処理
+        If func_GetKomonnryouInfo(strKozaNo) = False Then
+            '"該当する口座番号が存在しません。"
+            Exit Function
+        Else
+            func_KozaNoExist = True
+            intFlg2 = 1
+        End If
+    Else
+        func_KozaNoExist = True
+        intFlg1 = 1
+    End If
+    
+    '顧客名情報取得し、名称を設定
+    If func_GetKokyakumeiInfo(strKozaNo, vKokyakumei, lngKokyakumeiCnt) = False Then
+        strData1 = ""
+        strData2 = ""
+    Else
+        strData1 = Trim(vKokyakumei(0, 0))
+        strData2 = Trim(vKokyakumei(1, 0))
+    End If
+'------------<顧問バック更改対応 2013/04/15 GUT董 END> ------------
+        Call gCom01_BookProtect(ThisWorkbook, False)    'ブックの保護解除
+         
+'------------<Modify Start T.Mizutani 2010/3/12 (海外口座一覧の出力改善)> ------------
+'        If strData3 = "1" Then
+'------------<顧問バック更改対応 2013/04/15 GUT董 START> ------------
+'       If (strData3 = "1") Or (strData3 = "3") Then
+        If (intFlg1 = 1) Then
+'------------<顧問バック更改対応 2013/04/15 GUT董 END> ------------
+'------------<Modify End   T.Mizutani 2010/3/12 (海外口座一覧の出力改善)> ------------
+        '国内
+            Call gCom01_SheetProtect(ThisWorkbook.Worksheets(MAIN_SHEETNAME), False)
+            ThisWorkbook.Worksheets(MAIN_SHEETNAME).Visible = True
+            ThisWorkbook.Worksheets(MAIN_SHEETNAME).Select
+            ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Visible = False
+            ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range("口座名称カナ") = strData1
+            ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range("口座名称漢字") = strData2
+            ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range("口座番号") = strKozaNo
+            ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range("口座番号").Select
+            ThisWorkbook.Worksheets(MAIN_SHEETNAME).OLEObjects("optKohza_zokusei").Object.Value = True
+            ActiveWindow.ScrollRow = Worksheets(MAIN_SHEETNAME).Range("口座属性").Row
+            Call gCom01_SheetProtect(ThisWorkbook.Worksheets(MAIN_SHEETNAME), True)
+        Else
+'------------<顧問バック更改対応 2013/04/15 GUT董 START> ------------
+        If (intFlg2 = 1) Then
+'------------<顧問バック更改対応 2013/04/15 GUT董 END> ------------
+        '海外
+            Call gCom01_SheetProtect(ThisWorkbook.Worksheets(MAIN_SHEETNAME2), False)
+            ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Visible = True
+            ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Select
+            ThisWorkbook.Worksheets(MAIN_SHEETNAME).Visible = False
+            ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Range("口座名称カナ") = strData1
+            ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Range("口座名称漢字") = strData2
+            ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Range("口座番号") = strKozaNo
+            ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Range("口座番号").Select
+            ActiveWindow.ScrollRow = Worksheets(MAIN_SHEETNAME2).Range("口座属性").Row
+            Call gCom01_SheetProtect(ThisWorkbook.Worksheets(MAIN_SHEETNAME2), True)
+        End If
+        
+        Call gCom01_BookProtect(ThisWorkbook, True)     'ブックの保護
+        
+'------------<顧問バック更改対応 2013/04/15 GUT董 START> ------------
+'    Else
+'         TargetSheets.Range("口座名称カナ") = ""
+'         TargetSheets.Range("口座名称漢字") = ""
+'------------<顧問バック更改対応 2013/04/15 GUT董 END> ------------
+    End If
+'    TargetSheets.Range("口座名称") = strData1
+
+'    Call gCom01_SheetProtect(TargetSheets, True)
+'------------<Modify End   azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+
+    Erase vData
+
+    'データありの場合のみ正常
+'------------<顧問バック更改対応 2013/04/15 GUT董 START> ------------
+'    If lngRow > 0 Then
+'------------<顧問バック更改対応 2013/04/15 GUT董 END> ------------
+        func_KozaNoExist = True
+'------------<顧問バック更改対応 2013/04/15 GUT董 START> ------------
+'    End If
+'------------<顧問バック更改対応 2013/04/15 GUT董 END> ------------
+
+    Exit Function
+
+ErrHandler:
+    func_KozaNoExist = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_KozaNoExist", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Erase vData
+'    MsgBox "Error:func_KozaNoExist" & vbCrLf & Err.Description
+
+End Function
+
+'------------<顧問バック更改対応 2013/04/15 GUT董 START> ------------
+'*************************************************************************
+'関数名　　：親口座番号の存在チェック
+'
+'引　　数　：
+'
+'戻り値　　：Boolean
+'
+'機能説明　：親口座番号の存在チェック
+'
+'更新履歴　：2013/04/15 GUT 董 新規作成 顧問バック更改対応
+'*************************************************************************
+Private Function func_GKozaNoExist(ByRef TargetSheets As Object, ByVal strKozaNo As String) As Boolean
+
+    Dim intFlg1            As Integer
+    Dim intFlg2            As Integer
+    
+    intFlg1 = 0
+    intFlg2 = 0
+    
+    func_GKozaNoExist = False
+  
+    '合算口座チェック、情報取得処理
+    If func_GassanSearch(TargetSheets) = False Then
+        '入力口座番号チェック処理
+        If func_GetKomonnInfo(strKozaNo) = False Then
+            '入力口座番号チェック処理
+            If func_GetKomonnryouInfo(strKozaNo) = False Then
+                func_GKozaNoExist = False
+                Exit Function
+            Else
+                func_GKozaNoExist = True
+                intFlg2 = 1
+            End If
+        Else
+            func_GKozaNoExist = True
+            intFlg1 = 1
+        End If
+    Else
+        func_GKozaNoExist = True
+    End If
+
+    Call gCom01_SheetProtect(TargetSheets, False)
+
+    If (intFlg1 = 1) Then
+        Call gCom01_BookProtect(ThisWorkbook, False)    'ブックの保護解除
+        Call gCom01_SheetProtect(ThisWorkbook.Worksheets(MAIN_SHEETNAME), False)
+        ThisWorkbook.Worksheets(MAIN_SHEETNAME).Visible = True
+        ThisWorkbook.Worksheets(MAIN_SHEETNAME).Select
+        ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Visible = False
+        ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range("口座名称カナ") = ""
+        ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range("口座名称漢字") = ""
+        ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range("口座番号") = TargetSheets.Range("口座番号")
+        ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range("口座番号").Select
+        ThisWorkbook.Worksheets(MAIN_SHEETNAME).OLEObjects("optKohza_zokusei").Object.Value = True
+        ActiveWindow.ScrollRow = Worksheets(MAIN_SHEETNAME).Range("口座属性").Row
+        Call gCom01_SheetProtect(ThisWorkbook.Worksheets(MAIN_SHEETNAME), True)
+        Call gCom01_BookProtect(ThisWorkbook, True)    'ブックの保護
+    Else
+        If (intFlg2 = 1) Then
+            Call gCom01_SheetProtect(ThisWorkbook.Worksheets(MAIN_SHEETNAME2), False)
+            ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Visible = True
+            ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Select
+            ThisWorkbook.Worksheets(MAIN_SHEETNAME).Visible = False
+            ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Range("口座名称カナ") = ""
+            ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Range("口座名称漢字") = ""
+            ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Range("口座番号") = strKozaNo
+            ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Range("口座番号").Select
+            ActiveWindow.ScrollRow = Worksheets(MAIN_SHEETNAME2).Range("口座属性").Row
+            Call gCom01_SheetProtect(ThisWorkbook.Worksheets(MAIN_SHEETNAME2), True)
+        End If
+    End If
+    Call gCom01_SheetProtect(TargetSheets, True)
+
+    func_GKozaNoExist = True
+    
+    Exit Function
+
+ErrHandler:
+    func_GKozaNoExist = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_GKozaNoExist", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+'    MsgBox "Error:func_KozaNoExist" & vbCrLf & Err.Description
+
+End Function
+'------------<顧問バック更改対応 2013/04/15 GUT董 END> ------------
+
+'*************************************************************************
+'関数名　　：
+'
+'引　　数　：
+'           iKind       I       削除対象
+'           AllDel      I       全削除フラグ
+'
+'戻り値　　：
+'
+'機能説明　：
+'
+'更新履歴　：2006/08/11 SRA K.Nishihama 新規作成
+'更新履歴　：2007/01/12 SRA Y.Azuma     変更     UAT要望 「料率段階合計後に丸める」は「千円未満切捨て」を初期値表示
+'更新履歴　：2007/07/24 SRA Y.Azuma   　変更     (PH3)総合　仕様変更　初期値を「資産調整後に丸める」
+'更新履歴　：2007/11/09 SRA Y.Azuma   　変更     (PH4)
+'          ：2013/04/15 GUT 董 顧問バック更改対応
+'
+'*************************************************************************
+Public Function gfuncKohza_DoSearch(ByRef TargetSheets As Object) As Boolean
+On Error GoTo Error_Section
+    
+    Dim strKozaNo       As String
+    
+    Dim vDatMarume()    As Variant      '丸め方法データ
+    Dim lngMarumeCnt    As Long         '丸め方法データ件数
+    
+    Dim vDatGassan()    As Variant      '合算口座データ
+    Dim lngGassanCnt    As Long         '合算口座データ件数
+    
+    Dim vDatKohza()     As Variant      '口座属性データ
+    Dim lngKohzaCnt     As Long         '口座属性データ件数
+    
+    Dim vDatZokusei()   As Variant      '属性情報データ     <-- add azuma 2007/11/09 (PH4)★★★☆
+    Dim lngZokuseiCnt   As Long         '属性情報データ件数 <-- add azuma 2007/11/09 (PH4)★★★☆
+    Dim strSheetName    As String       '有効なシート名     <-- add azuma 2007/11/09 (PH4)★★★☆
+    
+'------------<顧問バック更改対応 2013/04/15 GUT董 START> ------------
+    Dim vDatFondmei()   As Variant      'ファンド名データ
+    Dim lngFondmeiCnt   As Long         'ファンド名データ件数
+    
+    Dim vDatKeiyaku()   As Variant      '契約形態データ
+    Dim lngKeiyakuCnt   As Long         '契約形態データ件数
+'------------<顧問バック更改対応 2013/04/15 GUT董 END> ------------
+    Erase vDatMarume
+    Erase vDatGassan
+    Erase vDatKohza
+    Erase vDatZokusei   '<-- add azuma 2007/11/09 (PH4)★★★☆
+'------------<顧問バック更改対応 2013/04/15 GUT董 START> ------------
+    Erase vDatFondmei
+    Erase vDatKeiyaku
+'------------<顧問バック更改対応 2013/04/15 GUT董 END> ------------
+    
+    gfuncKohza_DoSearch = False
+
+'*******************************************************
+'* 関数開始　                                        　*
+'*******************************************************
+
+    '検索キー情報取得
+    strKozaNo = Trim(gfunc_KozaNoFormat(TargetSheets.Range("口座番号")))
+
+    '口座属性の取得
+    If func_GetKohzaInfo(strKozaNo, vDatKohza, lngKohzaCnt) = False Then
+        Exit Function
+    End If
+
+    '丸め方法の取得
+    If func_GetMarumeInfo(strKozaNo, vDatMarume, lngMarumeCnt) = False Then
+        Exit Function
+    End If
+    
+    '合算口座の取得
+    If func_GetGassanInfo(strKozaNo, vDatGassan, lngGassanCnt) = False Then
+        Exit Function
+    End If
+    
+'------------<Modify Start azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+    '属性情報(統計付加情報用属性)の取得
+    If func_GetZokuseiInfo(strKozaNo, vDatZokusei, lngZokuseiCnt) = False Then
+        Exit Function
+    End If
+'------------<Modify End   azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+'------------<顧問バック更改対応 2013/04/15 GUT董 START> ------------
+    '海外口座の場合のみ
+    If Worksheets(MAIN_SHEETNAME2).Visible = True Then
+        'ファンド名情報の取得
+        If func_GetFondmeiInfo(strKozaNo, vDatFondmei, lngFondmeiCnt) = False Then
+            Exit Function
+        End If
+    
+        '契約形態情報の取得
+        If func_GetKeiyakuInfo(strKozaNo, vDatKeiyaku, lngKeiyakuCnt) = False Then
+            Exit Function
+        End If
+    End If
+'------------<顧問バック更改対応 2013/04/15 GUT董 END> ------------
+    
+    
+    '取得データの表示
+'------------<Modify Start azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+    '表示設定先シートの選択
+    If Worksheets(MAIN_SHEETNAME).Visible = True Then
+        strSheetName = MAIN_SHEETNAME
+    ElseIf Worksheets(MAIN_SHEETNAME2).Visible = True Then
+        strSheetName = MAIN_SHEETNAME2
+    End If
+'------------<Modify End   azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+
+
+    
+    '口座情報の画面設定
+    If lngKohzaCnt > 0 Then
+'------------<Modify Start azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+        '未更新マークの表示
+        Worksheets(MAIN_SHEETNAME).OLEObjects("lblMikoushin_kokunai").Visible = False
+        Worksheets(MAIN_SHEETNAME2).OLEObjects("lblMikoushin_kaigai").Visible = False
+'------------<Modify End   azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+        
+        If func_SetKohzaInfo(TargetSheets, vDatKohza, lngKohzaCnt) = False Then
+            Exit Function
+        End If
+'------------<Modify Start azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+    Else
+        '未更新マークの表示
+        Worksheets(MAIN_SHEETNAME).OLEObjects("lblMikoushin_kokunai").Visible = True
+        Worksheets(MAIN_SHEETNAME2).OLEObjects("lblMikoushin_kaigai").Visible = True
+'------------<Modify End   azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+    End If
+
+'------------<Modify Start azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+    '国内口座の場合のみ「丸め方法」と「合算口座」の設定を行う
+    If strSheetName = MAIN_SHEETNAME Then
+'------------<Modify End   azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+    
+        '丸め方法情報の画面設定
+        If lngMarumeCnt > 0 Then
+'------------<Modify Start azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+'            If func_SetMarumeInfo(TargetSheets, vDatMarume, lngMarumeCnt) = False Then
+            If func_SetMarumeInfo(Worksheets(MAIN_SHEETNAME), vDatMarume, lngMarumeCnt) = False Then
+'------------<Modify End   azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+                Exit Function
+            End If
+    '------------<Modify Start azuma 2007/01/12 > -----------------------
+        Else
+        '初期登録時
+'------------<Modify Start azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+            With Worksheets(MAIN_SHEETNAME)
+                .Range("丸め７").Value = func_SearchComboItem("1", "丸め方法リスト")
+            End With
+''------------<Modify Start azuma 2007/07/24 (PH3)> -----------------------
+'            '初期値を「資産調整後に丸める」に変更する。
+'            .Cells(13, 15).Value = func_SearchComboItem("1", "丸め方法リスト")
+''            .Cells(11, 15).Value = func_SearchComboItem("1", "丸め方法リスト")
+''------------<Modify End   azuma 2007/07/24 (PH3)> -----------------------
+'------------<Modify End   azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+            
+    '------------<Modify End   azuma 2007/01/12 > -----------------------
+        End If
+    
+        '合算親口座情報の画面設定
+        If lngGassanCnt > 0 Then
+'------------<Modify Start azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+'            If func_SetGassanInfo(TargetSheets, vDatGassan, lngGassanCnt) = False Then
+            If func_SetGassanInfo(Worksheets(MAIN_SHEETNAME), vDatGassan, lngGassanCnt) = False Then
+'------------<Modify End   azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+                Exit Function
+            End If
+        End If
+    
+    End If  '<----------- Modify azuma 2007/11/09 (PH4)★★★☆
+    
+'------------<Modify Start azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+    '属性情報の画面設定
+    If lngZokuseiCnt > 0 Then
+    
+    
+        If func_SetZokuseiInfo(Worksheets(strSheetName), vDatZokusei, lngZokuseiCnt) = False Then
+            Exit Function
+        End If
+    End If
+'------------<Modify End   azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+'------------<顧問バック更改対応 2013/04/15 GUT董 START> ------------
+    '海外口座の場合のみ
+    If Worksheets(MAIN_SHEETNAME2).Visible = True Then
+        'ファンド名情報の画面設定
+        If lngFondmeiCnt > 0 Then
+            If func_SetFondmeiInfo(Worksheets(strSheetName), vDatFondmei, lngFondmeiCnt) = False Then
+                Exit Function
+            End If
+        End If
+    
+        '契約形態情報の画面設定
+        If lngKeiyakuCnt > 0 Then
+            If func_SetKeiyakuInfo(Worksheets(strSheetName), vDatKeiyaku, lngKeiyakuCnt) = False Then
+                Exit Function
+            End If
+        End If
+    End If
+'------------<顧問バック更改対応 2013/04/15 GUT董 END> ------------
+    
+    '取得データをメモリーから破棄
+    Erase vDatMarume
+    Erase vDatGassan
+    Erase vDatKohza
+    Erase vDatZokusei   '<-- add azuma 2007/11/09 (PH4)★★★☆
+'------------<顧問バック更改対応 2013/04/15 GUT董 START> ------------
+    Erase vDatFondmei
+    Erase vDatKeiyaku
+'------------<顧問バック更改対応 2013/04/15 GUT董 END> ------------
+    
+    gfuncKohza_DoSearch = True
+    
+    Exit Function
+
+Error_Section:
+
+    gfuncKohza_DoSearch = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gfuncKohza_DoSearch", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+    Erase vDatMarume
+    Erase vDatGassan
+    Erase vDatKohza
+    Erase vDatZokusei   '<-- add azuma 2007/11/09 (PH4)★★★☆
+'------------<顧問バック更改対応 2013/04/15 GUT董 START> ------------
+    Erase vDatFondmei
+    Erase vDatKeiyaku
+'------------<顧問バック更改対応 2013/04/15 GUT董 END> ------------
+
+End Function
+
+'*************************************************************************
+'関数名　　：ワークシートに口座情報を設定する
+'
+'引　　数　：
+'           TargetSheets    O       処理対象ワークシート
+'           vdata()         I       設定データ
+'           lngRow          I       設定データ件数
+'
+'戻り値　　：Boolean
+'
+'機能説明　：処理対象ワークシートにデータを設定する。
+'
+'更新履歴　：2006/08/21 SRA K.Nishihama    新規作成
+'更新履歴　：2007/02/14 SRA Y.Azuma        変更     (PH2)QANo.209 上期成功報酬対応
+'更新履歴　：2007/03/08 SRA T.Ichikawa     変更     (PH3)QANo. ０円請求書文言出力追加
+'更新履歴　：2007/11/09 SRA Y.Azuma        変更     (PH4)
+'更新履歴　：2008/10/14 SRA T.Mizutani     変更     海外口座の契約日の管理
+'
+'*************************************************************************
+Private Function func_SetKohzaInfo(ByRef TargetSheets As Object _
+                                 , ByVal vData As Variant _
+                                 , ByVal lngRow As Long) As Boolean
+On Error GoTo ErrHandler
+
+    Dim strSheetName    As String
+    func_SetKohzaInfo = False
+    
+    If Worksheets(MAIN_SHEETNAME).Visible = True Then
+        strSheetName = MAIN_SHEETNAME
+    ElseIf Worksheets(MAIN_SHEETNAME2).Visible = True Then
+        strSheetName = MAIN_SHEETNAME2
+    End If
+    
+'------------<Modify Start azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+    With Worksheets(strSheetName)
+        '国内口座と海外口座で処理を分ける
+        If strSheetName = MAIN_SHEETNAME Then
+        '■国内口座
+            '年請求回数区分 ★★★☆
+            .Range("年請求回数区分") = func_SearchComboItem(CStr(vData(EmGetKohzaInfo.SEIKYUU_KAI, 0)), LIST_SEIKYU_KAISUU)
+            
+            '信託契約区分 ★★★☆
+            .Range("信託契約区分") = func_SearchComboItem(CStr(vData(EmGetKohzaInfo.SHINTAKU_KEIYAKU, 0)), LIST_SHINTAKU_KEIYAKU)
+        
+            .Range("按分方法") = func_SearchComboItem(CStr(vData(EmGetKohzaInfo.ANBUN_HOHHOH, 0)), "按分方法リスト")
+            .Range("最低保証額") = CStr(vData(EmGetKohzaInfo.SAITEI_HOSHOH_GAKU, 0))
+            
+            '料率控除対象チェックボックス
+            If CStr(vData(EmGetKohzaInfo.RATE_KOHJYO_KBN, 0)) = "1" Then
+                .ChkRyouritu = True
+            Else
+                .ChkRyouritu = False
+            End If
+            
+            .Range("料率控除割合") = CStr(vData(EmGetKohzaInfo.RATE_KOHJYO_WARIAI, 0))
+            
+            'T21延長区分チェックボックス
+            If CStr(vData(EmGetKohzaInfo.T21_ENCHOH_KBN, 0)) = "1" Then
+                .ChkT21 = True
+            Else
+                .ChkT21 = False
+            End If
+            
+            '成功報酬対象チェックボックス
+            If CStr(vData(EmGetKohzaInfo.SEIKOH_HOHSHU_KBN, 0)) = "1" Then
+                .ChkSeikouHoushu = True
+            Else
+                .ChkSeikouHoushu = False
+            End If
+                 
+            '成功報酬タイプラジオボタン
+            Select Case CStr(vData(EmGetKohzaInfo.SEIKOH_HOHSHU_TYPE, 0))
+                Case SEIKOH_TYPE_KAKEME_A
+                    .OptKakemeA = True
+                Case SEIKOH_TYPE_KAKEME_B
+                    .OptKakemeB = True
+                Case SEIKOH_TYPE_KASAN
+                    .OptZandaka = True
+            End Select
+    
+            
+            .Range("上期未収掛け目") = CStr(vData(EmGetKohzaInfo.KAMIKI_MISHU_KAKEME_RATE, 0))
+            
+            
+            '０円請求書文言出力チェックボックス
+            If CStr(vData(EmGetKohzaInfo.MONGON_KBN, 0)) = "1" Then
+                .ChkSeikyushoMongon = True
+            Else
+                .ChkSeikyushoMongon = False
+            End If
+            
+            .Range("請求書文言出力") = CStr(vData(EmGetKohzaInfo.MONGON, 0))
+            
+            '送付書_顧客名 ★★★☆
+            .Range("送付書顧客名") = CStr(Trim(vData(EmGetKohzaInfo.YOBI_NAME, 0)))
+            
+            '送付書_郵便番号 ★★★☆
+            .Range("送付書郵便番号") = CStr(Trim(vData(EmGetKohzaInfo.YUUBIN, 0)))
+            
+            '送付書_住所1 ★★★☆
+            .Range("送付書住所1") = CStr(Trim(vData(EmGetKohzaInfo.JYUUSHO1, 0)))
+            
+            '送付書_住所2 ★★★☆
+            .Range("送付書住所2") = CStr(Trim(vData(EmGetKohzaInfo.JYUUSHO2, 0)))
+            
+            '送付書_担当部 ★★★☆
+            .Range("送付書担当部") = CStr(Trim(vData(EmGetKohzaInfo.TANTOU_BU, 0)))
+            
+            '送付書_担当者 ★★★☆
+            .Range("送付書担当者") = CStr(Trim(vData(EmGetKohzaInfo.TANTOUSHA, 0)))
+            
+            '送付書_代表者肩書 ★★★☆
+            .Range("送付書代表者肩書") = CStr(Trim(vData(EmGetKohzaInfo.KATAGAKI, 0)))
+            
+            '送付書_代表者 ★★★☆
+            .Range("送付書代表者") = CStr(Trim(vData(EmGetKohzaInfo.DAIHYOUSHA, 0)))
+            
+            '送付書_電話番号 ★★★☆
+            .Range("送付書電話番号") = CStr(Trim(vData(EmGetKohzaInfo.TEL_NO, 0)))
+            
+            '送付書_FAX番号 ★★★☆
+            .Range("送付書FAX番号") = CStr(Trim(vData(EmGetKohzaInfo.FAX_NO, 0)))
+            
+            '送付書_E -mail ★★★☆
+            .Range("送付書Email") = CStr(Trim(vData(EmGetKohzaInfo.E_MAIL, 0)))
+            
+            '請求書_顧客名 ★★★☆
+            .Range("請求書顧客名") = CStr(Trim(vData(EmGetKohzaInfo.SEIKYUU_NAME1, 0)))
+            
+            '契約書_顧客名 ★★★☆
+            .Range("契約書顧客名") = CStr(Trim(vData(EmGetKohzaInfo.KEI_YOBI_NAME, 0)))
+            
+            '契約書_郵便番号 ★★★☆
+            .Range("契約書郵便番号") = CStr(Trim(vData(EmGetKohzaInfo.KEI_YUUBIN, 0)))
+            
+            '契約書_住所1 ★★★☆
+            .Range("契約書住所1") = CStr(Trim(vData(EmGetKohzaInfo.KEI_JYUUSHO1, 0)))
+            
+            '契約書_住所2 ★★★☆
+            .Range("契約書住所2") = CStr(Trim(vData(EmGetKohzaInfo.KEI_JYUUSHO2, 0)))
+            
+            '契約書_担当部 ★★★☆
+            .Range("契約書担当部") = CStr(Trim(vData(EmGetKohzaInfo.KEI_TANTOU_BU, 0)))
+            
+            '契約書_担当者 ★★★☆
+            .Range("契約書担当者") = CStr(Trim(vData(EmGetKohzaInfo.KEI_TANTOUSHA, 0)))
+            
+            '契約書_代表者肩書 ★★★☆
+            .Range("契約書代表者肩書") = CStr(Trim(vData(EmGetKohzaInfo.KEI_KATAGAKI, 0)))
+            
+            '契約書_代表者 ★★★☆
+            .Range("契約書代表者") = CStr(Trim(vData(EmGetKohzaInfo.KEI_DAIHYOUSHA, 0)))
+            
+            '契約書_電話番号 ★★★☆
+            .Range("契約書電話番号") = CStr(Trim(vData(EmGetKohzaInfo.KEI_TEL_NO, 0)))
+            
+            '契約書_FAX番号 ★★★☆
+            .Range("契約書FAX番号") = CStr(Trim(vData(EmGetKohzaInfo.KEI_FAX_NO, 0)))
+            
+            '契約書_E -mail ★★★☆
+            .Range("契約書Email") = CStr(Trim(vData(EmGetKohzaInfo.KEI_E_MAIL, 0)))
+            
+        ElseIf strSheetName = MAIN_SHEETNAME2 Then
+        '■海外口座
+        
+            '契約カウント対象外期間From ★★★☆
+'------------<Modify Start azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+''            If CStr(vData(EmGetKohzaInfo.KEIYAKUGAI_FROM, 0)) = "00000000" Or _
+''               CStr(vData(EmGetKohzaInfo.KEIYAKUGAI_FROM, 0)) = "99999999" Then
+            If CStr(vData(EmGetKohzaInfo.KEIYAKUGAI_FROM, 0)) = "0" Or _
+               CStr(vData(EmGetKohzaInfo.KEIYAKUGAI_FROM, 0)) = "99999999" Then
+'------------<Modify End   azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+                .Range("カウント対象FROM") = ""
+            Else
+                .Range("カウント対象FROM") = CStr(vData(EmGetKohzaInfo.KEIYAKUGAI_FROM, 0))
+            End If
+            
+            '契約カウント対象外期間To   ★★★☆
+'------------<Modify Start azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+''            If CStr(vData(EmGetKohzaInfo.KEIYAKUGAI_TO, 0)) = "00000000" Or _
+''               CStr(vData(EmGetKohzaInfo.KEIYAKUGAI_TO, 0)) = "99999999" Then
+            If CStr(vData(EmGetKohzaInfo.KEIYAKUGAI_TO, 0)) = "0" Or _
+               CStr(vData(EmGetKohzaInfo.KEIYAKUGAI_TO, 0)) = "99999999" Then
+'------------<Modify End   azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+                .Range("カウント対象TO") = ""
+            Else
+                .Range("カウント対象TO") = CStr(vData(EmGetKohzaInfo.KEIYAKUGAI_TO, 0))
+            End If
+            
+        
+        End If
+        
+        '協会区分 ★★★☆
+        .Range("協会区分") = func_SearchComboItem(CStr(vData(EmGetKohzaInfo.DATA_TYPE, 0)), LIST_KYOUKAI_KUBUN)
+        '------------<Add Start 海外口座の契約日の管理 mizutani 2008/10/14 > -----------------------
+        '契約年月日 ★★★☆
+        .Range("契約年月日") = CStr(Trim(vData(EmGetKohzaInfo.KEIYAKU_YMD, 0)))
+        '------------<Add End 海外口座の契約日の管理 mizutani 2008/10/14 > -----------------------
+        
+        Worksheets(TIMESTAMP_SHEETNAME).Range("口座属性登録日時") = CStr(vData(EmGetKohzaInfo.TOHROKU_YMD_K, 0))
+        Worksheets(TIMESTAMP_SHEETNAME).Range("請求書文言登録日時") = CStr(vData(EmGetKohzaInfo.TOHROKU_YMD_M, 0))
+
+    End With
+
+
+'    With TargetSheets
+'
+'        .Range("按分方法") = func_SearchComboItem(CStr(vData(0, 0)), "按分方法リスト")
+'        .Range("最低保証額") = CStr(vData(1, 0))
+'
+'        '料率控除対象チェックボックス
+'        If vData(2, 0) = "1" Then
+'            .ChkRyouritu = True
+'        Else
+'            .ChkRyouritu = False
+'        End If
+'
+'        .Range("料率控除割合") = CStr(vData(3, 0))
+'
+'        'T21延長区分チェックボックス
+'        If vData(5, 0) = "1" Then
+'            .ChkT21 = True
+'        Else
+'            .ChkT21 = False
+'        End If
+'
+'        '成功報酬対象チェックボックス
+'        If vData(6, 0) = "1" Then
+'            .ChkSeikouHoushu = True
+'        Else
+'            .ChkSeikouHoushu = False
+'        End If
+'
+'        '成功報酬タイプラジオボタン
+''------------<Modify Start azuma 2006/12/08 > -----------------------
+'        Select Case CStr(vData(7, 0))
+'            Case SEIKOH_TYPE_KAKEME_A
+'                .OptKakemeA = True
+'            Case SEIKOH_TYPE_KAKEME_B
+'                .OptKakemeB = True
+'            Case SEIKOH_TYPE_KASAN
+'                .OptZandaka = True
+'        End Select
+'
+''        If vData(7, 0) = "1" Then
+''            .OptKakeme = True
+''        Else
+''            .OptZandaka = True
+''        End If
+''------------<Modify End   azuma 2006/12/08 > -----------------------
+'
+''------------<Modify Start azuma 2007/02/14 > -----------------------
+'        .Range("上期未収掛け目") = CStr(vData(9, 0))
+''------------<Modify End   azuma 2007/02/14 > -----------------------
+'
+'        Worksheets(TIMESTAMP_SHEETNAME).Range("口座属性登録日時") = CStr(vData(8, 0))
+'
+''------------<Modify Start Ichikawa 2007/03/08 > -----------------------
+'        '０円請求書文言出力チェックボックス
+'        If vData(10, 0) = "1" Then
+'            .ChkSeikyushoMongon = True
+'        Else
+'            .ChkSeikyushoMongon = False
+'        End If
+'
+'        .Range("請求書文言出力") = CStr(vData(11, 0))
+'
+'        Worksheets(TIMESTAMP_SHEETNAME).Range("請求書文言登録日時") = CStr(vData(12, 0))
+'''------------<Modify End   Ichikawa 2007/03/08 > -----------------------
+'
+'    End With
+'------------<Modify End   azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+
+    func_SetKohzaInfo = True
+
+    Exit Function
+
+ErrHandler:
+    func_SetKohzaInfo = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & ThisWorkbook.Name & "\" & MODULE_NAME, "func_SetKohzaInfo", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    MsgBox "Error:func_SetKohzaInfo" & vbCrLf & Err.Description
+
+End Function
+
+'*************************************************************************
+'関数名　　：ワークシートに合算親口座情報を設定する
+'
+'引　　数　：
+'           TargetSheets    O       処理対象ワークシート
+'           vdata()         I       設定データ
+'           lngRow          I       設定データ件数
+'
+'戻り値　　：Boolean
+'
+'機能説明　：処理対象ワークシートにデータを設定する。
+'
+'更新履歴　：2006/08/21 SRA K.Nishihama    新規作成
+'*************************************************************************
+Private Function func_SetGassanInfo(ByRef TargetSheets As Object _
+                                  , ByVal vData As Variant _
+                                  , ByVal lngRow As Long) As Boolean
+On Error GoTo ErrHandler
+    func_SetGassanInfo = False
+    
+    With TargetSheets
+        .Range("合算親口座") = CStr(vData(0, 0))
+        .Range("合算開始日") = CStr(vData(1, 0))
+        .Range("合算終了日") = CStr(vData(2, 0))
+        Worksheets(TIMESTAMP_SHEETNAME).Range("検索時合算親口座番号") = CStr(vData(0, 0))
+        Worksheets(TIMESTAMP_SHEETNAME).Range("合算口座登録日時") = CStr(vData(3, 0))
+    End With
+
+    func_SetGassanInfo = True
+
+    Exit Function
+
+ErrHandler:
+    func_SetGassanInfo = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_SetGassanInfo", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    MsgBox "Error:func_SetGassanInfo" & vbCrLf & Err.Description
+
+End Function
+
+'*************************************************************************
+'関数名　　：ワークシートに丸め方法情報を設定する
+'
+'引　　数　：
+'           TargetSheets    O       処理対象ワークシート
+'           vdata()         I       設定データ
+'           lngRow          I       設定データ件数
+'
+'戻り値　　：Boolean
+'
+'機能説明　：処理対象ワークシートにデータを設定する。
+'
+'更新履歴　：2006/08/21 SRA K.Nishihama    新規作成
+'更新履歴　：2006/10/31 SRA IIDA           丸めタイミング2,3を削除
+'更新履歴　：2007/11/09 SRA Y.Azuma        変更     (PH4)
+'
+'*************************************************************************
+Private Function func_SetMarumeInfo(ByRef TargetSheets As Object _
+                                  , ByVal vData As Variant _
+                                  , ByVal lngRow As Long) As Boolean
+On Error GoTo ErrHandler
+
+    Dim lngCnt      As Long
+    Dim lngStartRow As Long
+    
+    func_SetMarumeInfo = False
+    
+'    Application.ScreenUpdating = False
+    
+    '明細行の追加
+    With TargetSheets
+    
+'------------<Modify Start azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+        lngStartRow = .Range("丸め１").Row
+'------------<Modify End   azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+    
+        For lngCnt = 0 To lngRow - 1
+            'データの設定(丸め方法１～８)
+'------------<Modify Start azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+            .Cells(lngCnt + lngStartRow, 15).Value = func_SearchComboItem(CStr(vData(1, lngCnt)), "丸め方法リスト")
+'            '2006/10/31 ADD S
+'            .Cells(lngCnt + 9, 15).Value = func_SearchComboItem(CStr(vData(1, lngCnt)), "丸め方法リスト")
+'            '2006/10/31 ADD E
+'------------<Modify End   azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+        Next lngCnt
+    
+        'TEMPLATEシートに既存レコードの登録日時を保存
+        Worksheets(TIMESTAMP_SHEETNAME).Range("丸め方法登録日時") = CStr(vData(2, 0))
+    End With
+    
+'    Application.ScreenUpdating = True
+    
+    func_SetMarumeInfo = True
+
+    Exit Function
+
+ErrHandler:
+    func_SetMarumeInfo = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_SetMarumeInfo", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    MsgBox "Error:func_SetMarumeInfo" & vbCrLf & Err.Description
+
+End Function
+
+'*************************************************************************
+'関数名　　：コンボ表示検索
+'
+'引　　数　：
+'           strCode     I       コード(DBなどから取得したコード)
+'           strName     I       サーチするリスト名
+'
+'戻り値　　：コンボ表示文字列
+'
+'機能説明　：コード値を入力するとその文字列を返す
+'
+'更新履歴　：2006/08/21 SRA K.Nishihama    新規作成
+'
+'*************************************************************************
+Public Function func_SearchComboItem(ByVal strCode As String _
+                                     , ByVal strName As String) As String
+
+    Dim c       As Variant
+    Dim lngCut  As Long
+    
+    func_SearchComboItem = ""
+    
+    'コードと名称の区切り位置取得
+    lngCut = gfunc_Separate(strName)
+    
+    If lngCut = 0 Then
+        func_SearchComboItem = strCode
+        Set c = Nothing
+        Exit Function
+    End If
+    
+    For Each c In Worksheets(DATA_SHEETNAME).Range(strName)
+        
+        If Trim(c.Value) <> "" Then
+            If strCode = CStr(Left(c.Value, lngCut)) Then
+                func_SearchComboItem = c.Value
+                Exit For
+            End If
+        End If
+    
+    Next c
+    
+    Set c = Nothing
+
+End Function
+
+'*************************************************************************
+'関数名　　：コードと名称の区切り位置取得処理
+'
+'引　　数　：
+'           strName     I       対象コンボ名
+'
+'戻り値　　：コードの桁数
+'
+'機能説明　：対象コンボ名からコード部桁数を返す
+'
+'更新履歴　：2006/08/21 SRA K.Nishihama    新規作成
+'          : 2013/04/15 GUT 董 顧問バック更改対応
+'*************************************************************************
+Public Function gfunc_Separate(ByVal strName As String) As Long
+
+    Dim lngCut As Long
+    
+    gfunc_Separate = 0
+    
+    Select Case strName
+'------------<顧問バック更改対応 2013/04/15 GUT董 START> ------------
+'        Case "按分方法リスト", "丸め方法リスト", LIST_SEIKYU_KAISUU, LIST_SHINTAKU_KEIYAKU
+        Case "按分方法リスト", "丸め方法リスト", LIST_SEIKYU_KAISUU, LIST_SHINTAKU_KEIYAKU, LIST_KEIYAKU_KEITAI_NAIYOU
+'------------<顧問バック更改対応 2013/04/15 GUT董 END> ------------
+            lngCut = 1
+        Case LIST_KYOUKAI_KUBUN
+            lngCut = 3
+        Case Else
+            lngCut = 0
+    End Select
+
+    gfunc_Separate = lngCut
+
+End Function
+
+'*************************************************************************
+'関数名　　：ワークシートに属性情報を設定する
+'
+'引　　数　：
+'           TargetSheets    O       処理対象ワークシート
+'           vdata()         I       設定データ
+'           lngMax          I       設定データ件数
+'
+'戻り値　　：Boolean
+'
+'機能説明　：処理対象ワークシートにデータを設定する。
+'
+'更新履歴　：2007/11/09 SRA Y.Azuma    新規     (PH4)
+'*************************************************************************
+Private Function func_SetZokuseiInfo(ByRef TargetSheets As Object _
+                                  , ByVal vData As Variant _
+                                  , ByVal lngMax As Long) As Boolean
+On Error GoTo ErrHandler
+
+    Dim lngCnt      As Long
+    
+    Dim lngZokuseiMax       As Long
+    Dim lngZokuseiCnt       As Long
+    Dim lngSheetRowStart    As Long
+    Dim lngSheetRowLast     As Long
+    Dim lngRow              As Long
+
+    
+    func_SetZokuseiInfo = False
+    
+    '属性配列の最大インデックス取得
+    lngZokuseiMax = UBound(gZokusei)
+    
+    '属性の番号の検索
+    With TargetSheets
+    
+        '属性開始行の取得
+        lngSheetRowStart = .Range("統計付加情報開始行").Row + 1
+        
+        '属性最終行の取得
+        lngSheetRowLast = .Range("統計付加情報開始行").End(xlDown).Row
+        If lngSheetRowLast >= 65536 Then
+            lngSheetRowLast = .Range("統計付加情報開始行").Row
+        End If
+    
+        '取得した属性毎に
+'------------<顧問バック更改対応 2013/04/15 GUT董 START> ------------
+        For lngRow = lngSheetRowStart To lngSheetRowLast
+            .Cells(lngRow, 7).Value = ""
+        Next
+'------------<顧問バック更改対応 2013/04/15 GUT董 END> ------------
+        For lngCnt = 0 To lngMax - 1
+        
+            For lngRow = lngSheetRowStart To lngSheetRowLast
+'------------<顧問バック更改対応 2013/04/15 GUT董 START> ------------
+                
+'                If CStr(Trim(.Cells(lngRow, 2))) = CStr(Trim(vData(0, lngCnt))) Then
+'                    .Cells(lngRow, 7).Value = func_SearchZokuseiItem(CStr(vData(1, lngCnt)), gZokusei(CLng(vData(0, lngCnt) - 1)))
+'                    Exit For
+'                End If
+'
+                If CStr(Trim(vData(0, lngCnt))) <= 26 Then
+                    If CStr(Trim(.Cells(lngRow, 2))) = CStr(Trim(vData(0, lngCnt))) Then
+                        .Cells(lngRow, 7).Value = func_SearchZokuseiItem(CStr(vData(1, lngCnt)), gZokusei(CLng(vData(0, lngCnt)) - 1))
+                        Exit For
+                    End If
+                Else
+                    If CStr(Trim(.Cells(lngRow, 2))) = CStr(Trim(vData(0, lngCnt))) Then
+                        .Cells(lngRow, 7).Value = func_SearchZokuseiItem(CStr(vData(1, lngCnt)), gZokusei(CLng(vData(0, lngCnt)) - 23 - 1))
+                        Exit For
+                    End If
+                End If
+'------------<顧問バック更改対応 2013/04/15 GUT董 END> ------------
+            Next lngRow
+        Next lngCnt
+        
+        'TEMPLATEシートに既存レコードの登録日時を保存
+        Worksheets(TIMESTAMP_SHEETNAME).Range("属性情報登録日時") = CStr(vData(2, 0))
+    End With
+    
+    
+    func_SetZokuseiInfo = True
+
+    Exit Function
+
+ErrHandler:
+    func_SetZokuseiInfo = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_SetZokuseiInfo", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+'    MsgBox "Error:func_SetZokuseiInfo" & vbCrLf & Err.Description
+
+End Function
+
+'*************************************************************************
+'関数名　　：コンボ表示検索
+'
+'引　　数　：
+'           strCode     I       コード(DBなどから取得したコード)
+'           strList()   I       サーチするリスト名
+'
+'戻り値　　：コンボ表示文字列
+'
+'機能説明　：コード値を入力するとその文字列を返す
+'
+'更新履歴　：2007/11/09 SRA Y.Azuma    新規     (PH4)
+'
+'*************************************************************************
+Public Function func_SearchZokuseiItem(ByVal strCode As String _
+                                     , ByRef Zokusei As typZokusei) As String
+
+    Dim lngListCnt      As Long
+    
+    func_SearchZokuseiItem = ""
+    
+    
+    For lngListCnt = 0 To UBound(Zokusei.Zokusei_List)
+        
+        If strCode = Zokusei.Zokusei_List(lngListCnt).Code_Value Then
+            func_SearchZokuseiItem = Zokusei.Zokusei_List(lngListCnt).Value_List
+            Exit For
+        End If
+    
+    Next lngListCnt
+    
+    '該当コードがリストにない場合、コード値だけを戻す
+    If lngListCnt > UBound(Zokusei.Zokusei_List) Then
+        func_SearchZokuseiItem = strCode
+    End If
+    
+End Function
+
+'------------<顧問バック更改対応 2013/04/15 GUT董 START> ------------
+'*************************************************************************
+'関数名　　：画面情報にファンド名情報を設定する
+'
+'引　　数　：
+'           TargetSheets    O       処理対象ワークシート
+'           vdata()         I       設定データ
+'           lngMax          I       設定データ件数
+'
+'戻り値　　：Boolean
+'
+'機能説明　：処理対象画面情報にデータを設定する。
+'
+'更新履歴　：2013/04/15 GUT 董 新規作成 顧問バック更改対応
+'*************************************************************************
+Private Function func_SetFondmeiInfo(ByRef TargetSheets As Object _
+                                  , ByVal vData As Variant _
+                                  , ByVal lngMax As Long) As Boolean
+On Error GoTo ErrHandler
+
+    Dim lngRowCnt   As Long
+    Dim lngAddRow   As Long
+    Dim lngCnt      As Long
+    Dim lngListRow  As Long     'ファンド名情報構造体のインデックス
+    Dim objX    As Object
+    Dim lngAddRowstr As String
+    
+    Call gCom01_SheetProtect(ThisWorkbook.Worksheets(MAIN_SHEETNAME2), False)    'ブックの保護
+    lngListRow = -1
+    func_SetFondmeiInfo = False
+    
+    '追加開始行
+    lngAddRow = TargetSheets.Range("ファンド名情報開始行").Row
+
+    For lngRowCnt = 0 To lngMax - 1
+         lngAddRow = lngAddRow + 1
+        lngAddRowstr = "B" & lngAddRow
+        '行追加
+        Call gKsC_fncKsCmnInsRow(TargetSheets, lngAddRow, 7)
+
+        '対象設定
+        With ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Range(lngAddRowstr)
+            Set objX = Worksheets(MAIN_SHEETNAME2).Shapes.AddFormControl( _
+            xlCheckBox, _
+            .Left + 25, _
+            .Top, _
+            13.5, _
+            10)
+            With objX.OLEFormat.Object
+                .Display3DShading = True
+                .Caption = ""
+            End With
+        End With
+        With TargetSheets.Range("ファンド名情報開始行")
+            '対象設定
+            .Offset(lngRowCnt + 1, 0).Value = "."
+            '適用日設定
+            .Offset(lngRowCnt + 1, 1).Value = CStr(Trim(vData(0, lngRowCnt)))
+            '顧客名（カナ/英）正式設定
+            .Offset(lngRowCnt + 1, 4).Value = CStr(Trim(vData(1, lngRowCnt)))
+            '顧客名（漢/英）正式設定
+            .Offset(lngRowCnt + 1, 8).Value = CStr(Trim(vData(2, lngRowCnt)))
+            '顧客名（カナ/英）略式設定
+            .Offset(lngRowCnt + 1, 12).Value = CStr(Trim(vData(3, lngRowCnt)))
+            '顧客名（漢/英）略式設定
+            .Offset(lngRowCnt + 1, 16).Value = CStr(Trim(vData(4, lngRowCnt)))
+            'AB列にファンド名情報設定
+            .Offset(lngRowCnt + 1, 25).Value = "ファンド名"
+        End With
+        'TEMPLATEシートに既存レコードの登録日時を保存
+        Worksheets(TIMESTAMP_SHEETNAME).Range("ファンド名登録日時") = CStr(vData(5, 0))
+    Next lngRowCnt
+    Call gCom01_SheetProtect(ThisWorkbook.Worksheets(MAIN_SHEETNAME2), True)    'ブックの保護
+    Erase vData
+    func_SetFondmeiInfo = True
+
+    Exit Function
+
+ErrHandler:
+    func_SetFondmeiInfo = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_SetFondmeiInfo", Err.Number, Err.Description)
+    On Error GoTo 0
+    Erase vData
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+'    MsgBox "Error:func_SetFondmeiInfo" & vbCrLf & Err.Description
+
+End Function
+
+'*************************************************************************
+'関数名　　：画面情報に契約形態情報を設定する
+'
+'引　　数　：
+'           TargetSheets    O       処理対象ワークシート
+'           vdata()         I       設定データ
+'           lngMax          I       設定データ件数
+'
+'戻り値　　：Boolean
+'
+'機能説明　：処理対象画面情報にデータを設定する。
+'
+'更新履歴　：2013/04/15 GUT 董 新規作成 顧問バック更改対応
+'*************************************************************************
+Private Function func_SetKeiyakuInfo(ByRef TargetSheets As Object _
+                                  , ByVal vData As Variant _
+                                  , ByVal lngMax As Long) As Boolean
+On Error GoTo ErrHandler
+
+    Dim lngRowCnt   As Long
+    Dim lngAddRow   As Long
+    Dim lngCnt      As Long
+    Dim lngListRow  As Long     '契約形態情報構造体のインデックス
+    Dim strNaiyou   As String
+    Dim strArray    As Variant
+    Dim intCount    As Integer
+    Dim intCnt      As Integer
+    Dim strCode     As String
+    Dim lngSheetRowLast1 As Long
+    Dim lngAddRowstr As String
+    Dim objX    As Object
+
+    Call gCom01_SheetProtect(ThisWorkbook.Worksheets(MAIN_SHEETNAME2), False)    'ブックの保護
+    lngListRow = -1
+    func_SetKeiyakuInfo = False
+    'コード値テーブルから契約形態内容用属性の一覧取得
+    lngSheetRowLast1 = ThisWorkbook.Worksheets(DATA_SHEETNAME).Range("F65535").End(xlUp).Row
+    For lngCnt = 0 To lngSheetRowLast1 - 2
+        strNaiyou = strNaiyou & ThisWorkbook.Worksheets(DATA_SHEETNAME).Cells(2 + lngCnt, 6).Value & ","
+    Next
+    
+    '追加開始行
+    lngAddRow = TargetSheets.Range("契約形態情報開始行").Row
+    For lngRowCnt = 0 To lngMax - 1
+        lngAddRow = lngAddRow + 1
+        lngAddRowstr = "B" & lngAddRow
+        '行追加
+        Call gKsC_fncKsCmnInsRow(TargetSheets, lngAddRow, 11)
+
+        '対象設定
+        With ThisWorkbook.Worksheets(MAIN_SHEETNAME2).Range(lngAddRowstr)
+            Set objX = Worksheets(MAIN_SHEETNAME2).Shapes.AddFormControl( _
+            xlCheckBox, _
+            .Left + 25, _
+            .Top, _
+            13.5, _
+            10)
+            With objX.OLEFormat.Object
+                .Display3DShading = True
+                .Caption = ""
+            End With
+        End With
+        With TargetSheets.Range("契約形態情報開始行")
+            '対象設定
+            .Offset(lngRowCnt + 1, 0) = "."
+            '適用日設定
+            .Offset(lngRowCnt + 1, 1).Value = CStr(Trim(vData(0, lngRowCnt)))
+            '内容リスト作成
+            .Offset(lngRowCnt + 1, 4).Select
+            With .Offset(lngRowCnt + 1, 4).Validation
+                .Delete
+                .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:=xlBetween, Formula1:=strNaiyou
+                .IgnoreBlank = True
+                .InCellDropdown = True
+                .InputTitle = ""
+                .ErrorTitle = ""
+                .InputMessage = ""
+                .ErrorMessage = ""
+                .IMEMode = xlIMEModeNoControl
+                .ShowInput = True
+                .ShowError = False
+            End With
+            '契約形態情報の内容値を設定
+            strArray = Split(strNaiyou, ",")
+            intCount = UBound(strArray)
+            For intCount = 0 To intCount
+                strCode = Mid(strArray(intCount), 1, 1)
+                If CStr(Trim(vData(1, lngRowCnt))) = strCode Then
+                    .Offset(lngRowCnt + 1, 4).Value = strArray(intCount)
+                End If
+            Next
+            'AB列に契約形態情報設定
+            .Offset(lngRowCnt + 1, 25).Value = "契約形態"
+        End With
+        'TEMPLATEシートに既存レコードの登録日時を保存
+        Worksheets(TIMESTAMP_SHEETNAME).Range("契約形態登録日時") = CStr(vData(2, 0))
+    Next lngRowCnt
+    Call gCom01_SheetProtect(ThisWorkbook.Worksheets(MAIN_SHEETNAME2), True)    'ブックの保護
+    Erase vData
+    func_SetKeiyakuInfo = True
+
+    Exit Function
+
+ErrHandler:
+    func_SetKeiyakuInfo = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_SetKeiyakuInfo", Err.Number, Err.Description)
+    On Error GoTo 0
+    Erase vData
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+'    MsgBox "Error:func_SetKeiyakuInfo" & vbCrLf & Err.Description
+
+End Function
+'------------<顧問バック更改対応 2013/04/15 GUT董 END> ------------

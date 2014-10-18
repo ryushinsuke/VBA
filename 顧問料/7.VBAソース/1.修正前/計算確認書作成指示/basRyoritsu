@@ -1,0 +1,187 @@
+Attribute VB_Name = "basRyoritsu"
+Option Explicit
+'*************************************************************************
+'
+'プロジェクト名：外部委託ライセンスフィー算出システム・計算確認書作成指示
+'
+'オブジェクト名：basRyoritsu
+'
+'機能概要　：KYK_RATEから段階を取得する。
+'
+'更新履歴　：2008/06/30 SRA 東       新規作成
+'
+'*************************************************************************
+Const MODULE_NAME = "basRyoritsu"
+
+
+'*************************************************************************
+'関数名　　：料率段階文字列編集(外部委託ライセンスフィー用)
+'
+'引　　数　：
+'           dblKingakuFrom  I       段階金額From
+'           dblKingakuTo    I       段階金額To
+'           lngErrorCnt     O       エラー数
+'           strGi_No        I       外部委託番号(デフォルト"1"RAFI)
+'           strTuka         I       通貨コード(デフォルト"JPY")
+'
+'戻り値　　：料率段階文字列　例)　over JPY 1 billion up to JPY 2 billion
+'
+'機能説明　：国内顧問料の同機能関数を移植
+'
+'更新履歴　：2008/06/30 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Function func_GI_RyorituDankaiEdit(ByVal dblKingakuFrom As Double _
+                                     , ByVal dblKingakuTo As Double _
+                                     , ByRef lngErrorCnt As Long _
+                                     , Optional strGi_No As String = "1" _
+                                     , Optional strTuka As String = "JPY") As String
+                                     
+On Error GoTo ErrHandler
+                                     
+    Const PROCEDURE_NAME    As String = "func_GI_RyorituDankaiEdit"
+    Dim dblKingakuFrom_w    As Double   '金額Fromワーク
+    Dim dblKingakuTo_w      As Double   '金額Toワーク
+    Dim strKingakuFrom_w    As String   '金額Fromワーク
+    Dim strKingakuTo_w      As String   '金額Toワーク
+    Dim strResutl           As String   '結果
+    Dim ErrNumber           As String
+    Dim ErrDescription      As String
+    
+    
+    If dblKingakuFrom = 0 And dblKingakuTo = 0 Then
+        func_GI_RyorituDankaiEdit = ""
+        Exit Function
+    End If
+
+    '/*表示書式編集（kingaku_from）*/
+    dblKingakuFrom_w = dblKingakuFrom / 100
+    strKingakuFrom_w = CStr(dblKingakuFrom_w)
+
+    '/*表示書式編集（kingaku_to）*/
+    dblKingakuTo_w = dblKingakuTo / 100
+    strKingakuTo_w = CStr(dblKingakuTo_w)
+
+    '/*内容の設定*/
+    Select Case strGi_No
+        Case GI_CODE_RAFI 'RAFI
+            If dblKingakuFrom = 0 And dblKingakuTo < 9999999 Then
+                strResutl = "for the first " & strTuka & " " & strKingakuTo_w & " billion"
+            ElseIf dblKingakuTo = 9999999 Then
+                strResutl = "over " & strTuka & " " & strKingakuFrom_w & " billion"
+            Else
+                strResutl = "over " & strTuka & " " & strKingakuFrom_w & " billion up to " & strTuka & " " & strKingakuTo_w & " billion"
+            End If
+        Case Else
+            If dblKingakuFrom = 0 And dblKingakuTo < 9999999 Then
+                strResutl = "for the first " & strTuka & " " & strKingakuTo_w & " billion"
+            ElseIf dblKingakuTo = 9999999 Then
+                strResutl = "over " & strTuka & " " & strKingakuFrom_w & " billion"
+            Else
+                strResutl = "over " & strTuka & " " & strKingakuFrom_w & " billion up to " & strTuka & " " & strKingakuTo_w & " billion"
+            End If
+    End Select
+
+    func_GI_RyorituDankaiEdit = strResutl
+
+Exit Function
+
+ErrHandler:
+
+'---- Error Log Start ----------------------------------------------------
+    ErrNumber = Err.Number
+    ErrDescription = ThisWorkbook.Name & "\" & MODULE_NAME & "\" & PROCEDURE_NAME & vbCrLf & Err.Description
+'---- Error Log End   ----------------------------------------------------
+    'エラー情報構造体セット
+    With gusrErr
+        .ModuleId = MODULE_NAME         'モジュール名
+        .Procedure = PROCEDURE_NAME     'プロシージャ名
+        .ErrNum = ErrNumber             'エラー番号
+        .ErrDescript = "料率段階文字列編集関数でシステムエラー発生"  'エラー概要
+        .GI_NAME = strGi_No             '外部委託先
+        .KohzaNo = ""                   '口座番号
+        'エラーメッセージ
+        .MsgNaiyou = PROCEDURE_NAME & "内でシステムエラー発生" & vbCrLf
+        'メッセージ詳細
+        .MsgSyousai = "Err.Number     ：" & ErrNumber & vbCrLf & _
+                      "Err.Description：" & ErrDescription & vbCrLf & _
+                      "dblKingakuFrom ：" & CStr(dblKingakuFrom) & vbCrLf & _
+                      "dblKingakuTo   ：" & CStr(dblKingakuTo) & vbCrLf & _
+                      "strTuka        ：" & strTuka & vbCrLf & _
+                      "strKingakuFrom_w：" & strKingakuFrom_w & vbCrLf & _
+                      "strKingakuTo_w ：" & strKingakuTo_w
+    End With
+    'エラーシート書き込み
+    Call fncWriteErrSheet(ERROR_SHEETNAME)
+    lngErrorCnt = lngErrorCnt + 1
+
+End Function
+
+
+
+''*************************************************************************
+''関数名　　：通貨単位文字列取得
+''
+''引　　数　：
+''           strTukaCd       I       KYK_RATEの通貨コード
+''
+''戻り値　　：通貨の単位文字
+''
+''機能説明　：通貨記号の取得
+''
+''更新履歴　：2008/06/30 SRA Y.Azuma    新規作成
+''
+''*************************************************************************
+'Private Function func_GetTukaName(ByVal strTukaCd As String) As String
+'On Error GoTo ErrHandler
+'
+'    Const PROCEDURE_NAME as string  = "func_GetTukaName"
+'    Dim strSql      As String
+'    Dim vdata()     As Variant
+'    Dim lngCol      As Long
+'    Dim lngRow      As Long
+'    Dim strResult   As String
+'
+'
+'    If strTukaCd = "000" Then
+'    '/*日本の場合*/
+'        strResult = "JPY"
+'    Else
+'    '/*日本以外*/
+'        strSql = ""
+'        strSql = strSql & " SELECT TRIM(FUZOKU_CD) FUZOKU_CD"
+'        strSql = strSql & "   FROM VW_DT301D"
+'        strSql = strSql & "  WHERE TRIM(CD_KBN) = '02' "
+'        strSql = strSql & "    AND TRIM(CD_1)   = TRIM('" & strTukaCd & "')"
+'        strSql = strSql & " "
+'
+'        'データ取得
+'        Call gclsDB.DoExequteSql(gcSELECT, strSql, vdata, lngCol, lngRow)
+'
+'        '取得データを設定
+'        If lngRow > 0 Then
+'            strResult = Trim(CStr(vdata(0, 0)))
+'        Else
+'            strResult = ""
+'        End If
+'
+'    End If
+'
+'    Erase vdata
+'
+'    func_GetTukaName = strResult
+'
+'Exit Function
+'
+'ErrHandler:
+'
+'    Erase vdata
+''---- Error Log Start ----------------------------------------------------
+'    Dim lng As Long
+'    lng = Err.Number
+'    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+'    On Error GoTo 0
+''    Err.Raise lng
+''---- Error Log End   ----------------------------------------------------
+'
+'End Function

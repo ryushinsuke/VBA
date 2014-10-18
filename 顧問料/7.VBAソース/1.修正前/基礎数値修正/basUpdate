@@ -1,0 +1,431 @@
+Attribute VB_Name = "basUpdate"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：契約管理システム・基礎数値修正
+'
+'オブジェクト名：basUpdate
+'
+'機能概要　：   基礎数値情報更新
+'
+'更新履歴　：2007/03/19 SRA T.Ichikawa  新規作成
+'
+'*************************************************************************
+Private Const MODULE_NAME As String = "basUpdate"
+
+'資産時価レコード
+Private Type TypeRecKsj
+    Kohza_no            As String   '口座番号
+    Shisan_bunrui       As String   '資産分類
+    Shisan_code         As String   '資産コード
+    Kijun_ymd           As Long     '基準年月
+    jika                As Currency '時価額
+    Tohroku_ymd         As Date     '登録年月日
+    Kohshin_ymd         As Date     '更新年月日
+    Kohshin_pgm_id      As String   '更新プログラムID
+    Kohshin_tantohsha   As String   '更新担当者
+    Sakujo_flg          As String   '削除フラグ
+    Kiso_suchi_mod      As String   '基礎数値修正額
+    Shuuseigaku_saiyou_flg  As String   '修正額採用フラグ
+    Keisan_hohhoh       As String   '顧問料計算方法
+End Type
+Private mrecKsj As TypeRecKsj
+
+
+'*************************************************************************
+'関数名　　：基礎数値情報チェック
+'
+'引　　数　：ARG1   O   ErrRow      long    エラー発生行番号
+'　　　　　：ARG2   O   ErrCol      long    エラー発生列番号
+'
+'戻り値　　：エラー番号
+'
+'機能説明　：基礎数値情報の基準日、基礎数値修正額の妥当性をチェックする
+'
+'更新履歴　：2007/03/19 SRA T.Ichikawa  新規作成
+'
+'*************************************************************************
+Public Function fncChkKisoSuchiInfo(ByRef ErrRow As Long, _
+                            ByRef ErrCol As Long) As Long
+
+    Const PROCEDURE_NAME As String = "fncChkKisoSuchiInfo"
+
+    On Error GoTo ErrHandler
+    
+    Dim lngRow  As Long
+    Dim lngCol  As Long
+    Dim TopRow  As Long
+    Dim lngCnt  As Long
+    Dim lngRet  As Long
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    fncChkKisoSuchiInfo = 0
+    
+    '変更チェック
+    '検索・表示ボタン押下後、口座番号、基準日、組入資産選択行が
+    '変更されたかをチェックする
+    lngRet = fncChkDataChange(ErrRow, ErrCol)
+    If lngRet <> 0 Then
+        fncChkKisoSuchiInfo = lngRet
+        Exit Function
+    End If
+    
+    With Sheets(SHEET_MAIN)
+        TopRow = fncKsCmnSearchDataTopRow(2)
+        lngRow = TopRow
+        
+        Do While .Cells(lngRow, COLN_DATA_FLAG) <> vbNullString
+            
+            '基礎数値修正額チェック
+            lngRet = fncChkKisoSuchiFormat(.Cells(lngRow, COLN_J_SHUSEIGAKU), MSG1_KISOSUCHI_INFO)
+            If lngRet <> 0 Then
+                ErrRow = lngRow
+                ErrCol = COLN_J_SHUSEIGAKU
+                fncChkKisoSuchiInfo = lngRet
+                Exit Function
+            End If
+            
+            lngRow = lngRow + 1
+        Loop
+    End With
+        
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+ErrHandler:
+    fncChkKisoSuchiInfo = Err.Number
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+
+
+
+'*************************************************************************
+'関数名　　：更新処理
+'
+'引　　数　：ARG1   I   Kouza_no    Strinng 口座番号
+'　　　　　：ARG2   I   Sisan_bun   Strinng 資産分類
+'　　　　　：ARG3   I   Sisan_cd    Strinng 資産コード
+'
+'戻り値　　：エラー番号
+'
+'機能説明　：時価情報を基に資産時価テーブルを更新する
+'
+'更新履歴　：2007/03/19 SRA T.Ichikawa  新規作成
+'更新履歴　：2008/01/22 SRA Y.Azuma    変更     (PH4)特殊文字バグ対応
+'
+'*************************************************************************
+Public Function fncExecUpdate( _
+                    ByVal Kouza_no As String, _
+                    ByVal Sisan_bun As String, _
+                    ByVal Sisan_cd As String, _
+                    ByVal Keisan_hoh As String) As Long
+
+    Const PROCEDURE_NAME As String = "fncExecUpdate"
+
+    On Error GoTo ErrHandler
+    
+    Dim strSql      As String
+    Dim recSel      As ADODB.Recordset
+    Dim lngRow      As Long
+    
+    Dim vntRec()    As Variant
+    Dim lngCol      As Long
+    Dim lngRecCnt   As Long
+    Dim strErrCd    As String
+    Dim blnRet      As Boolean
+    Dim lngUpdCnt   As Long     '更新件数カウント用(0件の場合エラーメッセージを出力する)
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    fncExecUpdate = 0
+    
+    lngUpdCnt = 0
+        
+    'トランザクション開始
+    fncKsCmnBeginTrans
+        
+    '基礎数値情報データの先頭行取得
+    lngRow = fncKsCmnSearchDataTopRow(2)
+        
+    With mrecKsj
+
+        Do While Sheets(SHEET_MAIN).Cells(lngRow, COLN_DATA_FLAG) <> vbNullString
+        
+            If Sheets(SHEET_MAIN).Cells(lngRow, COLN_J_CHK_DEFAULT) <> False Or Sheets(SHEET_MAIN).Cells(lngRow, COLN_J_CHK_FLG) <> False Then
+            
+                .Kohza_no = Kouza_no                        '口座番号
+                .Shisan_bunrui = Sisan_bun                  '資産分類
+                .Shisan_code = Mid(Sisan_cd, 2, 4)          '資産コード
+                .Kijun_ymd = Sheets(SHEET_MAIN).Cells(lngRow, COLN_J_KIJYUNBI)  '基準年月日
+                .Tohroku_ymd = Format(Now, "YYYY/MM/DD")    '登録年月日
+                .Kohshin_ymd = Format(Now, "YYYY/MM/DD")    '更新年月日
+                .Kohshin_pgm_id = PROGRAM_ID                '更新プログラムID
+                .Kohshin_tantohsha = USER_ID                '更新担当者
+                .Sakujo_flg = "0"                           '削除フラグ
+                .Kiso_suchi_mod = Trim(Sheets(SHEET_MAIN).Cells(lngRow, COLN_J_SHUSEIGAKU)) '基礎数値修正額
+                .Shuuseigaku_saiyou_flg = Trim(Sheets(SHEET_MAIN).Cells(lngRow, COLN_J_CHK_FLG)) '修正額採用フラグ
+                .Keisan_hohhoh = Keisan_hoh                 '顧問料計算方法
+            
+                                                        
+'            If Trim(Sheets(SHEET_MAIN).Cells(lngRow, COLN_J_SHUSEIGAKU)) = vbNullString Then
+''                .Sakujo_flg = "1"                       '削除フラグ
+'            Else
+''                .jika = Trim(Sheets(SHEET_MAIN).Cells(lngRow, COLN_J_JIKAGAKU)) '基礎数値修正額
+'                .Kiso_suchi_mod = Trim(Sheets(SHEET_MAIN).Cells(lngRow, COLN_J_SHUSEIGAKU)) '基礎数値修正額
+'                .Sakujo_flg = "0"                       '削除フラグ
+'            End If
+            
+                'ODBCエラーのコードをセット
+                '[Oracle][ODBC][Ora]ORA-00054: リソース・ビジー、NOWAITが指定されていました。
+                strErrCd = ODBC_ERRCD_RESOURCE_BUSY
+                
+                strSql = ""
+                strSql = strSql & " SELECT"
+                strSql = strSql & "     KSJ.*　"
+                strSql = strSql & " FROM"
+                strSql = strSql & "     KYK_SHISAN_JIKA KSJ "
+                strSql = strSql & " WHERE"
+'------------<Modify Start azuma 2008/01/22 (PH4)> ★★★☆-----------------------
+'                strSql = strSql & "     KSJ.KOHZA_NO        = '" & .Kohza_no & "'"
+                strSql = strSql & "     KSJ.KOHZA_NO        = '" & func_ChkQuoteshon(.Kohza_no, "'") & "'"
+'------------<Modify End   azuma 2008/01/22 (PH4)> ★★★☆-----------------------
+                strSql = strSql & " AND KSJ.SHISAN_BUNRUI   = '" & .Shisan_bunrui & "'"
+                
+'------------<Modify Start T.Ichikawa 2007/10/26 > -----------------------
+'                'N11の場合は資産コードを参照しない
+'                If .Keisan_hohhoh <> "4" Then
+                
+                'N11、N12の場合は資産コードを参照しない
+                If .Keisan_hohhoh <> "4" And .Keisan_hohhoh <> "5" Then
+'------------<Modify End   T.Ichikawa 2007/10/26 > -----------------------
+                
+                    strSql = strSql & " AND KSJ.SHISAN_CODE     = '" & .Shisan_code & "'"
+                End If
+                
+                strSql = strSql & " AND KSJ.KIJUN_YMD       = '" & .Kijun_ymd & "'"
+                strSql = strSql & " AND KSJ.SAKUJO_FLG      = '0'"
+                strSql = strSql & " FOR UPDATE NOWAIT"
+    
+                blnRet = fncKsCmnDoExequteSql(mainmenu.gcSELECT, strSql, vntRec, lngCol, lngRecCnt, strErrCd)
+                If blnRet = False Then
+                    If strErrCd = ODBC_ERRCD_RESOURCE_BUSY Then
+                        'リソース・ビジー
+                        '3023 他のユーザーにより更新されています。
+                        fncKsCmnMessageDisp MSGLVL_WARNNING, 3023, MSG1_KISOINF, "", True
+                        fncExecUpdate = 3023
+                    Else
+                        fncExecUpdate = strErrCd
+                    End If
+                
+                    'ロールバック
+                    GoTo RollBackExit
+                End If
+                
+'------------<Modify Start T.Ichikawa 2007/10/26 > -----------------------
+'                'N11の場合は更新対象が複数件存在してもOK
+'                If lngRecCnt > 1 And _
+'                    .Keisan_hohhoh <> "4" Then
+                
+                'N11、N12の場合は更新対象が複数件存在してもOK
+                If lngRecCnt > 1 And _
+                    (.Keisan_hohhoh <> "4" And .Keisan_hohhoh <> "5") Then
+'------------<Modify End   T.Ichikawa 2007/10/26 > -----------------------
+                
+                    '更新対象データが資産時価に複数件ある
+                    '3003 該当データが複数件存在します。
+                    fncKsCmnMessageDisp MSGLVL_WARNNING, 3003, MSG1_KISOINF, MSG2_MANY_ROWS_SJ, True
+                    fncExecUpdate = 3003
+                    'ロールバック
+                    GoTo RollBackExit
+                End If
+            
+                If lngRecCnt = 0 Then
+                    '3027 他ユーザにより削除されています。
+                    fncKsCmnMessageDisp MSGLVL_WARNNING, 3027, MSG1_KISOINF, "", True
+                    fncExecUpdate = 3027
+                    'ロールバック
+                    GoTo RollBackExit
+                
+                Else
+                
+                    strSql = ""
+                    strSql = strSql & " UPDATE KYK_SHISAN_JIKA KSJ"
+                    strSql = strSql & " SET"
+                    strSql = strSql & "     KSJ.KOHSHIN_YMD         = TO_CHAR(SYSDATE,'YYYY/MM/DD'),"
+                    strSql = strSql & "     KSJ.KOHSHIN_PGM_ID      = '" & .Kohshin_pgm_id & "',"
+                    strSql = strSql & "     KSJ.KOHSHIN_TANTOHSHA   = '" & .Kohshin_tantohsha & "',"
+                    
+                    If Trim(Sheets(SHEET_MAIN).Cells(lngRow, COLN_J_SHUSEIGAKU)) = vbNullString Then
+                        strSql = strSql & "     KSJ.KISO_SUCHI_MOD      = NULL,"
+                    Else
+                        strSql = strSql & "     KSJ.KISO_SUCHI_MOD      = " & .Kiso_suchi_mod & ","
+                    End If
+                    
+                    If .Shuuseigaku_saiyou_flg = "False" Then
+                        strSql = strSql & "     KSJ.SHUUSEIGAKU_SAIYOU_FLG = '0'"
+                    Else
+                        strSql = strSql & "     KSJ.SHUUSEIGAKU_SAIYOU_FLG = '1'"
+                    End If
+                    
+                    strSql = strSql & " WHERE"
+'------------<Modify Start azuma 2008/01/22 (PH4)> ★★★☆-----------------------
+'                    strSql = strSql & "     KSJ.KOHZA_NO            = '" & .Kohza_no & "'"
+                    strSql = strSql & "     KSJ.KOHZA_NO            = '" & func_ChkQuoteshon(.Kohza_no, "'") & "'"
+'------------<Modify End   azuma 2008/01/22 (PH4)> ★★★☆-----------------------
+                    strSql = strSql & " AND KSJ.SHISAN_BUNRUI       = '" & .Shisan_bunrui & "'"
+    
+'------------<Modify Start T.Ichikawa 2007/10/26 > -----------------------
+'                    'N11の場合は資産コードを参照しない
+'                    If .Keisan_hohhoh <> "4" Then
+                    
+                    'N11、N12の場合は資産コードを参照しない
+                    If .Keisan_hohhoh <> "4" And .Keisan_hohhoh <> "5" Then
+'------------<Modify End   T.Ichikawa 2007/10/26 > -----------------------
+
+                        strSql = strSql & " AND KSJ.SHISAN_CODE         = '" & .Shisan_code & "'"
+                    End If
+                    
+                    strSql = strSql & " AND KSJ.KIJUN_YMD           = '" & .Kijun_ymd & "'"
+                    blnRet = fncKsCmnDoExequteSql(mainmenu.gcUPDATE, strSql, vntRec, lngCol, lngRecCnt, strErrCd)
+                    If blnRet = False Then
+                        fncExecUpdate = strErrCd
+                        'ロールバック
+                        GoTo RollBackExit
+                    End If
+                    
+                    lngUpdCnt = lngUpdCnt + 1
+                End If
+                
+            End If
+            
+            lngRow = lngRow + 1
+        Loop
+    End With
+    
+    '更新件数が0の場合
+    If lngUpdCnt = 0 Then
+        '12003 更新対象のデータがありません。
+        fncKsCmnMessageDisp MSGLVL_WARNNING, 12003, MSG1_KISOINF, "", True
+        fncExecUpdate = 12003
+        'ロールバック
+        GoTo RollBackExit
+    End If
+    
+    'コミット
+    fncKsCmnCommitTrans
+        
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+    
+ErrHandler:
+    fncExecUpdate = Err.Number
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+RollBackExit:
+    'ロールバック
+    fncKsCmnRollbackTrans
+End Function
+
+
+
+'*************************************************************************
+'関数名　　：更新ボタン処理
+'
+'引　　数　：なし
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：更新ボタン処理
+'
+'更新履歴　：2007/03/19 SRA T.Ichikawa  新規作成
+'
+'*************************************************************************
+Function fncUpdate() As Long
+    
+    Const PROCEDURE_NAME As String = "fncUpdate"
+    
+On Error GoTo ErrorHandler
+
+    Dim lngRet      As Long
+    Dim lngRow      As Long
+    Dim lngCol      As Long
+    Dim strErrMsg   As String
+    Dim strTitle    As String
+    
+    Dim strKouzaNo  As String
+    Dim strSisanBun As String
+    Dim strSisanCd  As String
+    Dim strKeisanHohhoh As String
+
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+
+    fncUpdate = 0
+    
+    '入力チェック
+    lngRet = fncChkKisoSuchiInfo(lngRow, lngCol)
+    If lngRet <> 0 Then
+        Sheets(SHEET_MAIN).Cells(lngRow, lngCol).Select
+        fncUpdate = lngRet
+        Exit Function
+    End If
+    
+    '更新処理
+    With Sheets(SHEET_MAIN)
+        strKouzaNo = .Range(RNG_SV_KOUZA_NO).Value
+        lngRet = fncChkOptionButton(lngRow)
+        If lngRet <> 0 Then
+            fncUpdate = lngRet
+            Exit Function
+        End If
+        strSisanBun = .Cells(lngRow, COLN_SHISAN_BUNRUI_CODE)
+        strSisanCd = .Cells(lngRow, COLN_SHISAN_CODE)
+        strKeisanHohhoh = .Cells(lngRow, COLN_KEISAN_HOHHOH)
+        
+    End With
+    
+    If (strSisanBun = "0") Or _
+       (strSisanBun = "A") Or _
+       (strSisanBun = "B") Then
+       
+        '12000 更新確認
+'        If MsgBox(fncKsCmnMessageDisp(MSGLVL_QUESTION, 3020, "", , False), vbQuestion + vbYesNo, "確認") = vbNo Then
+        If MsgBox(fncKsCmnMessageDisp(MSGLVL_QUESTION, 12000, "", , False), vbQuestion + vbYesNo, "確認") = vbNo Then
+            Exit Function
+        End If
+    
+        '更新実行
+        lngRet = fncExecUpdate( _
+                    strKouzaNo, _
+                    strSisanBun, _
+                    strSisanCd, _
+                    strKeisanHohhoh)
+        If lngRet <> 0 Then
+            fncUpdate = lngRet
+            Exit Function
+        End If
+        
+        '3004 正常終了メッセージ
+        fncKsCmnMessageDisp MSGLVL_INFO, 3004, "", , True
+        
+        '基礎数値情報を再表示させる
+        Call fncDisp
+    Else
+        '3022 更新対象の資産ではありません。
+        fncKsCmnMessageDisp MSGLVL_WARNNING, 3022, "", MSG2_UP_SISAN, True
+        fncUpdate = 3022
+        Exit Function
+    End If
+    
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+
+ErrorHandler:
+    fncUpdate = Err.Number
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    
+End Function
+
+

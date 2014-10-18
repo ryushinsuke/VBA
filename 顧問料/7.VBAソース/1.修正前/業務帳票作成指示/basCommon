@@ -1,0 +1,1174 @@
+Attribute VB_Name = "basCommon"
+Option Explicit
+
+'*************************************************************************
+'プロジェクト名：新契約管理システム・業務帳票作成指示
+'オブジェクト名：basCommon
+'機能概要　：メイン画面
+'更新履歴　：2006/08/22 SRA 金          新規作成
+'            2006/11/28 SRA T.Sato      顧問料率一覧表出力追加
+'        　  2007/01/17 SRA 金          信託時価一覧表出力追加
+'        　  2007/10/24 SRA H.Anpo      PH4対応
+'        　  2007/10/29 SRA T.Ichikawa  PH4対応
+'        　  2010/12/15 SRA t.mizutani  外部委託ライセンスフィー基礎データの帳票化
+'
+'*************************************************************************
+
+Const MODULE_NAME = "basCommon"
+
+'!*===================================================*
+'!*     グローバル定数、変数の宣言(画面関連)
+'!*===================================================*
+
+' メニューファイル名
+Public Const gcMENU_FILE = "xlsMenu.xls"
+
+' プログラム名
+Public Const gcPRG_NAME = "業務帳票作成指示"
+
+Public Const gcMAIN_SHEETNAME = "main"
+
+'Range
+Public Const gc入金予定日from = "N10:P10"
+Public Const gc入金予定日to = "T10:V10"
+Public Const gc口座番号 = "N12:P12"
+Public Const gc請求日 = "T12:V12"
+Public Const gc基準日 = "N14:P14"
+Public Const gc口座番号2 = "N16:P16"
+Public Const gc適用開始日 = "T16:V16"
+'***** INSERT T.Sato 2006/11/28 *****
+Public Const gc料率適用期間from = "N18:P18"
+Public Const gc料率適用期間to = "T18:V18"
+'***** INSERT End *****
+'***** INSERT 金 2007/01/17 *****
+Public Const gc基準日2 = "N20:P20"
+'***** INSERT End *****
+
+'***** UPDATE 市川 2007/05/11 Start *****
+''***** UPDATE T.Sato 2006/11/28 *****
+''Public Const gc保存フォルダ = "G18:T18"
+''***** UPDATE 金 2007/01/17 *****
+''Public Const gc保存フォルダ = "G20:T20"
+''Public Const gc保存フォルダ = "G22:T22"
+''***** UPDATE End *****
+''***** UPDATE End *****
+ 
+'=== 2007/10/24 Modified by H.Anpo Start ===
+''------------<Modify Start azuma 2007/10/11 (PH3)> -----------------------
+''Public Const gc保存フォルダ = "G24:T24"
+'Public Const gc保存フォルダ = "G26:T26"
+''------------<Modify End   azuma 2007/10/11 (PH3)> -----------------------
+''***** UPDATE 市川 2007/05/11 End   *****
+ Public Const gc保存フォルダ = "G7:T7"
+'=== 2007/10/24 Modified by H.Anpo End ===
+
+ 
+'シート名称
+Public Const gcSHEETNAME1 = "入金一覧表"
+Public Const gcSHEETNAME2 = "自己設定投信委託者報酬額明細"
+Public Const gcSHEETNAME3 = "契約未更改一覧表"
+Public Const gcSHEETNAME4 = "投資顧問料率案内書"
+ 
+'帳票名称
+Public Const gc帳票名1 = "入金一覧表"
+Public Const gc帳票名2 = "自己設定投信委託者報酬額明細"
+Public Const gc帳票名3 = "契約未更改一覧表"
+Public Const gc帳票名4 = "投資顧問料率案内書"
+'***** INSERT T.Sato 2006/11/28 *****
+Public Const gc帳票名5 = "顧問料率一覧表"
+'***** INSERT End *****
+
+'***** INSERT 金 2007/01/17 *****
+Public Const gc帳票名6 = "信託時価一覧表"
+'***** INSERT End *****
+ 
+'***** INSERT 市川 2007/05/11 *****
+Public Const gc帳票名7 = "掛け目一覧表"
+'***** INSERT End *****
+ 
+'***** INSERT 東 2007/10/11 *****
+Public Const gc帳票名8 = "時価未登録一覧表"
+'***** INSERT End *****
+
+'------------<Added 資産一覧表追加対応 2008/02/18 SRA市川 Start > ----------------------------------------
+Public Const gc帳票名9 = "資産一覧表"
+'------------<Added 資産一覧表追加対応 2008/02/18 SRA市川 End   > ----------------------------------------
+ 
+'------------<Added 顧問料支払い口座一覧の対応 2008/04/22 SRA市川 Start > ----------------------------------------
+Public Const gc帳票名10 = "顧問料支払い口座一覧（予定）"
+Public Const gc帳票名11 = "信託報酬支払い口座一覧"
+'------------<Added 顧問料支払い口座一覧の対応 2008/04/22 SRA市川 End   > ----------------------------------------
+
+'------------<Added 顧問料支払い口座一覧の対応 2008/05/22 SRA市川 Start > ----------------------------------------
+Public Const gc帳票名12 = "顧問料支払い口座一覧（実績）"
+'------------<Added 顧問料支払い口座一覧の対応 2008/05/22 SRA市川 End   > ----------------------------------------
+
+'------------<Modify Start azuma 2008/10/10 > 単月未収顧問料チェック表-----------------------
+Public Const gc帳票名55 = "単月未収顧問料チェック表"
+'------------<Modify End   azuma 2008/10/10 > 単月未収顧問料チェック表-----------------------
+
+'------------<Add Start t.mizutani 2010/12/15 > -----------------------
+Public Const gc帳票名56 = "RAFI基礎データ"
+'------------<Add End   t.mizutani 2010/12/15 > -----------------------
+
+'=== 2007/10/24 Added by H.Anpo Start ===
+Public Const gc帳票名40 = "顧問料算定基準一覧"
+Public Const gc帳票名41 = "統計帳票_海外新基準"
+Public Const gc帳票名42 = "統計帳票_分析新基準"
+Public Const gc帳票名43 = "統計帳票_協会新基準"
+Public Const gc帳票名44 = "統計帳票_国内新基準"
+Public Const gc帳票名45 = "統計帳票_専務会報告"
+Public Const gc帳票名46 = "統計帳票_部店別契約残高一覧"
+Public Const gc帳票名47 = "統計帳票_海外口座一覧"
+'=== 2007/10/24 Added by H.Anpo End ===
+ 
+ 
+'***** UPDATE T.Sato 2006/12/06 *****
+'テンプレートを日本語に変更
+'Public Const gc帳票Base1 = "nyuukin_list.xls"
+'Public Const gc帳票Base2 = "itakusya_housyuugaku_meisai.xls"
+'Public Const gc帳票Base3 = "keiyaku_mikoukai_list.xls"
+'Public Const gc帳票Base4 = "gousei_komonryou_annai.xls"
+Public Const gc帳票Base1 = "入金一覧表テンプレート.xls"
+Public Const gc帳票Base2 = "自己設定投信委託者報酬額明細テンプレート.xls"
+Public Const gc帳票Base3 = "契約未更改一覧表テンプレート.xls"
+Public Const gc帳票Base4 = "投資顧問料率案内書テンプレート.xls"
+'***** UPDATE End *****
+'***** INSERT T.Sato 2006/11/28 *****
+Public Const gc帳票Base5 = "顧問料率一覧表テンプレート.xls"
+'***** INSERT End *****
+
+'***** INSERT 金 2007/01/17 *****
+Public Const gc帳票Base6 = "信託時価一覧表テンプレート.xls"
+'***** INSERT End *****
+
+'***** INSERT 市川 2007/05/11 *****
+Public Const gc帳票Base7 = "掛け目一覧表テンプレート.xls"
+'***** INSERT End *****
+
+'***** INSERT 東 2007/10/11 *****
+Public Const gc帳票Base8 = "時価未登録一覧表テンプレート.xls"
+'***** INSERT End *****
+
+'------------<Added 資産一覧表追加対応 2008/02/18 SRA市川 Start > ----------------------------------------
+Public Const gc帳票Base9 = "資産一覧表テンプレート.xls"
+'------------<Added 資産一覧表追加対応 2008/02/18 SRA市川 End   > ----------------------------------------
+
+'------------<Added 顧問料支払い口座一覧の対応 2008/04/22 SRA市川 Start > ----------------------------------------
+Public Const gc帳票Base10 = "顧問料支払い口座一覧（予定）テンプレート.xls"
+Public Const gc帳票Base11 = "信託報酬支払い口座一覧テンプレート.xls"
+'------------<Added 顧問料支払い口座一覧の対応 2008/04/22 SRA市川 End   > ----------------------------------------
+
+'------------<Added 顧問料支払い口座一覧の対応 2008/05/22 SRA市川 Start > ----------------------------------------
+Public Const gc帳票Base12 = "顧問料支払い口座一覧（実績）テンプレート.xls"
+'------------<Added 顧問料支払い口座一覧の対応 2008/05/22 SRA市川 End   > ----------------------------------------
+
+'------------<Modify Start azuma 2008/10/10 > 単月未収顧問料チェック表-----------------------
+Public Const gc帳票Base55 = "単月未収顧問料チェック表テンプレート.xls"
+'------------<Modify End   azuma 2008/10/10 > 単月未収顧問料チェック表-----------------------
+
+'------------<Add Start t.mizutani 2010/12/15 > -----------------------
+Public Const gc帳票Base56 = "RAFI基礎データテンプレート.xls"
+'------------<Add End   t.mizutani 2010/12/15 > -----------------------
+
+'=== 2007/10/24 Added by H.Anpo Start ===
+Public Const gc帳票Base40 = "顧問料算定基準一覧テンプレート.xls"
+Public Const gc帳票Base41 = "統計帳票_海外新基準テンプレート.xls"
+Public Const gc帳票Base42 = "統計帳票_分析新基準テンプレート.xls"
+Public Const gc帳票Base43 = "統計帳票_協会新基準テンプレート.xls"
+Public Const gc帳票Base44 = "統計帳票_国内新基準テンプレート.xls"
+Public Const gc帳票Base45 = "統計帳票_専務会報告テンプレート.xls"
+Public Const gc帳票Base46 = "統計帳票_部店別契約残高一覧テンプレート.xls"
+Public Const gc帳票Base47 = "統計帳票_海外口座一覧テンプレート.xls"
+'=== 2007/10/24 Added by H.Anpo End ===
+
+' 重要！！！！！！！ ====================================================
+' 印刷するときの拡大(%)
+' 必ずZoomをチェックして拡大(%)設定すること。
+' 重要！！！！！！！ ====================================================
+
+''---- エラーメッセージ -------------------------------------------------
+' KYK_SEC_MSGに入力する。================================================
+' INSERT INTO KYK_SEC_MSG
+' VALUES ('1', 4   , 4  , '帳票を作成しました。')
+' VALUES ('1', 5   , 5  , '帳票を印刷しました。')
+' VALUES ('1', 6   , 6  , '帳票を作成・印刷しました。')
+' VALUES ('1', 9000, 4  , '')
+' VALUES ('1', 9001, 5  , '')
+' VALUES ('1', 9002, 6  , '')
+' VALUES ('3', 30  , 30 , '両方とも未チェックです。どちらか一方又は両方にチェックが必要です。')
+' VALUES ('3', 31  , 31 , '入力されたフォルダは存在しません。')
+' VALUES ('3', 32  , 32 , '該当ファイルが存在しません。')
+' VALUES ('3', 9000, 10 , '')
+' VALUES ('3', 9001, 30 , '')
+' VALUES ('3', 9002, 1  , '(保存フォルダ以外　必須)')
+' VALUES ('3', 9003, 31 , '')
+' VALUES ('3', 9004, 1  , '(保存フォルダ　必須)')
+' VALUES ('3', 9005, 7  , '')
+' VALUES ('3', 9006, 5  , '')
+' VALUES ('3', 9007, 12 , '')
+' VALUES ('3', 9008, 14 , '')
+' VALUES ('3', 9009, 32 , '')
+' KYK_SEC_MSGに入力する。================================================
+
+' 1:情報
+Public Const gcMsgKbn_1 = "1"       ' 情報
+Public Const gcMsgId1001 = 9000     ' 帳票を作成しました。
+Public Const gcMsgId1002 = 9001     ' 帳票を印刷しました。
+Public Const gcMsgId1003 = 9002     ' 帳票を作成・印刷しました。
+
+' 2:質問
+Public Const gcMsgKbn_2 = "2"       ' 質問
+
+' 3:警告 (ユーザーエラー)
+Public Const gcMsgKbn_3 = "3"       ' 警告 (ユーザーエラー)
+Public Const gcMsgId3001 = 9000     ' 該当データが存在しません。
+Public Const gcMsgId3002 = 9001     ' 両方とも未チェックです。どちらか一方又は両方にチェックが必要です。
+Public Const gcMsgId3003 = 9002     ' 未入力です。
+Public Const gcMsgId3004 = 9003     ' 入力されたフォルダは存在しません。
+Public Const gcMsgId3005 = 9004     ' 未入力です。
+Public Const gcMsgId3006 = 9005     ' 日付として認識できません。YYYYMMDD形式で入力して下さい。
+Public Const gcMsgId3007 = 9006     ' 期間の指定に誤りがあります。
+Public Const gcMsgId3008 = 9007     ' 入力桁数が不正です。
+Public Const gcMsgId3009 = 9008     ' 口座番号が存在しません。
+Public Const gcMsgId3010 = 9009     ' 該当ファイルが存在しません。
+
+' 4:エラー (システムエラー)
+Public Const gcMsgKbn_4 = "4"       ' エラー (システムエラー)
+
+
+'*===================================================*
+'*     fncGetFolder関連
+'*===================================================*
+
+Type BROWSEINFO
+    hWndOwner As Long
+    pidlRoot As Long
+    pszDisplayName As String
+    lpszTitle As String
+    ulFlags As Long
+    lpfn As Long
+    lParam As String
+    iImage As Long
+End Type
+
+Declare Function SHBrowseForFolder Lib "shell32" (lpbi As BROWSEINFO) As Long
+Declare Function SHGetPathFromIDList Lib "shell32" (ByVal pidl As Long, ByVal pszPath As String) As Long
+
+Public Const gcCSIDL_DESKTOP = &H0                'デスクトップ
+Public Const gcBIF_BROWSEINCLUDEFILES = &H4000
+Public Const gcBIF_RETURNONLYFSDIRS = &H1         'フォルダのみ選択可能
+
+
+'*===================================================*
+'*   関数スタート
+'*===================================================*
+
+'*************************************************************************
+'関数名　　：日付入力チェック処理
+'引　　数　：
+'           strTxt           I           項目名
+'           strDate          I           YYYYMMDD
+'戻り値　　：処理結果
+'機能説明　：
+'更新履歴　：2006/08/22 SRA             新規作成
+'
+'*************************************************************************
+Public Function fncCheckDate(ByVal strTxt As String, ByVal strDate As String) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncCheckDate"
+
+On Error GoTo ErrSection
+
+    fncCheckDate = False
+            
+    '　必須チェック
+    If strDate = "" Then
+        Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3005, strTxt, "")
+        Exit Function
+    ElseIf Len(strDate) <> 8 Then
+        '8桁以外
+        Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3006, strTxt, "")
+        Exit Function
+    End If
+    
+    '　妥当チェック
+    If gfunc_CheckDate(strDate) = False Then
+        Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3006, strTxt, "")
+        Exit Function
+    End If
+    
+    fncCheckDate = True
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncCheckDate = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+End Function
+
+
+'*************************************************************************
+'関数名　　：口座番号入力チェック処理
+'引　　数　：
+'           strTxt           I           項目名
+'           strKouza         I           口座番号
+'戻り値　　：処理結果
+'機能説明　：
+'更新履歴　：2006/08/22 SRA             新規作成
+'更新履歴　：2008/01/17 SRA Y.Azuma     変更     (PH4)特殊文字バグ対応
+'
+'*************************************************************************
+Public Function fncCheckKouzaNo(ByVal strTxt As String, ByVal strKouza As String) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncCheckKouzaNo"
+
+On Error GoTo ErrSection
+
+    fncCheckKouzaNo = False
+            
+    '口座番号(必須)
+    If strKouza = "" Then
+        Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3005, strTxt, "")
+        Exit Function
+    ElseIf Len(strKouza) <> 7 Then
+        '7桁以外
+        Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3008, strTxt, "７桁で入力して下さい。")
+        Exit Function
+    End If
+    
+    '存在チェック
+'------------<Modify Start azuma 2008/01/17 (PH4)> ★★★☆-----------------------
+'    If gCom01_KozaNoExist(strKouza) = False Then
+    If gCom01_KozaNoExist(func_ChkQuoteshon(strKouza, "'")) = False Then
+'------------<Modify End   azuma 2008/01/17 (PH4)> ★★★☆-----------------------
+        Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3009, strTxt, "")
+        Exit Function
+    End If
+    
+    fncCheckKouzaNo = True
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncCheckKouzaNo = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+End Function
+
+
+'*************************************************************************
+'関数名　　：フォルダ選択関数
+'引　　数　：strComent    I     タイトル名
+'　　　　　：strPath      O     フォルダ名
+'戻り値　　：処理結果
+'機能説明　：フォルダ名を取得する。
+'更新履歴　：2006/08/22 SRA             新規作成
+'
+'*************************************************************************
+Public Function fncGetFolder(ByVal strComent As String, ByRef strPath As String) As Boolean
+
+On Error GoTo ErrSection
+  
+    Dim bif As BROWSEINFO
+    Dim pidl As Long
+    Static blnOpenFlg   As Boolean      'ダイアログオープンフラグ '<------------ Modify azuma 2006/10/17
+    
+    With bif
+        .pidlRoot = gcCSIDL_DESKTOP
+        .ulFlags = gcBIF_RETURNONLYFSDIRS
+        .lpszTitle = strComent
+    End With
+    
+'------------<Modify Start azuma 2006/10/17 単No.193> -----------------------
+    If blnOpenFlg = False Then
+        blnOpenFlg = True
+'------------<Modify End   azuma 2006/10/17 単No.193> -----------------------
+    
+        pidl = SHBrowseForFolder(bif)
+        If pidl <> 0 Then
+            strPath = String$(256, vbNullChar)
+            SHGetPathFromIDList pidl, strPath
+    '       strPath = UCase(Left(strPath, InStr(strPath, vbNullChar) - 1))
+            strPath = Left(strPath, InStr(strPath, vbNullChar) - 1)
+            fncGetFolder = True
+        Else
+            fncGetFolder = False
+        End If
+'------------<Modify Start azuma 2006/10/17 単No.193> -----------------------
+        blnOpenFlg = False
+    End If
+'------------<Modify End   azuma 2006/10/17 単No.193> -----------------------
+     
+    Exit Function
+  
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+  fncGetFolder = False
+  
+End Function
+
+
+'*************************************************************************
+'関数名　　：サーバーのシステム日付を取得する
+'引　　数　：
+'           strKijunYmd I       基準日(YYYYMMDD)
+'           strTime     O       消費税(％単位)
+'戻り値　　：処理結果
+'機能説明　：サーバーのシステム日付を取得する。
+'更新履歴　：2006/08/22 SRA             新規作成
+'更新履歴　：2007/04/27 SRA Y.Azuma     変更     (PH2)消費税取得方法変更
+'        　：2007/10/29 SRA T.Ichikawa  変更     (PH4)SQLを修正(新テーブルを参照する)
+'        　：2007/11/01 SRA Y.Azuma     変更     (PH4)
+'
+'*************************************************************************
+Public Function fncGetZeiRate(ByVal strKijunYmd As String, ByRef strRate As String) As Boolean
+
+    Const PROCEDURE_NAME As String = "fncGetZeiRate"
+
+On Error GoTo ErrSection
+    
+    Dim strSql      As String
+    Dim vData()     As Variant
+    Dim lngCol      As Long
+    Dim lngRow      As Long
+    Dim lngCnt      As Long
+    
+    fncGetZeiRate = False
+    
+'------------<Modify Start Ichikawa 2007/10/29 (PH4)> -----------------------
+''------------<Modify Start azuma 2007/04/27 > -----------------------
+'    strSql = ""
+'    strSql = strSql & " SELECT"
+'    strSql = strSql & "     A.KIJYUN_YMD"
+'    strSql = strSql & "    ,A.SHOUHI_ZEI"
+'    strSql = strSql & " FROM"
+'    strSql = strSql & "     SHOUHI_ZEI A"
+'    strSql = strSql & " WHERE"
+'    strSql = strSql & "     A.KIJYUN_YMD = (SELECT"
+'    strSql = strSql & "                         MAX(KIJYUN_YMD)"
+'    strSql = strSql & "                     FROM"
+'    strSql = strSql & "                         SHOUHI_ZEI"
+'    strSql = strSql & "                     WHERE"
+'    strSql = strSql & "                         KIJYUN_YMD <= TO_NUMBER('" & strKijunYmd & "')"
+'    strSql = strSql & "                     )"
+''    strSql = ""
+''    strSql = strSql & " select "
+''    strSql = strSql & "  kijyun_ymd , "
+''    strSql = strSql & "  shouhi_zei  "
+''    strSql = strSql & " from shouhi_zei "
+''    strSql = strSql & " where kijyun_ymd = (select max(kijyun_ymd) from shouhi_zei) "
+''    strSql = strSql & " "
+''------------<Modify End   azuma 2007/04/27 > -----------------------
+
+    strSql = ""
+    strSql = strSql & "SELECT" & vbCrLf
+    strSql = strSql & "    A.TEKIYOH_KIKAN_FROM," & vbCrLf
+    strSql = strSql & "    A.ZEI" & vbCrLf
+    strSql = strSql & "FROM" & vbCrLf
+    strSql = strSql & "    KYK_SHOHIZEI A "
+    strSql = strSql & "WHERE" & vbCrLf
+'------------<Modify Start azuma 2007/11/01 (PH4)> -----------------------
+    strSql = strSql & "    A.TEKIYOH_KIKAN_FROM <= TO_NUMBER('" & strKijunYmd & "')" & vbCrLf
+    strSql = strSql & "AND A.TEKIYOH_KIKAN_TO   >= TO_NUMBER('" & strKijunYmd & "')" & vbCrLf
+'    strSql = strSql & "    A.TEKIYOH_KIKAN_FROM = (" & vbCrLf
+'    strSql = strSql & "        SELECT" & vbCrLf
+'    strSql = strSql & "            MAX(TEKIYOH_KIKAN_FROM)" & vbCrLf
+'    strSql = strSql & "        FROM" & vbCrLf
+'    strSql = strSql & "            KYK_SHOHIZEI" & vbCrLf
+'    strSql = strSql & "        WHERE" & vbCrLf
+'    strSql = strSql & "            TEKIYOH_KIKAN_FROM <= TO_NUMBER('" & strKijunYmd & "')" & vbCrLf
+'    strSql = strSql & "    )" & vbCrLf
+'------------<Modify End   azuma 2007/11/01 (PH4)> -----------------------
+'------------<Modify End   Ichikawa 2007/10/29 (PH4)> -----------------------
+  
+    'データ取得
+    Call gclsDB.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow)
+    
+    '取得データをセルに設定
+    If lngRow > 0 Then
+'       strDate = vData(0, 0)        ' 消費税適用日FROM
+        strRate = vData(1, 0)        ' 消費税(％単位)
+        fncGetZeiRate = True
+    Else
+        ' 該当データが存在しません。
+        Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3001, "消費税", "")
+    End If
+    
+    Erase vData
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncGetZeiRate = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+    Erase vData
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：シート上のツールバーなどを非表示にする。
+'引　　数　：なし
+'戻り値　　：
+'機能説明　：非表示設定
+'更新履歴　：2006/08/22 SRA             新規作成
+'
+'*************************************************************************
+Public Sub subHideToolbar()
+
+    'カーソル右移動
+'    Application.MoveAfterReturnDirection = xlToRight
+
+'   ActiveWindow.DisplayFormulas = True                    ' 数式
+''  ActiveWindow.DisplayGridlines = False                  ' 枠線
+''  ActiveWindow.DisplayHeadings = False                   ' 行列番号
+    ActiveWindow.DisplayHorizontalScrollBar = False        ' 水平スクロールバー
+'   ActiveWindow.DisplayOutline = False                    ' アウトライン記号
+'   ActiveWindow.DisplayRightToLeft = False                ' 改ページ
+    ActiveWindow.DisplayVerticalScrollBar = False          ' 垂直スクロールバー
+    ActiveWindow.DisplayWorkbookTabs = False               ' シート見出し
+'   ActiveWindow.DisplayZeros = False                      ' ゼロ値
+    
+End Sub
+
+
+'*************************************************************************
+'関数名　　：シート上のツールバーなどを表示にする。
+'引　　数　：なし
+'戻り値　　：
+'機能説明　：表示設定
+'更新履歴　：2006/08/22 SRA             新規作成
+
+'*************************************************************************
+Public Sub subShowToolbar()
+
+'   Application.MoveAfterReturnDirection = xlDown
+
+'   ActiveWindow.DisplayFormulas = True                   ' 数式
+''  ActiveWindow.DisplayGridlines = True                  ' 枠線
+''  ActiveWindow.DisplayHeadings = True                   ' 行列番号
+    ActiveWindow.DisplayHorizontalScrollBar = True        ' 水平スクロールバー
+'   ActiveWindow.DisplayOutline = True                    ' アウトライン記号
+'   ActiveWindow.DisplayRightToLeft = True                ' 改ページ
+    ActiveWindow.DisplayVerticalScrollBar = True          ' 垂直スクロールバー
+    ActiveWindow.DisplayWorkbookTabs = True               ' シート見出し
+'   ActiveWindow.DisplayZeros = True                      ' ゼロ値
+    
+End Sub
+
+'*************************************************************************
+'関数名　　：エクセルファイルコピー
+'引　　数　：
+'           strSourceFName          I　　ソースファイル名
+'           strDestinationFName     I　　ターゲットファイル名
+'戻り値　　：処理結果
+'機能説明　：エクセルファイルをコピーする。
+'更新履歴　：2006/08/22 SRA             新規作成
+'
+'*************************************************************************
+Public Function fncCopyBook(ByVal strSourceFName As String, _
+                       ByVal strDestinationFName As String) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncCopyBook"
+
+On Error GoTo ErrSection
+    
+    Dim strInFName          As String
+    Dim strOutFName         As String
+    Dim objFS               As Object
+
+    fncCopyBook = False
+
+    Set objFS = CreateObject("Scripting.FileSystemObject")
+
+    strInFName = Application.ActiveWorkbook.Path & "\template\" & strSourceFName
+  
+    objFS.CopyFile strInFName, strDestinationFName
+    
+    fncCopyBook = True
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncCopyBook = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+   
+End Function
+
+
+'*************************************************************************
+'関数名　　：エクセルファイル削除
+'引　　数　：
+'           strFName                I　　削除ファイル名
+'戻り値　　：処理結果
+'機能説明　：エクセルファイルを削除する。
+'更新履歴　：2006/08/22 SRA             新規作成
+'
+'*************************************************************************
+Public Function fncDeleteFile(ByVal strFName As String) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncDeleteFile"
+
+On Error GoTo ErrSection
+    
+    Dim objFS               As Object
+
+    fncDeleteFile = False
+
+    Set objFS = CreateObject("Scripting.FileSystemObject")
+  
+    objFS.DeleteFile strFName, True
+    
+    fncDeleteFile = True
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncDeleteFile = False
+
+'---- Error Log Start ----------------------------------------------------
+'    Dim lng As Long
+'    lng = Err.Number
+'    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+'    On Error GoTo 0
+''   Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+   
+End Function
+
+'*************************************************************************
+'関数名　　：エクセルシートコピー
+'引　　数　：
+'           lngRow                 I　　コピーするシート数
+'           strSrcFName            I　　ソースファイル名
+'戻り値　　：処理結果
+'機能説明　：エクセルファイルをコピーする。
+'更新履歴　：2006/08/22 SRA             新規作成
+'
+'*************************************************************************
+Public Function fncCopySheet(ByVal lngRow As Long, _
+                             ByVal strSrcFName As String) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncCopySheet"
+
+On Error GoTo ErrSection
+    
+    Dim lngRowCnt          As Long
+    Dim objFS              As Object
+
+    fncCopySheet = False
+
+    ' ファイルOpen
+    Workbooks.Open Filename:=strSrcFName
+   
+    ' シートコピー
+    For lngRowCnt = 0 To lngRow - 1
+       Workbooks(Workbooks.Count).Worksheets(1).Copy after:= _
+                 Workbooks(Workbooks.Count).Worksheets(lngRowCnt + 1)
+    Next lngRowCnt
+
+    ' ファイルClose
+    Workbooks(Workbooks.Count).Close SaveChanges:=True
+    
+    fncCopySheet = True
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    ' ファイルClose
+    Workbooks(Workbooks.Count).Close SaveChanges:=True
+    fncCopySheet = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+   
+End Function
+
+
+
+'*************************************************************************
+'関数名　　：配列の階層変更
+'
+'引　　数　：ARG1   I   vntSrcAry   Variant 修正元配列
+'　　　　　：ARG2   O   vntDstAry   Variant 修正後配列
+'
+'戻り値　　：エラー番号
+'
+'機能説明　：Array(X,Y) -> Array(Y,X)に変更する
+'
+'更新履歴　：2006/07/05 SRA H.Anpo      新規作成
+'
+'*************************************************************************
+Public Function fncKsCmnArrayIdxChange( _
+            ByVal vntSrcAry As Variant, _
+            ByRef vntDstAry As Variant)
+
+    Const PROCEDURE_NAME As String = "fncKsCmnArrayIdxChange"
+    
+On Error GoTo ErrorHandler
+
+    Dim lngCnt1      As Long
+    Dim lngCnt2      As Long
+
+    fncKsCmnArrayIdxChange = 0
+
+    ReDim vntDstAry(UBound(vntSrcAry, 2), UBound(vntSrcAry, 1))
+    For lngCnt1 = 0 To UBound(vntSrcAry, 1)
+        For lngCnt2 = 0 To UBound(vntSrcAry, 2)
+            vntDstAry(lngCnt2, lngCnt1) = vntSrcAry(lngCnt1, lngCnt2)
+        Next
+    Next
+    
+    Exit Function
+
+ErrorHandler:
+    fncKsCmnArrayIdxChange = Err.Number
+'    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+
+End Function
+
+'*************************************************************************
+'関数名　　：ORACLE セッションID取得
+'引　　数　：
+'           lngSessionID        O           セッションID
+'戻り値　　：処理結果
+'機能説明　：ORACLE セッションID取得を取得する
+'更新履歴　：2007/10/26 SRA H.Anpo   新規
+'
+'*************************************************************************
+Public Function fncGetSessionID(ByRef lngSessionID As Long) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncGetSessionID"
+
+On Error GoTo ErrSection
+
+    Dim strSql      As String
+    Dim vData()     As Variant
+    Dim lngCol      As Long
+    Dim lngRow      As Long
+    Dim lngRowCnt   As Long
+    Dim lngColCnt   As Long
+    
+    fncGetSessionID = False
+    
+
+'*******************************************************
+'* SQL文作成                                           *
+'*******************************************************
+    strSql = ""
+    strSql = strSql & " SELECT USERENV('SESSIONID') FROM DUAL"
+    Call gclsDB.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow)
+    If lngRow > 0 Then
+        lngSessionID = vData(0, 0)
+    Else
+        Exit Function
+    End If
+
+    Erase vData
+    
+    fncGetSessionID = True
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncGetSessionID = False
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- エラーログ出力 End  ---------------------------------
+
+    Erase vData
+   
+End Function
+
+'*************************************************************************
+'関数名　　：ワークテーブル作成
+'引　　数　：
+'           lngSessionID        I           セッションID
+'           strWhereString      I           WHERE文の文字列
+'                                           例) "WHERE  KIJYUN_YMD IN ('20070331','20070228')"
+'戻り値　　：処理結果
+'機能説明　：ワークテーブルにV経営帳票のデータをINSERTする
+'更新履歴　：2007/10/26 SRA H.Anpo   新規
+'
+'*************************************************************************
+Public Function fncInsertTempTable( _
+    ByVal lngSessionID As Long, _
+    ByVal strWhereString As String _
+    ) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncInsertTempTable"
+
+On Error GoTo ErrSection
+
+    Dim strSql      As String
+    
+    fncInsertTempTable = False
+    
+    cnAdo.BeginTrans
+    
+    strSql = ""
+    strSql = strSql & " INSERT INTO KYK_WK_KEIEI_CHOUHYOU  "
+    strSql = strSql & " SELECT " & lngSessionID & ", KVKC.* FROM KYK_VW_KEIEI_CHOUHYOU KVKC "
+    strSql = strSql & strWhereString
+    cnAdo.Execute strSql
+    
+    cnAdo.CommitTrans
+    
+    fncInsertTempTable = True
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncInsertTempTable = False
+
+    cnAdo.RollbackTrans
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- エラーログ出力 End  ---------------------------------
+
+End Function
+
+'*************************************************************************
+'関数名　　：ワークテーブル削除
+'引　　数　：
+'           lngSessionID        I           セッションID
+'                                           例) "WHERE  KIJYUN_YMD IN ('20070331','20070228')"
+'戻り値　　：処理結果
+'機能説明　：指定されたセッションIDのデータをワークテーブルから削除する。
+'更新履歴　：2007/10/26 SRA H.Anpo   新規
+'
+'*************************************************************************
+Public Function fncDeleteTempTable( _
+    ByVal lngSessionID As Long _
+    ) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncDeleteTempTable"
+
+On Error GoTo ErrSection
+
+    Dim strSql      As String
+    
+    fncDeleteTempTable = False
+    
+    cnAdo.BeginTrans
+    
+    strSql = ""
+    strSql = strSql & " DELETE FROM KYK_WK_KEIEI_CHOUHYOU  "
+    strSql = strSql & " WHERE SESSION_ID = " & lngSessionID
+    cnAdo.Execute strSql
+    
+    cnAdo.CommitTrans
+    
+    fncDeleteTempTable = True
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncDeleteTempTable = False
+
+    cnAdo.RollbackTrans
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- エラーログ出力 End  ---------------------------------
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：計算式を値に変換
+'引　　数　：
+'           objWorkbook             I　　ワークブックオブジェクト
+'戻り値　　：処理結果
+'機能説明　：指定されたブック内の全シートの計算式のセルを値に変換する
+'更新履歴　：2007/11/20 SRA H.Anpo   新規
+'
+'*************************************************************************
+Public Function fncForMulaToValueInAllSheets(ByVal objWorkbook As Excel.Workbook) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncForMulaToValueInAllSheets"
+
+    Const cRANGE_NAME As String = "Print_Area"
+
+On Error GoTo ErrSection
+    
+    Dim lngCnt  As Long
+
+    fncForMulaToValueInAllSheets = False
+
+    With objWorkbook
+        For lngCnt = 1 To .Sheets.Count
+            With .Sheets(lngCnt)
+                'Print_Areaの範囲をコピー＆値を貼付け
+                .Range(cRANGE_NAME).Copy
+                .Range(cRANGE_NAME).PasteSpecial Paste:=xlPasteValues, Operation:=xlNone, SkipBlanks:=False, Transpose:=False
+                '先頭の表示列を選択
+                .Select
+                .Range(.Cells(.Range(cRANGE_NAME).Row, .Range(cRANGE_NAME).Column), .Cells(.Range(cRANGE_NAME).Row, .Range(cRANGE_NAME).Column)).Select
+            End With
+        Next lngCnt
+    End With
+
+    fncForMulaToValueInAllSheets = True
+    
+    Exit Function
+
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncForMulaToValueInAllSheets = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+   
+End Function
+
+
+'*************************************************************************
+'関数名　　：
+'
+'引　　数　：
+'           lngProcess     I         処理フラグ 0=抽出処理 1=追加処理 2=更新処理 3=削除処理
+'           strSql         I         SQL文
+'           vntRs()        O         取得したデータ(２次元)
+'           lngCols        O         列数
+'           lngRows        O         行数
+'           strErrCode     I/O       エラーコード(入力時は、除外するエラーコードが入ってくる。)
+'戻り値　　：
+'
+'機能説明　：引数で取得したSQL文を実行し、結果を返す。
+'
+'更新履歴　：2008/03/03 SRA H.Anpo    新規作成
+'
+'*************************************************************************
+Public Function DoExequteSqlReadOnly(lngProcess As Long, _
+                             strSql As String, _
+                             vntRs() As Variant, _
+                             lngCols As Long, _
+                             lngRows As Long, _
+                             Optional strErrCode As String = "") As Boolean
+
+'関数説明
+' 1.SQL文の実行処理を行う。
+' 2.処理フラグが、0の場合、抽出したデータ件数をlngRows引数に返す。
+' 3.処理フラグが、0の場合、抽出したデータをstrSql引数に返す。
+' 4.処理フラグが、1,2,3の場合、更新したデータ件数をlngRows引数に返す。
+' 5.処理フラグが、1,2,3の場合、strSqlに""を返す。
+' 6.処理が成功した場合はTrueを返し、終了する。
+' 7.エラーが発生した場合はFalseを返し、終了する。
+
+
+On Error GoTo ErrSection
+
+'***************************************************************
+'*　変数宣言
+'***************************************************************
+    Dim RS As New ADODB.Recordset       'レコードセット
+    Dim lngCnt  As Long                 'カウンタ
+    Dim lngCnt2 As Long                 'カウンタ２
+
+'*******************************************************
+'* 変数初期化                                          *
+'*******************************************************
+    DoExequteSqlReadOnly = False      '関数初期化
+
+    Erase vntRs                     '配列初期化
+    lngCnt = 0                      'インデックス１初期化
+    lngCnt2 = 0                     'インデックス２初期化
+
+
+'*******************************************************
+'* 関数開始　                                          *
+'*******************************************************
+
+    '処理フラグチェック
+    Select Case lngProcess
+        Case gcSELECT, gcINSERT, gcUPDATE, gcDELETE
+        Case Else
+            GoTo ErrSection
+    End Select
+    
+    'SQL文チェック
+    If Trim$(strSql) = "" Then
+        GoTo ErrSection
+    End If
+
+    
+    'レコードセット
+    Select Case lngProcess
+    
+        'SELECTの場合
+        Case gcSELECT
+            RS.Open strSql, cnAdo, adOpenForwardOnly, adLockReadOnly, adCmdText
+            Do While RS.EOF = False
+            
+                ReDim Preserve vntRs(RS.Fields.Count - 1, lngCnt2)
+                
+                For lngCnt = 0 To RS.Fields.Count - 1
+                    'NULL値でない場合
+                    If IsNull(RS.Fields(lngCnt)) = False Then
+                        vntRs(lngCnt, lngCnt2) = RS.Fields(lngCnt)
+                    'NULL値の場合
+                    Else
+                        vntRs(lngCnt, lngCnt2) = gfunc_ChangeNull(RS.Fields(lngCnt), "")
+                    End If
+                Next
+                
+                lngCnt2 = lngCnt2 + 1
+                DoEvents
+                RS.MoveNext
+            Loop
+            lngCols = RS.Fields.Count
+            lngRows = lngCnt2
+            RS.Close
+
+        'INSERT,UPDATE,DELETEの場合
+        Case gcINSERT, gcUPDATE, gcDELETE
+            Set RS = cnAdo.Execute(strSql, lngRows, &H1)
+            lngCols = 0
+    
+    End Select
+
+
+    'レコードセットオブジェクト開放
+    Set RS = Nothing
+
+    '処理成功
+    DoExequteSqlReadOnly = True
+
+Exit Function
+
+'*******************************************************
+'* エラーセクション                                　  *
+'*******************************************************
+ErrSection:
+
+    '処理失敗
+    DoExequteSqlReadOnly = False
+    lngCols = 0
+    lngRows = 0
+
+    '除外エラーコードと一致した場合はログ出力を行わない。
+    If Mid$(Err.Description, 1, Len(gc00_OraErr)) = gc00_OraErr Then
+        If strErrCode = Mid$(Err.Description, Len(gc00_OraErr) + 1, 9) Then Exit Function
+    Else
+        If strErrCode = Mid$(Err.Description, 1, 9) Then Exit Function
+    End If
+
+    'エラーコードを戻り値にいれる。
+    If Mid$(Err.Description, 1, Len(gc00_OraErr)) = gc00_OraErr Then
+        strErrCode = Mid$(Err.Description, Len(gc00_OraErr) + 1, 9)
+    Else
+        strErrCode = Mid$(Err.Description, 1, 9)
+    End If
+
+'    Debug.Print "Err_SQL：" & strSql
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "", Err.Number, Err.Description & "(" & strSql & ")")
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+
+

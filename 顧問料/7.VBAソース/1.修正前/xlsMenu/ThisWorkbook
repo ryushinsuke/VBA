@@ -1,0 +1,447 @@
+VERSION 1.0 CLASS
+BEGIN
+  MultiUse = -1  'True
+END
+Attribute VB_Name = "ThisWorkbook"
+Attribute VB_GlobalNameSpace = False
+Attribute VB_Creatable = False
+Attribute VB_PredeclaredId = True
+Attribute VB_Exposed = True
+
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：契約管理システム・信託時価データ取込処理
+'
+'オブジェクト名：ThisWorkbook
+'
+'機能概要　：サンプル
+'
+'更新履歴　：2006/01/17 SRA T.Tanaka    新規作成
+'
+'
+'*************************************************************************
+Private Const MODULE_NAME As String = "Menu"
+
+
+'*************************************************************************
+'関数名　　：ワークブック終了前処理
+'
+'引　　数　：
+'
+'戻り値　　：
+'
+'機能説明　：ＤＢオブジェクトの破棄
+'
+'更新履歴　：2006/07/06 SRA Y.Azuma    新規作成
+'　　　　　　2006/09/19 SRA H.Haya     行抹消 Erase gErrorMsg, Set gclsDB = Nothing
+'
+'*************************************************************************
+Private Sub Workbook_BeforeClose(Cancel As Boolean)
+
+    'エラーメッセージ配列の廃棄
+''**9/19    Erase gErrorMsg
+        
+    Application.ScreenUpdating = False
+        
+'------------<Modify Start azuma 2007/06/18 (PH3)> -----------------------
+    ThisWorkbook.Application.Caption = ""
+'------------<Modify End   azuma 2007/06/18 (PH3)> -----------------------
+        
+'------------<Modify Start azuma 2008/6/16 > 外部委託ライセンスフィー算出★★★-----------------------
+    Call gCom01_SheetProtect(Worksheets(SHEET_MAIN2), False) 'シート保護解除
+
+    Call gDelButton(SHEET_MAIN)     'メニューシートのボタン削除
+    Call gDelButton(SHEET_MAIN2)    'メニュー2シートのボタン削除
+'------------<Modify End   azuma 2008/6/16 > 外部委託ライセンスフィー算出★★★-----------------------
+        
+    Call 再表示
+
+''**9/19    Set gclsDB = Nothing
+    'Excelシートを最小化する
+    ActiveWindow.WindowState = xlMinimized
+
+    '強制終了
+    If Me.Saved = False Then
+        Application.DisplayAlerts = False
+        ThisWorkbook.Saved = True
+    End If
+
+End Sub
+
+
+'*************************************************************************
+'関数名　　：ワークブック起動処理
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：スタートアップモジュール
+'
+'更新履歴　：2006/01/18 SRA T.Tanaka    新規作成
+'　　　　　　2006/08/14 SRA H.早川      動的ボタン追加処理対応
+'            2007/10/23 SRA K.西濱      ユーザ認証画面オープン処理追加
+'更新履歴　：2008/06/16 SRA Y.Azuma     変更   外部委託ライセンスフィー算出対応
+'
+'*************************************************************************
+Private Sub Workbook_Open()
+    
+    Const PROCEDURE_NAME As String = "Workbook_Open"
+    
+On Error GoTo ErrHandler
+
+    Dim blnControl          As Boolean
+''' 06/8/15 Insert Start
+    Dim lngRow              As Long
+    Dim strBtnNm            As String
+    Dim strBtnNmAll         As String
+    Dim strBtnID            As String
+    Dim strCellNm           As String
+    Dim strCellCol          As String
+    Dim lngCellRow          As Long
+    Dim strCellCol_Bef      As String
+    Dim lngCellRow_Bef      As Long
+    Dim objMain             As Object
+    Dim objX                As Object
+    Dim blnMenuDeci         As Boolean
+    Dim lngSheetCnt         As Long     '<----------- Modify azuma 2008/6/16 外部委託ライセンスフィー算出★★★
+    Dim strSheetName        As String   '<----------- Modify azuma 2008/6/16 外部委託ライセンスフィー算出★★★
+    Dim strMainName         As String   '<----------- Modify azuma 2008/6/16 外部委託ライセンスフィー算出★★★
+    Dim vSheet()            As Variant  '<----------- Modify azuma 2008/6/16 外部委託ライセンスフィー算出★★★
+    Dim vMain()             As Variant  '<----------- Modify azuma 2008/6/16 外部委託ライセンスフィー算出★★★
+    
+    
+'-----------<Added オンラインおよびオンラインバッチ起動時の定時バッチチェック対応 2008/03/21 SRA市川 Start > -----------
+    Dim blnBCResult         As Boolean
+    Dim strSystemNm1        As String
+    Dim strErrMsg           As String
+    
+'------------<Modify Start azuma 2008/6/16 > 外部委託ライセンスフィー算出★★★-----------------------
+    vSheet = Array(SHEET_BUTTONLIST, SHEET_BUTTONLIST2)
+    vMain = Array(SHEET_MAIN, SHEET_MAIN2)
+    ThisWorkbook.Worksheets(SHEET_SETTING).Range("LOGIN_USER").Value = ""
+'------------<Modify End   azuma 2008/6/16 > 外部委託ライセンスフィー算出★★★-----------------------
+    
+    
+    'ＤＢ接続クラス作成
+    Set gclsDB = New clsDBAccess
+    
+    If blnDbCon = True Then
+        'エラーメッセージ一覧取得
+        Call gfunc_GetErrMsgList
+        blnControl = True
+    
+    Else
+        MsgBox "DB接続に失敗しました。設定を確認してください。", vbCritical
+        blnControl = False
+    End If
+      
+    'バッチチェック共通関数呼び出し
+    If func_BatchCheck(Replace(ThisWorkbook.Name, ".xls", ""), blnBCResult, strSystemNm1, strErrMsg, False) = False Then
+        'バッチチェックでシステムエラー等が発生した場合、処理を続行する
+    End If
+    
+    'バッチチェックNGの場合、確認メッセージを表示する
+    If blnBCResult = False Then
+        If MsgBox("「" & strSystemNm1 & "」が実行中です。「" & Replace(ThisWorkbook.Name, ".xls", "") & "」を起動しますか？", vbYesNo + vbExclamation) = vbNo Then
+'------------<Modify Start Nishihama 2008/07/09 > -----------------------
+            'Workbook_Close
+            ThisWorkbook.Close
+'------------<Modify End Nishihama 2008/07/09 > -------------------------
+        End If
+    End If
+'-----------<Added オンラインおよびオンラインバッチ起動時の定時バッチチェック対応 2008/03/21 SRA市川 End   > -----------
+    
+''''2007/10/23 ユーザ認証画面追加 開始-----------------------------
+    Call HideItem
+    'Excelシートを最小化する
+    ActiveWindow.WindowState = xlMinimized
+'    Application.ScreenUpdating = False
+    'ユーザ認証画面を開く(開発時)
+'    UserCertification.Show vbModeless: DoEvents
+    'リリース時は↓へ変更する
+    UserCertification.Show
+    'ユーザIDテキストボックスにセットフォーカス
+    UserCertification.txt_UsrId.SetFocus
+    '最大化するExcelシートを選択する
+    Windows(Me.Name).Activate
+    '最小化したExcelシートを最大化で戻す
+    ActiveWindow.WindowState = xlMaximized
+'''''2007/10/23 ユーザ認証画面追加 終了----------------------------
+
+''' 06/8/15 Insert End
+    
+    UserForm1.Show vbModeless: DoEvents
+       
+'=== 2006/12/14 Added By H.Anpo Start
+'R1C1形式をA1形式に設定する
+    Application.ReferenceStyle = xlA1
+'=== 2006/12/14 Added By H.Anpo End
+    
+    Application.ScreenUpdating = False
+    Call HideItem
+    
+'    Call subBeginProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+
+'-----------<Deleted オンラインおよびオンラインバッチ起動時の定時バッチチェック対応 2008/03/21 SRA市川 Start > -----------
+'    'ＤＢ接続クラス作成
+'    Set gclsDB = New clsDBAccess
+'
+'    If blnDbCon = True Then
+'        'エラーメッセージ一覧取得
+'        Call gfunc_GetErrMsgList
+'        blnControl = True
+'
+'    Else
+'        MsgBox "DB接続に失敗しました。設定を確認してください。", vbCritical
+'        blnControl = False
+'    End If
+'-----------<Deleted オンラインおよびオンラインバッチ起動時の定時バッチチェック対応 2008/03/21 SRA市川 End   > -----------
+    
+''' 06/8/15 Insert Start
+    Call gCom01_SheetProtect(Worksheets(SHEET_MAIN), False) 'シート保護解除
+'------------<Modify Start azuma 2008/6/16 > 外部委託ライセンスフィー算出★★★-----------------------
+    Call gCom01_SheetProtect(Worksheets(SHEET_MAIN2), False) 'シート保護解除
+
+    Call gDelButton(SHEET_MAIN)     'メニューシートのボタン削除
+    Call gDelButton(SHEET_MAIN2)    'メニュー2シートのボタン削除
+'------------<Modify End   azuma 2008/6/16 > 外部委託ライセンスフィー算出★★★-----------------------
+    
+    
+'''ボタンを表示する。
+'''別インスタンス起動の時、サブシートと同インスタンスなら非表示にする。
+    blnMenuDeci = True
+    
+'------------<Modify Start azuma 2008/6/16 > 外部委託ライセンスフィー算出★★★-----------------------
+    ''' 9/13 下記ＩＦ文は　現在　False ルート通過
+    For lngSheetCnt = 0 To UBound(vSheet)
+    strSheetName = vSheet(lngSheetCnt)
+    strMainName = vMain(lngSheetCnt)
+        If gblnInstanceKick And _
+            Application.Workbooks(1).Name <> ThisWorkbook.Name Then
+    '   (1)ボタン名照合用の文字列作成
+            strBtnNmAll = vbCrLf
+            With Worksheets(strSheetName)
+                For lngRow = SHEET_BUTTON_DataSRow To 99999
+                    strBtnNm = Trim(.Cells(lngRow, SHEET_BUTTON_DataNmCol))
+                    strCellCol = Trim(.Cells(lngRow, SHEET_BUTTON_DataColCol))
+                    Select Case ""
+                    Case strBtnNm & strCellCol
+                        Exit For
+                    Case strBtnNm       'ボタン名空白なら何もしない、終了もしない。
+                    Case Else
+                        strBtnNmAll = strBtnNmAll & strBtnNm & ".xls" & vbCrLf
+                    End Select
+                Next
+            End With
+        
+    '   (2)上記文字列とすでに開かれているＢｏｏｋ名を照合する。
+    '      一致するものがあるなら、別インスタンスで開くべきと判断する。
+            For Each objMain In Application.Workbooks
+                If InStr(1, strBtnNmAll, vbCrLf & objMain.Name & vbCrLf, vbTextCompare) > 0 Then
+                    blnMenuDeci = False
+                    Exit For
+                End If
+            Next
+        End If
+        
+        If Not blnMenuDeci Then
+            ThisWorkbook.Windows(1).Visible = False
+        End If
+        'Else
+        
+    '''ボタンの作成
+        With Worksheets(strSheetName)
+            strCellCol_Bef = ""
+            For lngRow = SHEET_BUTTON_DataSRow To 99999
+                strBtnNm = Trim(.Cells(lngRow, SHEET_BUTTON_DataNmCol))
+                strCellCol = Trim(.Cells(lngRow, SHEET_BUTTON_DataColCol))
+                Select Case ""
+                Case strBtnNm & strCellCol
+                    Exit For
+                Case Else
+                    If strCellCol = strCellCol_Bef Then
+                        lngCellRow = lngCellRow_Bef + SHEET_BUTTON_DispRStep
+                    Else
+                        lngCellRow = SHEET_BUTTON_DispSRow
+                    End If
+        
+                    If strBtnNm <> "" Then    'ボタン名空白ならボタンを割り当てないが、配置行はカウントする。
+                        strCellNm = strCellCol & Trim(Str(lngCellRow))
+                        strBtnID = SHEET_BUTTON_PFix & Trim(Str(lngRow - SHEET_BUTTON_DataSRow + 1 + (100 * lngSheetCnt)))
+                        
+                        With Worksheets(strMainName).Range(strCellNm)
+                            Set objX = Worksheets(strMainName).Shapes.AddFormControl( _
+                                xlButtonControl, _
+                                .Left, .Top, 300, 30)
+                            With objX.OLEFormat.Object
+                                .Name = strBtnID
+                                .Caption = strBtnNm
+                                .OnAction = strBtnID & "_Click"
+                                .Enabled = blnControl
+                                .Visible = True
+                                Select Case True
+                                Case Not blnControl
+                                    .Font.Color = vbWhite
+                                Case strBtnNm = SHEET_BUTTON_Menu
+                                    .Font.Color = vbBlue
+                                End Select
+                            End With
+                        End With
+                    End If
+        
+                    lngCellRow_Bef = lngCellRow
+                    strCellCol_Bef = strCellCol
+                End Select
+            Next
+        End With
+        'End If
+        
+    ''' 06/9/19 追加　図形描画のオブジェクト選択状態ではFormControlオブジェクトが実行不のなのでこれを強制解除
+        For Each objX In Application.CommandBars("Drawing").Controls
+            With objX
+                If .Caption = "オブジェクトの選択(&S)" Then
+                    If .State = msoButtonDown Then objX.Execute
+                    Exit For
+                End If
+            End With
+        Next
+    ''' 06/9/19 追加END
+    Next lngSheetCnt
+    
+'''''' 9/13 下記ＩＦ文は　現在　False ルート通過
+'''    If gblnInstanceKick And _
+'''        Application.Workbooks(1).Name <> ThisWorkbook.Name Then
+''''   (1)ボタン名照合用の文字列作成
+'''        strBtnNmAll = vbCrLf
+'''        With Worksheets(SHEET_BUTTONLIST)
+'''            For lngRow = SHEET_BUTTON_DataSRow To 99999
+'''                strBtnNm = Trim(.Cells(lngRow, SHEET_BUTTON_DataNmCol))
+'''                strCellCol = Trim(.Cells(lngRow, SHEET_BUTTON_DataColCol))
+'''                Select Case ""
+'''                Case strBtnNm & strCellCol
+'''                    Exit For
+'''                Case strBtnNm       'ボタン名空白なら何もしない、終了もしない。
+'''                Case Else
+'''                    strBtnNmAll = strBtnNmAll & strBtnNm & ".xls" & vbCrLf
+'''                End Select
+'''            Next
+'''        End With
+'''
+''''   (2)上記文字列とすでに開かれているＢｏｏｋ名を照合する。
+''''      一致するものがあるなら、別インスタンスで開くべきと判断する。
+'''        For Each objMain In Application.Workbooks
+'''            If InStr(1, strBtnNmAll, vbCrLf & objMain.Name & vbCrLf, vbTextCompare) > 0 Then
+'''                blnMenuDeci = False
+'''                Exit For
+'''            End If
+'''        Next
+'''    End If
+'''
+'''    If Not blnMenuDeci Then
+'''        ThisWorkbook.Windows(1).Visible = False
+'''    End If
+'''    'Else
+'''
+''''''ボタンの作成
+'''    With Worksheets(SHEET_BUTTONLIST)
+'''        strCellCol_Bef = ""
+'''        For lngRow = SHEET_BUTTON_DataSRow To 99999
+'''            strBtnNm = Trim(.Cells(lngRow, SHEET_BUTTON_DataNmCol))
+'''            strCellCol = Trim(.Cells(lngRow, SHEET_BUTTON_DataColCol))
+'''            Select Case ""
+'''            Case strBtnNm & strCellCol
+'''                Exit For
+'''            Case Else
+'''                If strCellCol = strCellCol_Bef Then
+'''                    lngCellRow = lngCellRow_Bef + SHEET_BUTTON_DispRStep
+'''                Else
+'''                    lngCellRow = SHEET_BUTTON_DispSRow
+'''                End If
+'''
+'''                If strBtnNm <> "" Then    'ボタン名空白ならボタンを割り当てないが、配置行はカウントする。
+'''                    strCellNm = strCellCol & Trim(Str(lngCellRow))
+'''                    strBtnID = SHEET_BUTTON_PFix & Trim(Str(lngRow - SHEET_BUTTON_DataSRow + 1))
+'''
+'''                    With Worksheets(SHEET_MAIN).Range(strCellNm)
+'''                        Set objX = Worksheets(1).Shapes.AddFormControl( _
+'''                            xlButtonControl, _
+'''                            .Left, .Top, 300, 30)
+'''                        With objX.OLEFormat.Object
+'''                            .Name = strBtnID
+'''                            .Caption = strBtnNm
+'''                            .OnAction = strBtnID & "_Click"
+'''                            .Enabled = blnControl
+'''                            .Visible = True
+'''                            Select Case True
+'''                            Case Not blnControl
+'''                                .Font.Color = vbWhite
+'''                            Case strBtnNm = SHEET_BUTTON_Menu
+'''                                .Font.Color = vbBlue
+'''                            End Select
+'''                        End With
+'''                    End With
+'''                End If
+'''
+'''                lngCellRow_Bef = lngCellRow
+'''                strCellCol_Bef = strCellCol
+'''            End Select
+'''        Next
+'''    End With
+'''    'End If
+'''
+'''''' 06/9/19 追加　図形描画のオブジェクト選択状態ではFormControlオブジェクトが実行不のなのでこれを強制解除
+'''    For Each objX In Application.CommandBars("Drawing").Controls
+'''        With objX
+'''            If .Caption = "オブジェクトの選択(&S)" Then
+'''                If .State = msoButtonDown Then objX.Execute
+'''                Exit For
+'''            End If
+'''        End With
+'''    Next
+'''''' 06/9/19 追加END
+    
+'------------<Modify End   azuma 2008/6/16 > 外部委託ライセンスフィー算出★★★-----------------------
+    
+    
+    Call gCom01_SheetProtect(Worksheets(SHEET_MAIN), True) 'シート保護
+'------------<Modify Start azuma 2008/6/16 > 外部委託ライセンスフィー算出★★★-----------------------
+    Call gCom01_SheetProtect(Worksheets(SHEET_MAIN2), True) 'シート保護
+    Worksheets(SHEET_MAIN).Visible = True
+    Worksheets(SHEET_MAIN2).Visible = False
+    Worksheets(SHEET_MAIN).Select
+'------------<Modify End   azuma 2008/6/16 > 外部委託ライセンスフィー算出★★★-----------------------
+    
+'    ThisWorkbook.Worksheets(SHEET_MAIN).OLEObjects(1).Activate
+'       サブシートから連動起動した場合実施するとまずいので削除
+''' 06/8/15 Insert End
+    
+'------------<Modify Start azuma 2006/11/08 > -----------------------
+    'ログ出力パスの取得
+    If gfunc_GetMyDocPath(strMyDocPath) = False Then
+        MsgBox "ログ出力パスの取得に失敗しました。 (" & MODULE_NAME & ")", vbCritical
+        Exit Sub
+    End If
+'------------<Modify End   azuma 2006/11/08 > -----------------------
+        
+'------------<Modify Start azuma 2007/06/18 (PH3)> -----------------------
+    ThisWorkbook.Application.Caption = "【" & gstrUserName & "】"
+'------------<Modify End   azuma 2007/06/18 (PH3)> -----------------------
+    
+    Application.ScreenUpdating = True
+    
+    Unload UserForm1
+
+'    Call subEndProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Sub
+ErrHandler:
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    
+    Set gclsDB = Nothing
+    
+End Sub
+
+

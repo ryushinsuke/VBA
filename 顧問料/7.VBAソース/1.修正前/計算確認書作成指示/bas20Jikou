@@ -1,0 +1,145 @@
+Attribute VB_Name = "bas20Jikou"
+Option Explicit
+'*************************************************************************
+'
+'プロジェクト名：外部委託ライセンスフィー算出システム・計算確認書作成指示
+'
+'オブジェクト名：bas20Jikou
+'
+'機能概要　：実行処理
+'
+'更新履歴　：2008/06/30 SRA 東       新規作成
+'
+'*************************************************************************
+Const MODULE_NAME As String = "bas20Jikou"
+
+
+'*************************************************************************
+'関数名　　：実行処理メイン処理
+'
+'引　　数　：
+'           objTarget        I           対象のシート
+'
+'戻り値　　：なし
+'
+'機能説明　：
+'
+'更新履歴　：2008/06/30 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Sub gsub_ExecuteMain(ByRef objTarget As Object)
+
+On Error GoTo ErrorSection
+
+    Const PROCEDURE_NAME    As String = "gsub_ExecuteMain"
+    Dim blnRet              As Boolean
+    
+    blnRet = False
+    
+    With objTarget
+    
+        '入力チェック処理
+        blnRet = funcJikou_InputCheck(objTarget)
+
+        If blnRet = False Then
+            Exit Sub
+        End If
+
+        '進捗画面の表示
+        frmProcess.Show vbModal
+        
+    End With
+
+Exit Sub
+    
+ErrorSection:
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'@    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Sub
+
+
+'*************************************************************************
+'関数名　　：実行時入力チェック処理
+'
+'引　　数　：
+'           objTarget        I           対象のシート
+'
+'戻り値　　：
+'
+'機能説明　：
+'
+'更新履歴　：2008/06/30 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Private Function funcJikou_InputCheck(ByRef objTarget As Object) As Boolean
+On Error GoTo ErrorSection
+
+    Const PROCEDURE_NAME    As String = "funcJikou_InputCheck"
+    Dim blnRet              As Boolean
+
+    funcJikou_InputCheck = False
+
+    With objTarget
+
+        '送付日(必須)
+        
+        '　必須チェック
+        If Trim(.Range("送付日").Value) = "" Then
+            Call gfunc_ErrorMsg(3, 20020, "送付日", "")
+            .Range("送付日").Activate
+            Exit Function
+        End If
+        
+        
+        blnRet = False
+        
+        '　送付日妥当チェック
+        blnRet = gfunc_CheckDate(CStr(.Range("送付日").Value))
+        If blnRet = False Then
+            Call gfunc_ErrorMsg(3, 20030, "送付日", "日付の妥当性に問題があります。YYYYMMDD形式で入力して下さい。")
+            .Range("送付日").Activate
+            Exit Function
+        End If
+
+        
+        '保存フォルダー(必須)
+        
+        '　必須チェック
+        If Trim(.Range("保存フォルダ").Value) = "" Then
+            Call gfunc_ErrorMsg(3, 20040, "保存フォルダ", "")
+            .Range("保存フォルダ").Activate
+            Exit Function
+        End If
+        
+        '　存在チェック
+        If Dir(CStr(.Range("保存フォルダ").Value), vbDirectory) = "" Then
+            Call gfunc_ErrorMsg(3, 20050, "保存フォルダ", "")
+            .Range("保存フォルダ").Activate
+            Exit Function
+        End If
+    
+    End With
+
+    funcJikou_InputCheck = True
+
+    Exit Function
+ErrorSection:
+
+funcJikou_InputCheck = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'@    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+

@@ -1,0 +1,79 @@
+Attribute VB_Name = "basKsCommon"
+Option Explicit
+
+Const MODULE_NAME = "basKsCommon"
+
+Public Const TBL_SHISAN = "KYK_SHISAN"                  '資産テーブル名定義
+Public Const TBL_SHISAN_PX = "KYK_SHISAN_PX"            '資産・PX銘柄対応テーブル名定義
+Public Const TBL_SHISAN_T21 = "KYK_SHISAN_T21"          '資産・T21銘柄対応テーブル名定義
+Public Const TBL_GOHSEI_SHISAN = "KYK_GOHSEI_SHISAN"    '合成資産テーブル名定義
+
+'------<Modify Start   T.Mizutani 2009/10/15> 資産登録画面における資産コード削除対応------
+Public Const TBL_SHISAN_KANJOH = "KYK_SHISAN_KANJOH_KAMOKU_CD"    '資産・勘定科目コード対応テーブル名定義
+'------<Modify End     T.Mizutani 2009/10/15> 資産登録画面における資産コード削除対応------
+
+'Public Const TBL_SHISAN = "AZM_SHISAN"                  '資産テーブル名定義
+'Public Const TBL_SHISAN_PX = "AZM_SHISAN_PX"            '資産・PX銘柄対応テーブル名定義
+'Public Const TBL_SHISAN_T21 = "AZM_SHISAN_T21"          '資産・T21銘柄対応テーブル名定義
+'Public Const TBL_GOHSEI_SHISAN = "AZM_GOHSEI_SHISAN"    '合成資産テーブル名定義
+
+'------------<資産登録20080218 20080307 SRA東 START> -----------------------
+Public Const SHISAN_ICHIRAN_BUNRUI = "0,A,B,Z"    '処理対象の資産分類コード
+'Public Const SHISAN_ICHIRAN_BUNRUI = "0,B,Z"    '処理対象の資産分類コード
+'------------<資産登録20080218 20080307 SRA東 END  > -----------------------
+Public Const KO_SHISAN_ICHIRAN_BUNRUI = "0"     '子資産分類コード
+
+Public Const KANJOH = "1"       '勘定   勘定・銘柄・親区分の区分値
+Public Const MEIGARA = "2"      '銘柄   勘定・銘柄・親区分の区分値
+Public Const OYA_KBN = "3"      '親     勘定・銘柄・親区分の区分値
+
+
+Public Const UPDATE_USER = "APL001"
+Public Const UPDATE_PGM_ID = "資産登録"
+
+Public Const MAIN_SHEETNAME = "main"
+Public Const DATA_SHEETNAME = "data"
+
+
+Public Const SHISAN_LIST = "資産コードリスト"
+Public Const KAGEN_LIST = "加減区分リスト"
+Public Const KO_SHISAN_LIST = "子資産リスト"
+
+'------------<資産登録20080218 20080325 SRA東 START> -----------------------
+Public Const KBN_NAME_PX = "PX銘柄指定型"
+Public Const KBN_NAME_KNJ = "勘定コード集計型"
+Public Const KBN_NAME_T21 = "T21調整資産"
+Public Const KBN_NAME_OYA = "合成資産"
+'------------<資産登録20080218 20080325 SRA東 END  > -----------------------
+
+Public blnProcessing As Boolean '処理中フラグ   True:検索・初期化処理中
+
+'資産検索テーブルの取得項目順
+Public Enum EmShisanSearch1
+    SHISAN_NAME = 0         '資産名
+    SHISAN_PNAME            '帳票資産名
+    KANJOH_MEIGARA_OYA_KBN  '勘定・銘柄・親区分
+    GAIBU_CODE              'PX銘柄コード
+    HOHSHU_RATE             '報酬レート
+'------------<Modify Start azuma 2009/01/19 > 自己設定投信の委託者報酬額の内訳管理---------------
+    UNYOH_HOHSHU_RATE       '運用報酬レート
+'------------<Modify End   azuma 2009/01/19 > 自己設定投信の委託者報酬額の内訳管理---------------
+    JIKA_TANI_KUCHISU       '時価単位口数
+    T21_KOHZA_NO            'T21口座番号
+    KOUSHIN_YMD             '資産テーブル更新日付
+End Enum
+
+'合成資産テーブルの取得項目順
+Public Enum EmGohseiShisan
+    SHISAN_KAGEN_KBN = 0    '資産加減区分
+    KO_SHISAN_CODE          '子資産コード(分類＋コード)
+    SHISAN_NAME             '子資産名
+End Enum
+
+'子資産一覧構造体
+Public Type typKoShisan
+    strKagenKbn     As String
+    strCode         As String
+    lngGyouNo       As Long
+End Type
+

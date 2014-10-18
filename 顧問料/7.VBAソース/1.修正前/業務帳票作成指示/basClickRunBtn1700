@@ -1,0 +1,350 @@
+Attribute VB_Name = "basClickRunBtn1700"
+Option Explicit
+
+'*************************************************************************
+'プロジェクト名：新契約管理システム・業務帳票作成指示
+'オブジェクト名：basClickRunBtn1700
+'機能概要　：掛け目一覧表を作成する
+'更新履歴　：2007/05/11 SRA 市川
+'
+'*************************************************************************
+
+Const MODULE_NAME = "basClickRunBtn1700"
+
+Private Const cSTART_ROW = 8
+Private Const cBaseFile = gc帳票Base7
+Private Const cPreFName = gc帳票名7
+
+
+'*************************************************************************
+'関数名　　：掛け目一覧表(帳票作成)
+'引　　数　：
+'           objTarget        I           対象のシート
+'戻り値　　：
+'機能説明　：
+'更新履歴　：2007/05/11 SRA 市川            新規作成
+'
+'*************************************************************************
+Public Function fncClickRunBtn1700(ByRef objTarget As Object) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncClickRunBtn1700"
+
+On Error GoTo ErrSection
+
+    Dim strOutFName     As String
+    Dim strData()       As String
+    
+    Call subBeginProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    fncClickRunBtn1700 = False
+   
+    With objTarget
+
+        ' 作成選択の場合
+        If .chkMake.Value = True Then
+        
+            ' データ取得
+            If fncGetDBData1700(strData()) = False Then
+                GoTo RtnErrSection
+            End If
+        
+            ' 帳票ファイル取得
+            If fncGetFile1700(strOutFName) = False Then
+                GoTo RtnErrSection
+            End If
+        
+            ' フォルダをつける。
+            strOutFName = .Range("保存フォルダ").Value & "\" & strOutFName
+            
+            ' ファイルコピー
+            If fncCopyBook(cBaseFile, strOutFName) = False Then
+                GoTo RtnErrSection
+            End If
+            
+            ' ファイル作成
+            If fncMakeBook1700(strOutFName, strData()) = False Then
+                ' ファイル削除
+                fncDeleteFile (strOutFName)
+                
+                GoTo RtnErrSection
+            End If
+        End If
+    
+        ' 印刷選択の場合
+        If .chkPrint.Value = True Then
+            ' ファイル印刷
+            If fncPrintBook(cPreFName, .Range("保存フォルダ").Value) = False Then
+                GoTo RtnErrSection
+            End If
+        End If
+    
+    End With
+   
+    fncClickRunBtn1700 = True
+    Erase strData
+    
+    Call subEndProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                     *
+'*******************************************************
+ErrSection:
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+'*******************************************************
+'* リターンエラーセクション                              *
+'*******************************************************
+RtnErrSection:
+                
+    fncClickRunBtn1700 = False
+    Erase strData
+    
+End Function
+
+'*************************************************************************
+'関数名　　：掛け目一覧表(帳票ファイル取得)
+'引　　数　：
+'           strOutFName        O           出力ファイル名
+'戻り値　　：処理結果
+'機能説明　：掛け目一覧表を出力するファイルを取得する。
+'更新履歴　：2007/05/11 SRA 市川            新規作成
+'
+'*************************************************************************
+Public Function fncGetFile1700(ByRef strOutFName As String) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncGetFile1700"
+
+On Error GoTo ErrSection
+
+    Dim strDate         As String
+    Dim strTime         As String
+
+    strOutFName = ""
+    
+    fncGetFile1700 = False
+    
+    Call gfunc_GetSvDateTime(strDate, strTime)
+       
+    ' 出力帳票ファイル
+    strOutFName = cPreFName
+    strOutFName = strOutFName & "_" & strDate
+    strOutFName = strOutFName & "_" & strTime
+    strOutFName = strOutFName & ".xls"
+    
+    fncGetFile1700 = True
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncGetFile1700 = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+End Function
+
+'*************************************************************************
+'関数名　　：掛け目一覧表(帳票データ取得)
+'引　　数　：
+'           strData()          O           取得データ
+'戻り値　　：処理結果
+'機能説明　：掛け目一覧表のデータを取得する。
+'更新履歴　：2007/05/11 SRA 市川            新規作成
+'
+'*************************************************************************
+Public Function fncGetDBData1700(ByRef strData() As String) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncGetDBData1700"
+
+On Error GoTo ErrSection
+
+    Dim strSql      As String
+    Dim vData()     As Variant
+    Dim lngCol      As Long
+    Dim lngRow      As Long
+    Dim lngRowCnt   As Long
+    Dim lngColCnt   As Long
+    
+    fncGetDBData1700 = False
+    
+'*******************************************************
+'* SQL文作成                                           *
+'*******************************************************
+
+    strSql = ""
+    strSql = strSql & "SELECT" & vbCrLf
+    strSql = strSql & "    KK.KAKEME_CD," & vbCrLf
+    strSql = strSql & "    KKN.KAKEME_NAME," & vbCrLf
+    strSql = strSql & "    KK.KAKEME_TABLE_NO," & vbCrLf
+    strSql = strSql & "    KK.SHUEKI_RATE_HANI," & vbCrLf
+    strSql = strSql & "    KK.FUGOU 符号," & vbCrLf
+    strSql = strSql & "    KK.A Ａ," & vbCrLf
+    strSql = strSql & "    KK.B Ｂ" & vbCrLf
+    strSql = strSql & "FROM" & vbCrLf
+    strSql = strSql & "    KYK_KAKEME KK," & vbCrLf
+    strSql = strSql & "    KYK_KAKEME_NAME KKN" & vbCrLf
+    strSql = strSql & "WHERE" & vbCrLf
+    strSql = strSql & "    KK.KAKEME_CD = KKN.KAKEME_CD" & vbCrLf
+    strSql = strSql & "    ORDER BY" & vbCrLf
+    strSql = strSql & "    KK.KAKEME_CD," & vbCrLf
+    strSql = strSql & "    KK.KAKEME_TABLE_NO" & vbCrLf
+    
+    'データ取得
+    Call gclsDB.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow)
+    If lngRow > 0 Then
+        ' 動的配列変数に対するメモリ領域の再割り当てを行います
+        ReDim strData(lngRow, lngCol)
+        
+        '取得データを配列に設定
+        For lngRowCnt = 0 To lngRow - 1
+            For lngColCnt = 0 To UBound(strData, 2) - 1
+                strData(lngRowCnt, lngColCnt) = CStr(vData(lngColCnt, lngRowCnt))
+            Next
+        Next lngRowCnt
+        fncGetDBData1700 = True
+    Else
+        ' 該当データが存在しません。
+        Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3001, cPreFName, "")
+    End If
+    
+    Erase vData
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncGetDBData1700 = False
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- エラーログ出力 End  ---------------------------------
+
+    Erase vData
+    Erase strData
+   
+End Function
+
+
+'*************************************************************************
+'関数名　　：掛け目一覧表(帳票作成)
+'引　　数　：
+'           strOutFName        I           出力ファイル名
+'           strData()          I           出力データ
+'戻り値　　：処理結果
+'機能説明　：掛け目一覧表の作成を取得する。
+'更新履歴　：2007/05/11 SRA 市川            新規作成
+'
+'*************************************************************************
+Public Function fncMakeBook1700(ByVal strOutFName As String, ByRef strData() As String) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncMakeBook1700"
+
+On Error GoTo ErrSection
+
+    Dim lngRowCnt       As Long
+    Dim lngColCnt       As Long
+    Dim strSrcRange     As String
+    Dim strDesRange     As String
+    Dim lngRow          As Long
+    Dim strWork         As String
+    
+    Call subBeginProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    ' ファイルOpen
+    Workbooks.Open Filename:=strOutFName
+    
+    lngRow = UBound(strData, 1)
+    fncMakeBook1700 = False
+    
+    strSrcRange = "A" & cSTART_ROW & ":Z" & cSTART_ROW
+    strDesRange = "A" & (cSTART_ROW + 1) & ":Z" & (cSTART_ROW + lngRow - 1)
+    
+    With Workbooks(Workbooks.Count).Worksheets(1)
+      
+        If lngRow > 1 Then
+            .Range(strSrcRange).Copy Destination:=.Range(strDesRange)
+        End If
+
+        ' 一覧出力
+        For lngRowCnt = 0 To lngRow - 1
+            .Cells(cSTART_ROW + lngRowCnt, 1).Value = strData(lngRowCnt, 0)     '掛け目コード
+            .Cells(cSTART_ROW + lngRowCnt, 2).Value = strData(lngRowCnt, 1)     '掛け目名称
+            .Cells(cSTART_ROW + lngRowCnt, 3).Value = strData(lngRowCnt, 3)     '収益率差分範囲(%)又は基準収益率範囲(%)
+            
+            '符号を編集
+            Select Case strData(lngRowCnt, 4)
+                Case "0"
+                    strWork = "＜"
+                Case "1"
+                    strWork = "≦"
+                Case "2"
+                    strWork = "＞"
+                Case "3"
+                    strWork = "≧"
+            End Select
+            
+            .Cells(cSTART_ROW + lngRowCnt, 4).Value = strWork                   '符号
+            .Cells(cSTART_ROW + lngRowCnt, 5).Value = strData(lngRowCnt, 5)     'Ａ
+            .Cells(cSTART_ROW + lngRowCnt, 6).Value = strData(lngRowCnt, 6)     'Ｂ
+            
+        Next lngRowCnt
+         
+        ' カーソル位置を異動する。
+        .Activate     ' シートが２個以上の場合要る。
+        .Range("A1").Activate
+        
+    End With
+    
+    ActiveWindow.ScrollRow = 1
+    ActiveWindow.ScrollColumn = 1
+    
+    Workbooks(Workbooks.Count).Close SaveChanges:=True
+    fncMakeBook1700 = True
+    
+    Call subEndProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    Workbooks(Workbooks.Count).Close SaveChanges:=True
+    fncMakeBook1700 = False
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- エラーログ出力 End  ---------------------------------
+   
+End Function
+

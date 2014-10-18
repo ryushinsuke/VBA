@@ -1,0 +1,23 @@
+VERSION 1.0 CLASS
+BEGIN
+  MultiUse = -1  'True
+END
+Attribute VB_Name = "Sheet2"
+Attribute VB_GlobalNameSpace = False
+Attribute VB_Creatable = False
+Attribute VB_PredeclaredId = True
+Attribute VB_Exposed = True
+Option Explicit
+'*************************************************************************
+'
+'プロジェクト名：外部委託ライセンスフィー算出システム・計算確認書作成指示
+'
+'オブジェクト名：Sheet2
+'
+'機能概要　：Data画面
+'
+'更新履歴　：2008/06/30 SRA 東       新規作成
+'
+'*************************************************************************
+Private Const MODULE_NAME As String = DATA_SHEETNAME
+

@@ -1,0 +1,1160 @@
+Attribute VB_Name = "bas50Seikyusho"
+Option Explicit
+
+Const MODULE_NAME = "bas50Seikyusho"
+
+'------------<Modify Start azuma 2007/09/25 > ★★★☆-----------------------
+'****************************************************
+'* ワークシート関数削除定義
+'****************************************************
+Public Const gCOPY_RANGE = "A1:AY400"  '請求書の式を値に変換する為のコピー範囲
+Public Const gCOPY_DEBUG_FLG = False    'True:関数を削除しない、False:関数を削除し値のみする。（通常はこっち）
+'------------<Modify End   azuma 2007/09/25 > ★★★☆-----------------------
+
+
+'*************************************************************************
+'関数名　　：請求書作成処理メイン
+'
+'引　　数　：
+'           lngKohzaCnt       I       処理対象の配列インデックス
+'           strKohzaList      I       処理対象の配列
+'           strOutputDir      I       出力先フォルダ
+'           strFileName       I       データファイル名(Pathなし)
+'           strSeiFileName    I       請求書ファイル名(Pathなし)
+'           strNamInfo        I       NAM情報
+'           typTorikomi       I       請求データ取込の情報
+'
+'戻り値　　：Boolean
+'
+'機能説明　：実際の請求書作成のメイン関数
+'
+'更新履歴　：2006/08/09 SRA Y.Azuma    新規作成
+'更新履歴　：2006/10/17 SRA Y.Azuma    変更     システムエラー時のデータシートファイルClose(単No.197)
+'
+'*************************************************************************
+Public Function func_SeikyushoMain(ByVal lngKohzaCnt As Long _
+                                , ByRef strKohzaList() As String _
+                                , ByVal strOutputDir As String _
+                                , ByVal strFileName As String _
+                                , ByVal strSeiFileName As String _
+                                , ByRef strNamInfo() As String _
+                                , ByRef typTorikomi As TorikomiOutput) As Boolean
+On Error GoTo ErrHandler
+
+    Dim blnRet      As Boolean
+    
+    '1.2.1　請求書ファイル作成処理
+    blnRet = func_MakeSeikyuFile(lngKohzaCnt, strKohzaList(), strOutputDir, strFileName, strSeiFileName, typTorikomi)
+    If blnRet = False Then
+        MsgBox "Error!!　func_MakeSeikyuFile"
+        Exit Function
+    End If
+    
+
+    func_SeikyushoMain = True
+    Exit Function
+    
+FileClose:
+    
+    'データファイルを保存して閉じる
+    Workbooks(strFileName).Close savechanges:=True
+    ThisWorkbook.Application.ScreenUpdating = True
+    Exit Function
+    
+ErrHandler:
+
+    func_SeikyushoMain = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_SeikyushoMain", Err.Number, Err.Description)
+' Resume
+    On Error GoTo 0
+
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+'------------<Modify Start azuma 2006/10/17 単No.197> -----------------------
+'    On Error Resume Next
+    'データシートファイルCLOSE
+    ThisWorkbook.Application.DisplayAlerts = False
+    Workbooks(strFileName).Close False
+    ThisWorkbook.Application.DisplayAlerts = True
+'------------<Modify End   azuma 2006/10/17 単No.197> -----------------------
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：コレクションデータ作成
+'
+'引　　数　：ARG1   I   colTarget   Collection  コレクション
+'　　　　　：ARG2   I   strKey      String      KEY
+'　　　　　：ARG3   I   vntData     Variant     DATA
+'
+'戻り値　　：なし
+'
+'機能説明　：コレクションに指定されたKEY、データをセットする。
+'
+'更新履歴　：2006/09/06 SRA H.Anpo    新規作成
+'
+'*************************************************************************
+Public Function fncSetCollectionItem( _
+            ByVal colTarget As Collection, _
+            ByVal strKey As String, _
+            ByVal vntData As Variant) As Boolean
+
+On Error GoTo ErrHandler
+  
+    Dim intCnt As Integer
+    
+    fncSetCollectionItem = False
+    
+    colTarget.Add Item:=vntData, Key:=strKey
+    
+    fncSetCollectionItem = True
+
+    Exit Function
+
+ErrHandler:
+
+End Function
+
+'*************************************************************************
+'関数名　　：コレクションデータ取得
+'
+'引　　数　：ARG1   I   colTarget   Collection  コレクション
+'　　　　　：ARG2   I   strKey      String      KEY
+'
+'戻り値　　：なし
+'
+'機能説明　：コレクションから指定されたKEYのデータを取得する。
+'
+'更新履歴　：2006/09/06 SRA H.Anpo    新規作成
+'
+'*************************************************************************
+Public Function fncGetCollectionItem( _
+            ByVal colTarget As Collection, _
+            ByVal strKey As String) As String
+
+On Error GoTo ErrHandler
+  
+    fncGetCollectionItem = vbNullString
+'    fncGetCollectionItem = colTarget(strKey)
+
+        fncGetCollectionItem = colTarget.Item(strKey)
+    
+    
+    Exit Function
+
+ErrHandler:
+'MsgBox "fncGetCollectionItem : " & strKey
+End Function
+
+'*************************************************************************
+'関数名　　：TEMPLATEシート名取得
+'
+'引　　数　：ARG1   I   strDataSeetName 編集前のシート名
+'　　　　　：ARG2   O   strTempSeetName 編集後のシート名
+'
+'戻り値　　：エラー番号
+'
+'機能説明　：指定されたシート名から"・"以降の文字を取り除く
+'           ex)"請求書・全体" -> "請求書"
+'
+'更新履歴　：2006/09/06 SRA H.Anpo    新規作成
+'
+'*************************************************************************
+Private Function fncGetTempSeetName( _
+            ByVal strSrcSheetName As String, _
+            ByRef strDstSheetName As String) As Long
+
+On Error GoTo ErrHandler
+    Dim intPos  As Integer
+    
+    fncGetTempSeetName = 0
+    strDstSheetName = ""
+  
+    intPos = InStr(strSrcSheetName, "・")
+    If intPos > 0 Then
+        strDstSheetName = Mid(strSrcSheetName, 1, intPos - 1)
+    Else
+        strDstSheetName = strSrcSheetName
+    End If
+
+    Exit Function
+
+ErrHandler:
+    fncGetTempSeetName = Err.Number
+'    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_MakeSeikyuFile", Err.Number, Err.Description)
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：名前付きセルの内容を初期化
+'
+'引　　数　：ARG1   I   strBookName     ワークブック名
+'
+'戻り値　　：エラー番号
+'
+'機能説明　：指定されたブックに含まれる名前の付いたセルを初期化する
+'
+'更新履歴　：2006/09/06 SRA H.Anpo    新規作成
+'
+'*************************************************************************
+Private Function fncClearNameCell( _
+            ByVal strBookName As String) As Long
+
+On Error GoTo ErrHandler
+    
+    Dim lngCnt          As Long
+    Dim strNmSheetName  As String
+    Dim strNmName       As String
+    
+    fncClearNameCell = 0
+    
+    '名称項目を初期化
+    strNmSheetName = vbNullString
+    strNmName = vbNullString
+    
+    With Workbooks(strBookName).Names
+        For lngCnt = 1 To .Count
+            '対象外の名前
+            If Not (.Item(lngCnt).Name Like "*Print*") And _
+               Not (.Item(lngCnt).Value Like "*REF*") And _
+               InStr(1, .Item(lngCnt).Name, "=") = 0 Then
+                'シート名取得
+                strNmSheetName = Mid$(.Item(lngCnt).RefersTo, 1, InStr(1, .Item(lngCnt).RefersTo, "!") - 1)
+                strNmSheetName = Replace(strNmSheetName, "=", "")
+                '名称取得
+                strNmName = Mid$(.Item(lngCnt).Name, InStr(1, .Item(lngCnt).Name, "!") + 1)
+                
+                If strNmSheetName <> vbNullString And strNmName <> vbNullString Then
+                    If Workbooks(strBookName).Sheets(strNmSheetName).Range(strNmName) <> vbNullString Then
+                        '名前セルの内容をクリア
+                         Workbooks(strBookName).Sheets(strNmSheetName).Range(strNmName) = vbNullString
+                    End If
+                End If
+            End If
+        Next
+    End With
+
+    Exit Function
+
+ErrHandler:
+'Debug.Print strNmSheetName & "!" & strNmName
+    fncClearNameCell = Err.Number
+    Err.Clear
+Resume Next
+'Resume
+
+End Function
+
+'*************************************************************************
+'関数名　　：名前付きセルの列番号取得
+'
+'引　　数　：ARG1   I   strBookName     ワークブック名
+'　　　　　：ARG2   I   strSheetName    ワークシート名
+'　　　　　：ARG3   I   lngRowNo        行番号
+'　　　　　：ARG4   O   aryNameCol      列番号配列
+'
+'戻り値　　：エラー番号
+'
+'機能説明　：指定された行に存在する名前付きセルの列番号を取得する
+'
+'更新履歴　：2006/09/06 SRA H.Anpo    新規作成
+'
+'*************************************************************************
+Private Sub subGetNameCellColumn( _
+            ByVal strBookName As String, _
+            ByVal strSheetName As String, _
+            ByVal lngRowNo As Long, _
+            ByRef aryNameCol As Variant _
+            )
+
+    Dim lngCnt          As Long
+    Dim myObject        As Object
+    Dim myRange         As Range
+    
+On Error Resume Next
+    
+    ReDim aryNameCol(0)
+    lngCnt = 0
+    
+    Set myRange = Workbooks(strBookName).Sheets(strSheetName).Range("A" & lngRowNo & ":IV" & lngRowNo)
+'    Workbooks(strBookName).Sheets(strSheetName).Rows(lngRowNo & ":" & lngRowNo).Select
+    For Each myObject In myRange
+'    For Each myObject In Workbooks(strBookName).Sheets(strSheetName).Rows(lngRowNo & ":" & lngRowNo)
+        '以下条件の場合に列番号を保存
+        '・値がセットされている
+        '・名前が登録されている
+        '・式が登録されていない
+        If myObject.Value <> "" And InStr(myObject.Formula, "=") = 0 Then
+'Debug.Print myObject.Name
+            If myObject.Name <> vbNullString Then
+                If Err.Number = 0 Then
+                    lngCnt = lngCnt + 1
+                    ReDim Preserve aryNameCol(lngCnt)
+                    aryNameCol(lngCnt) = myObject.Column
+                Else
+                    Err.Clear
+                End If
+            End If
+        End If
+    Next
+    On Error GoTo 0
+    
+    Set myObject = Nothing
+    Set myRange = Nothing
+    
+    Exit Sub
+
+End Sub
+
+'*************************************************************************
+'関数名　　：出力シートの初期設定
+'
+'引　　数　：ARG1   I   strBookName     ワークブック名
+'　　　　　：ARG2   I   strSheetName    ワークシート名
+'
+'戻り値　　：エラー番号
+'
+'機能説明　：請求書ファイルのシートの初期設定を行う
+'
+'更新履歴　：2006/09/27 SRA H.Anpo    新規作成
+'
+'*************************************************************************
+Private Sub subOutSheetIntialize( _
+            ByVal strBookName As String, _
+            ByVal strSheetName As String _
+            )
+On Error GoTo ErrorHandler
+
+    '請求書シートの表示設定
+    With Workbooks(strBookName).Sheets(strSheetName)
+        
+        .Activate
+'------------<Modify Start azuma 2006/12/14 総No.35> -----------------------
+        With Workbooks(strBookName).Application.ActiveWindow
+            'ズーム
+            .Zoom = OUT_SHEET_ZOOM
+            
+            '先頭にスクロール
+            .ScrollRow = 1
+            .ScrollColumn = 1
+        End With
+        .Cells(1, 1).Select
+'Debug.Print "出力シートの初期設定ズームスクロール"
+        'ズーム
+        'ActiveWindow.Zoom = OUT_SHEET_ZOOM
+        
+        '先頭にスクロール
+'        ActiveWindow.ScrollRow = 1
+'        ActiveWindow.ScrollColumn = 1
+'------------<Modify End   azuma 2006/12/14 総No.35> -----------------------
+        
+        'A1セルにカーソル移動
+        .Range(OUT_SHEET_DEFAULT_CELL).Select
+    
+    End With
+
+    Exit Sub
+
+ErrorHandler:
+
+End Sub
+
+
+'*************************************************************************
+'関数名　　：帳票毎のシート編集処理
+'
+'引　　数　：ARG1   I   lngKind             編集種別
+'                                           1:データシートファイルのTemplateシートを修正
+'                                           2:請求書ファイルの各シートを修正(データセット前)
+'                                           3:請求書ファイルの各シートを修正(データセット後)
+'　　　　　：ARG2   I   typTorikomi         請求データ取込の情報
+'　　　　　：ARG3   I   strBookName         編集対象のワークブック名
+'　　　　　：ARG4   I   strTempSheetName    TEMPLATEシート名(ヘッダ無しの名称)
+'　　　　　：ARG5   I   strFullSheetName    請求書ファイルシート名(ヘッダ付の名称)
+'
+'戻り値　　：エラー番号
+'
+'機能説明　：各帳票毎に個別の編集処理を行う。
+'
+'更新履歴　：2006/09/06 SRA H.Anpo    新規作成
+'
+'*************************************************************************
+Private Function fncModifyPrintSheet( _
+            ByVal lngKind As Long, _
+            ByRef typTorikomi As TorikomiOutput, _
+            ByVal strBookName As String, _
+            ByVal strTempSheetName As String, _
+            ByVal strFullSheetName As String) As Long
+
+On Error GoTo ErrHandler
+    Dim lngRet  As Long
+
+    fncModifyPrintSheet = 0
+    Select Case strTempSheetName
+'        Case DATASHEET_BASIC:           '共通
+'            lngRet = fncModifyPrintSheetBasic( _
+'                        lngKind, _
+'                        typTorikomi, _
+'                        strBookName, _
+'                        strTempSheetName, _
+'                        strFullSheetName)
+'        Case DATASHEET_SOUFU:           '案内
+'            lngRet = fncModifyPrintSheetSoufu( _
+'                        lngKind, _
+'                        typTorikomi, _
+'                        strBookName, _
+'                        strTempSheetName, _
+'                        strFullSheetName)
+        Case DATASHEET_GOHKEI           '請求書
+            lngRet = fncModifyPrintSheetGohkei( _
+                        lngKind, _
+                        typTorikomi, _
+                        strBookName, _
+                        strTempSheetName, _
+                        strFullSheetName)
+'        Case DATASHEET_SASIZU:          '支払指図書
+'            lngRet = fncModifyPrintSheetSasizu( _
+'                        lngKind, _
+'                        typTorikomi, _
+'                        strBookName, _
+'                        strTempSheetName, _
+'                        strFullSheetName)
+'        Case DATASHEET_KISO_SUCHI1:     '月末算定基礎
+'            lngRet = fncModifyPrintSheetSuchi1( _
+'                        lngKind, _
+'                        typTorikomi, _
+'                        strBookName, _
+'                        strTempSheetName, _
+'                        strFullSheetName)
+'        Case DATASHEET_KISO_SUCHI2:     '月中算定基礎
+'            lngRet = fncModifyPrintSheetSuchi2( _
+'                        lngKind, _
+'                        typTorikomi, _
+'                        strBookName, _
+'                        strTempSheetName, _
+'                        strFullSheetName)
+'------------<Modify Start azuma 2006/12/21 (PH2)> -----------------------
+        Case DATASHEET_ZENTAI:          '総計算書
+            lngRet = fncModifyPrintSheetZentai( _
+                        lngKind, _
+                        typTorikomi, _
+                        strBookName, _
+                        strTempSheetName, _
+                        strFullSheetName)
+'------------<Modify End   azuma 2006/12/21 (PH2)> -----------------------
+'        Case DATASHEET_CHOSEI:          '計算書
+'            lngRet = fncModifyPrintSheetChosei( _
+'                        lngKind, _
+'                        typTorikomi, _
+'                        strBookName, _
+'                        strTempSheetName, _
+'                        strFullSheetName)
+'        Case DATASHEET_T21SISAN:        'T21明細
+'            lngRet = fncModifyPrintSheetT21Sisan( _
+'                        lngKind, _
+'                        typTorikomi, _
+'                        strBookName, _
+'                        strTempSheetName, _
+'                        strFullSheetName)
+'        Case DATASHEET_GOHSEI           '合成料率
+'            lngRet = fncModifyPrintSheetGohsei( _
+'                        lngKind, _
+'                        typTorikomi, _
+'                        strBookName, _
+'                        strTempSheetName, _
+'                        strFullSheetName)
+'        Case DATASHEET_TOKUKA_GATA:     '料率
+'            lngRet = fncModifyPrintSheetTokukaGata( _
+'                        lngKind, _
+'                        typTorikomi, _
+'                        strBookName, _
+'                        strTempSheetName, _
+'                        strFullSheetName)
+        
+        Case DATASHEET_G_SEKYUU:     '合算請求書
+            lngRet = fncModifyPrintSheetGassanSeikyu( _
+                        lngKind, _
+                        typTorikomi, _
+                        strBookName, _
+                        strTempSheetName, _
+                        strFullSheetName)
+        Case Else
+    End Select
+    
+    '共通処理
+    If lngKind = 3 Then
+        
+        '請求書シートの表示設定
+        Call subOutSheetIntialize(strBookName, strFullSheetName)
+        
+    End If
+    
+    Exit Function
+
+ErrHandler:
+    fncModifyPrintSheet = Err.Number
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：請求ファイル作成処理
+'
+'引　　数　：
+'           lngKohzaCnt       I       処理対象の配列インデックス
+'           strKohzaList      I       処理対象の配列
+'           strOutputDir      I       出力先フォルダ
+'           strDataFilaName   I       データシートファイル名
+'           strSeiFilaName    I       請求書ファイル名
+'           typTorikomi       I       請求データ取込の情報
+'
+'戻り値　　：Boolean
+'
+'機能説明　：請求ファイルのテンプレート作成
+'
+'更新履歴　：2006/09/06 SRA H.Anpo     新規作成
+'更新履歴　：2006/10/17 SRA Y.Azuma    変更     システムエラー時のデータシートファイルClose(単No.197)
+'更新履歴　：2007/09/25 SRA Y.Azuma    変更     ワークシート関数の削除処理
+'更新履歴　：2012/02/16 SRA H.Yonehara 変更     請求書表紙の文言追加対応
+'
+'*************************************************************************
+Private Function func_MakeSeikyuFile(ByVal lngKohzaCnt As Long _
+                                , ByRef strKohzaList() As String _
+                                , ByVal strOutputDir As String _
+                                , ByVal strDataFileName As String _
+                                , ByVal strSeiFilaName As String _
+                                , ByRef typTorikomi As TorikomiOutput) As Boolean
+
+    Const PROCEDURE_NAME = "func_MakeSeikyuFile"
+
+On Error GoTo ErrHandler
+
+    Dim lngCnt                  As Long         '汎用カウンタ
+    Dim lngRowNo                As Long         'データシート行番号
+    Dim lngNameRowNo            As Long         '名前セルの行番号(請求ファイル)
+    
+    Dim blnRet                  As Long         'リターンコード
+    Dim lngRet                  As Long         'リターンコード
+    
+    Dim strFileName             As String       '請求書ファイルのブック名
+    Dim strDataFullName         As String       'データシートファイルのブック名
+
+    Dim strDataSheetName        As String       'データシート上のシート名称
+    Dim strSheetName            As String       '請求書シート名称
+    Dim strTempSheetName        As String       'Templateシート名称
+    
+    Dim colSeetNames            As Collection   'シート名用コレクション
+    Dim colZoufukuNames         As Collection   '増幅時の名前用コレクション
+    Dim aryKyotuData()          As String       '全帳票共通データ用配列 aryKyotuData(1 To 2, 1 To N)
+                                                '   aryKyotuData(1, N) :名前
+                                                '   aryKyotuData(2, N) :設定値
+    Dim lngKyotuDataCnt         As Long         '全帳票共通データ数
+    
+    Dim strSvLocation           As String       '退避用ロケーション番号
+    Dim strSvSheetName          As String       '退避用シート名
+    Dim strSvTmpSheetName       As String       '退避用テンプレートシート名
+    
+    Dim strWkKey                As String       'KEY編集用ワーク
+    Dim strWkName               As String       '名前編集用ワーク
+    Dim lngWkOffset             As Long         'オフセット編集用ワーク
+    
+    Dim aryNameCol()            As Variant      '名前の付いたセルのカラム番号配列(初期化用)
+    
+    Dim blnSheetErr             As Boolean      'シート名不正時:TRUE
+    
+'------------<Modify Start azuma 2007/09/25 > ★★★☆-----------------------
+    Dim lngSheetMaxCnt As Long
+    Dim lngSheetCnt As Long
+'------------<Modify End   azuma 2007/09/25 > ★★★☆-----------------------
+
+'------------<Modify Start Yonehara 2012/02/16 > ----------------------------
+    Dim blnSkip                 As Boolean      'True:SKIP行／False：処理行
+'------------<Modify End   Yonehara 2012/02/16 > ----------------------------
+    
+    func_MakeSeikyuFile = False
+
+    ThisWorkbook.Application.ScreenUpdating = False
+    ThisWorkbook.Application.DisplayAlerts = False
+    ThisWorkbook.Application.DisplayStatusBar = False
+
+    '*********************************************************
+    '請求書 新規BOOK作成(ファイル名：口座番号7桁 + ".xls")
+    '*********************************************************
+    blnRet = func_FileOpen(strOutputDir, strSeiFilaName)
+    If blnRet = False Then
+        MsgBox "Error!! func_FileOpen"
+        Exit Function
+    End If
+    
+    '*********************************************************
+    'データシートファイルOPEN
+    '*********************************************************
+    strDataFullName = strOutputDir & "\" & strDataFileName
+    ThisWorkbook.Application.Workbooks.Open strDataFullName
+    
+    'ウィンドウを非表示にする
+    Workbooks(strDataFileName).Activate
+    
+'------------<Modify Start azuma 2006/12/14 総No.35> -----------------------
+    Workbooks(strDataFileName).Application.ActiveWindow.Visible = False
+'Debug.Print "５０請求書作成のVisibleを無効"
+'    ActiveWindow.Visible = False
+'------------<Modify End   azuma 2006/12/14 総No.35> -----------------------
+    
+'    'データシートファイルの名称項目を初期化
+'    fncClearNameCell strDataFileName
+    
+    '*********************************************************
+    '請求書ブックにデータシートをコピー
+    '*********************************************************
+    Call subSheetCopyOtherBook(Workbooks(strSeiFilaName), Workbooks(strDataFileName), DATASHEET_DATA, DATASHEET_DATA)
+    'Sheet1シートを削除
+    Workbooks(strSeiFilaName).Sheets(1).Delete
+    
+    '*********************************************************
+    '請求書シート作成
+    '*********************************************************
+    With Workbooks(strDataFileName).Sheets(DATASHEET_DATA)
+        '*********************************************************
+        '変数の初期化
+        '*********************************************************
+        lngRowNo = 2                            'データシート２行目から検索(１行目はヘッダー情報)
+        lngKyotuDataCnt = 0                     '全帳票共通データ数
+        ReDim aryKyotuData(1 To 2, 0)           '全帳票共通データ配列
+        
+        Set colSeetNames = New Collection       'シート名用コレクション生成
+        Set colZoufukuNames = New Collection    '増幅時の名前用コレクション生成
+        
+        strSvLocation = vbNullString            '増幅用ロケーション退避エリア初期化
+        strSvSheetName = vbNullString           'シート名退避エリア初期化
+        strSvTmpSheetName = vbNullString        'テンプレートシート名退避エリア初期化
+        
+        blnSheetErr = False                     'シート名不正時：TRUE
+        
+        '*********************************************************
+        'データシートを元に請求書シートを作成
+        '*********************************************************
+        Do While .Range(DATASHEET_SHEETNAME_COL & lngRowNo).Value <> vbNullString
+'If lngRowNo = 69 Then Stop
+            'テンプレートシート名が"条件"以外の場合処理を行う
+            If .Range(DATASHEET_DATA_TYPE & lngRowNo).Value <> "条件" Then
+            
+                '------------<Modify Start Yonehara 2012/02/16> ----------
+                blnSkip = False                 'SKIP行：TRUE
+                '------------<Modify End   Yonehara 2012/02/16> ----------
+                
+                '*********************************************************
+                'シート名作成
+                '*********************************************************
+                'データシート上のシート名(ヘッダ＋シート名)
+                strDataSheetName = .Range(DATASHEET_SHEETHEAD_COL & lngRowNo).Value & .Range(DATASHEET_SHEETNAME_COL & lngRowNo).Value
+                
+                'テンプレートシート名("・"文字以降を削除したもの)
+                lngRet = fncGetTempSeetName(.Range(DATASHEET_SHEETNAME_COL & lngRowNo).Value, strTempSheetName)
+                If lngRet <> 0 Then
+                    Err.Raise lngRet
+                End If
+                
+                '請求書ファイルに作成するシート名(ヘッダ＋テンプレートシート名)
+                strSheetName = .Range(DATASHEET_SHEETHEAD_COL & lngRowNo).Value & strTempSheetName
+                
+                '------------<Modify Start Yonehara 2012/02/16> ----------
+                'シート名が「支払指図書」、「合算支払指図書」で顧問料支払方法＝振込の場合は、当行処理SKIP
+                If (strTempSheetName = DATASHEET_SASIZU Or strTempSheetName = DATASHEET_G_SASIZU) Then
+                    If (Workbooks(strSeiFilaName).Sheets(DATASHEET_SOUFU).Range("顧問料支払方法").Value = SHIHARAI_HOHHOH_HURIKOMI) Then
+                        blnSkip = True
+                    Else
+                        blnSkip = False
+                    End If
+                Else
+                    blnSkip = False
+                End If
+                '------------<Modify End   Yonehara 2012/02/16> ----------
+                
+                If strTempSheetName = DATASHEET_BASIC Then
+                    '*********************************************************
+                    '共通情報退避
+                    '*********************************************************
+                    'テンプレートシート名が"共通"の場合は配列に共通情報を保存
+                    lngKyotuDataCnt = lngKyotuDataCnt + 1
+                    ReDim Preserve aryKyotuData(1 To 2, lngKyotuDataCnt)
+                    aryKyotuData(1, lngKyotuDataCnt) = .Range(DATASHEET_ITEMNAME_COL & lngRowNo).Text        '名前
+                    aryKyotuData(2, lngKyotuDataCnt) = RTrim(.Range(DATASHEET_RESULT_COL & lngRowNo).Text) '設定値
+                
+                Else
+                    '*********************************************************
+                    '新規シート作成
+                    '*********************************************************
+                    '作成済みかチェック
+                    If fncGetCollectionItem(colSeetNames, strSheetName) = vbNullString Then
+                        '未作成時はシート作成
+                        '*********************************************************
+                        'シート名チェック
+                        '*********************************************************
+                        On Error Resume Next
+                        Workbooks(strDataFileName).Sheets(strTempSheetName).Activate
+                        If Err.Number <> 0 Then
+                            blnSheetErr = True
+                            On Error GoTo ErrHandler
+                            Err.Raise -1, , "シート名が不正です。"
+                        Else
+                            blnSheetErr = False
+                        End If
+                        On Error GoTo ErrHandler
+    
+                        '------------<Modify Start Yonehara 2012/02/16> ----------
+                        'If blnSheetErr = False Then
+                        If blnSheetErr = False And blnSkip = False Then
+                        '------------<Modify End   Yonehara 2012/02/16> ----------
+                        
+                            '*********************************************************
+                            '帳票毎の編集処理
+                            '*********************************************************
+                            '前処理シートの編集処理(請求書ファイルのシートを編集)
+                            If strSvSheetName <> vbNullString Then
+                                lngRet = fncModifyPrintSheet(3, typTorikomi, strSeiFilaName, strSvTmpSheetName, strSvSheetName)
+                            End If
+                            '新規シートの編集処理(データシートファイルのテンプレートシートを編集)
+                            lngRet = fncModifyPrintSheet(1, typTorikomi, strDataFileName, strTempSheetName, strSheetName)
+                            
+                            '*********************************************************
+                            'シート作成
+                            '*********************************************************
+                            Call subSheetCopyOtherBook(Workbooks(strSeiFilaName), Workbooks(strDataFileName), strTempSheetName, strSheetName)
+    
+                            '作成済みのシート名をコレクションに保存
+                            Call fncSetCollectionItem(colSeetNames, strSheetName, strDataSheetName)
+    
+                            '*********************************************************
+                            '共通情報セット
+                            '*********************************************************
+                            On Error Resume Next    '共通情報を未使用の帳票対応
+    
+                            For lngCnt = 1 To UBound(aryKyotuData, 2)
+                                Workbooks(strSeiFilaName).Sheets(strSheetName).Range(aryKyotuData(1, lngCnt)) = "" & aryKyotuData(2, lngCnt)
+                            Next
+    
+                            On Error GoTo ErrHandler
+    
+'                            '*********************************************************
+'                            '帳票毎の編集処理
+'                            '*********************************************************
+'                            lngRet = fncModifyPrintSheet(2, typTorikomi, strSeiFilaName, strTempSheetName, strSheetName)
+                        
+                            'シート名を退避
+                            strSvSheetName = strSheetName           '請求書ファイルのシート名
+                            strSvTmpSheetName = strTempSheetName    'テンプレートシートのシート名
+                        
+                        End If
+                    End If
+                
+                    '------------<Modify Start Yonehara 2012/02/16> --------------
+                    'If blnSheetErr = False Then
+                    If blnSheetErr = False And blnSkip = False Then
+                    '------------<Modify End   Yonehara 2012/02/16> --------------
+                    
+                        '*********************************************************
+                        'データをセット
+                        '*********************************************************
+                        If Trim(.Range(DATASHEET_OFFSET_COL & lngRowNo).Value) <> vbNullString Then
+                            '*********************************************************
+                            '増幅の場合
+                            '*********************************************************
+                            '増幅用コレクションのKEYを編集
+                            'KEY:シート名+項目名　DATA:項目名
+                            strWkKey = strDataSheetName & .Range(DATASHEET_ITEMNAME_COL & lngRowNo)
+                            
+                            'オフセットが10000以上の場合は10000で割った余りを求める
+                            lngWkOffset = .Range(DATASHEET_OFFSET_COL & lngRowNo).Value Mod GASSAN_OFFSET_BASE
+                            If lngWkOffset = 0 Then
+                                '増幅の先頭行の項目名をコレクションに保存
+                                Call fncSetCollectionItem(colZoufukuNames, strWkKey, .Range(DATASHEET_ITEMNAME_COL & lngRowNo).Value)
+                                
+                            End If
+                            
+                            If lngWkOffset > 0 And Val(strSvLocation) Mod GASSAN_OFFSET_BASE <> lngWkOffset Then
+                                '*********************************************************
+                                '行増幅処理
+                                '*********************************************************
+                                '名前の付いたセルの行番号を取得
+                                lngNameRowNo = Workbooks(strSeiFilaName).Sheets(strSheetName).Range(.Range(DATASHEET_ITEMNAME_COL & lngRowNo)).Row
+                                
+                                '名前の付いたセルの列番号を保存する(クリアするため)
+                                Call subGetNameCellColumn(strSeiFilaName, strSheetName, lngNameRowNo, aryNameCol)
+                                
+                                '新規行を追加する
+                                With Workbooks(strSeiFilaName).Sheets(strSheetName)
+                                    .Rows(lngNameRowNo & ":" & lngNameRowNo).Copy
+                                    .Rows(lngNameRowNo + lngWkOffset _
+                                         & ":" & lngNameRowNo + lngWkOffset).Insert Shift:=xlDown
+                                End With
+                                
+                                '保存した列番号のセルをクリアする
+                                For lngCnt = 1 To UBound(aryNameCol)
+                                    Workbooks(strSeiFilaName).Sheets(strSheetName).Cells( _
+                                        lngNameRowNo + .Range(DATASHEET_OFFSET_COL & lngRowNo).Value, _
+                                        aryNameCol(lngCnt) _
+                                        ).Value = vbNullString
+                                Next
+                                
+                            End If
+                            
+                            '増幅基準行の名前を取得
+                            strWkName = fncGetCollectionItem(colZoufukuNames, strWkKey)
+
+                        Else
+                            lngWkOffset = 0
+                            strWkName = .Range(DATASHEET_ITEMNAME_COL & lngRowNo).Value
+                        End If
+                        
+                        '名前の位置からオフセット数下の行にデータをセット
+                        Workbooks(strSeiFilaName).Sheets(strSheetName).Range(strWkName).Offset(lngWkOffset, 0) _
+                            = .Range(DATASHEET_RESULT_COL & lngRowNo).Text
+'If strWkName = "実績超過収益率G" Then Stop
+                        With Workbooks(strSeiFilaName).Sheets(strSheetName)
+                            '対象行の削除フラグ用セルをクリア
+                            If .Range(COLADR_DELETE_FLAG & .Range(strWkName).Row) <> vbNullString Then
+                                lngRet = fncSetDelFlag(strSeiFilaName, strSheetName, .Range(strWkName).Row, .Range(strWkName).Row, vbNullString)
+                                If lngRet <> 0 Then
+                                    Err.Raise lngRet
+                                End If
+                            End If
+                        End With
+                    
+                    End If
+                
+                End If
+            
+                'オフセット退避
+                strSvLocation = .Range(DATASHEET_OFFSET_COL & lngRowNo).Value
+
+            End If
+            
+            lngRowNo = lngRowNo + 1
+        Loop
+        
+        '*********************************************************
+        '帳票毎の編集処理
+        '*********************************************************
+        '前処理シートの編集処理(請求書ファイルのシートを編集)
+        If strSvSheetName <> vbNullString Then
+            lngRet = fncModifyPrintSheet(3, typTorikomi, strSeiFilaName, strSvTmpSheetName, strSvSheetName)
+            If lngRet <> 0 Then
+                Err.Raise lngRet
+            End If
+        End If
+        
+    End With
+    
+'------------<Modify Start azuma 2007/09/25 > ★★★☆-----------------------
+    '請求書で条件式になっているセルを表示値の値に変換する。
+    If gCOPY_DEBUG_FLG = False Then
+        lngSheetMaxCnt = Workbooks(strSeiFilaName).Sheets.Count
+
+        For lngSheetCnt = 2 To lngSheetMaxCnt
+            With Workbooks(strSeiFilaName).Worksheets(lngSheetCnt)
+                .Range(gCOPY_RANGE).Copy
+                .Range(gCOPY_RANGE).PasteSpecial Paste:=xlPasteValues, Operation:=xlNone, SkipBlanks:=False, Transpose:=False
+                .Select
+                .Range(OUT_SHEET_DEFAULT_CELL).Select
+            End With
+        Next lngSheetCnt
+    End If
+'------------<Modify End   azuma 2007/09/25 > ★★★☆-----------------------
+    
+    
+    '*********************************************************
+    '後処理
+    '*********************************************************
+    '請求書ファイルのデータシートを非表示
+    Workbooks(strSeiFilaName).Worksheets(DATASHEET_DATA).Visible = False
+    
+    'データシートファイルCLOSE
+    Workbooks(strDataFileName).Close False
+        
+    'データシートファイル削除
+    ThisWorkbook.Application.DisplayAlerts = False
+    Kill strOutputDir & "\" & strDataFileName
+    ThisWorkbook.Application.DisplayAlerts = True
+    
+    Set colSeetNames = Nothing
+    Set colZoufukuNames = Nothing
+    Erase aryKyotuData
+    ThisWorkbook.Application.DisplayAlerts = True
+    ThisWorkbook.Application.DisplayStatusBar = True
+    
+    func_MakeSeikyuFile = True
+
+Exit Function
+
+ErrHandler:
+
+'---- Error Log Start ----------------------------------------------------
+On Error Resume Next
+    
+    Dim strErrMsg   As String
+    Dim lng As Long
+    lng = Err.Number
+'Resume
+    strErrMsg = ""
+    strErrMsg = strErrMsg & "データシートから請求書作成中にシステムエラーが発生しました。" & vbLf
+    strErrMsg = strErrMsg & "システム管理者に連絡して下さい。" & vbLf
+    strErrMsg = strErrMsg & "  ファイル名：" & strDataFullName & vbLf
+    strErrMsg = strErrMsg & " データシートエラー  行番号：" & lngRowNo & vbLf
+    strErrMsg = strErrMsg & "<< データシートの内容 >>" & vbLf
+    strErrMsg = strErrMsg & "  ヘッダー　：" & Workbooks(strDataFileName).Sheets(DATASHEET_DATA).Range(DATASHEET_SHEETHEAD_COL & lngRowNo).Value & vbLf
+    strErrMsg = strErrMsg & "  シート名　：" & Workbooks(strDataFileName).Sheets(DATASHEET_DATA).Range(DATASHEET_SHEETNAME_COL & lngRowNo).Value & vbLf
+    strErrMsg = strErrMsg & "  項目名　　：" & Workbooks(strDataFileName).Sheets(DATASHEET_DATA).Range(DATASHEET_ITEMNAME_COL & lngRowNo).Value & vbLf
+    strErrMsg = strErrMsg & "  データ　　：" & Workbooks(strDataFileName).Sheets(DATASHEET_DATA).Range(DATASHEET_RESULT_COL & lngRowNo).Value & vbLf
+    
+    'エラー情報構造体セット
+    With gusrErr
+        .ModuleId = MODULE_NAME         'モージュールID
+        .Procedure = PROCEDURE_NAME     'プロシージャID
+        .MsgCode = ERR_MSGCD_VB         'メッセージ区分
+        .ErrNum = Err.Number            'システムエラーコード
+        .KohzaNo = strKohzaList(0, KOHZALIST_KOHZA_NO)
+        .ErrDescript = Err.Description  'システムエラー内容
+        .MsgNaiyou = "請求書作成中にシステムエラー発生"    'メッセージ内容(ブックファイル名)
+        .MsgSyousai = strErrMsg         'メッセージ詳細
+        
+        'エラーシート書き込み
+        Call fncWriteErrSheet(ERROR_SHEETNAME)
+    End With
+        
+'    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_MakeSeikyuFile", Err.Number, strErrMsg & Err.Description)
+    
+'------------<Modify Start azuma 2006/10/17 単No.197> -----------------------
+'    On Error Resume Next
+    'データシートファイルCLOSE
+    ThisWorkbook.Application.DisplayAlerts = False
+    ThisWorkbook.Application.Workbooks(strFileName).Close False
+    ThisWorkbook.Application.DisplayAlerts = True
+'------------<Modify End   azuma 2006/10/17 単No.197> -----------------------
+    
+Err.Clear
+Resume Next
+
+
+
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+
+
+'*************************************************************************
+'関数名　　：請求ファイルを開く
+'
+'引　　数　：
+'           strOutputDir    I       フォルダ
+'           strFileName     I       ファイル名
+'
+'戻り値　　：Boolean
+'
+'機能説明　：
+'
+'更新履歴　：2006/08/09 SRA Y.Azuma    新規作成
+'更新履歴　：2007/05/31 SRA Y.Azuma    変更     (PH3)連結　最後が"\"の場合の対応
+'
+'*************************************************************************
+Private Function func_FileOpen(ByVal strOutputDir As String _
+                             , ByVal strFileName As String) As Boolean
+On Error GoTo ErrHandler
+
+    Dim wbNewBook As Workbook
+
+    func_FileOpen = False
+
+    'ファイル名作成
+'''    strFileName = strKohzaNo & ".xls"
+    
+'------------<Modify Start azuma 2006/12/14 総No.35> -----------------------
+    '新規ワークブックのオープン
+    Set wbNewBook = ThisWorkbook.Application.Workbooks.Add
+    
+    '新規ワークブックの別名保存
+'------------<Modify Start azuma 2007/05/31 (PH3)> -----------------------
+    If Right(strOutputDir, 1) = "\" Then
+        wbNewBook.Application.ActiveWorkbook.SaveAs Filename:=strOutputDir & strFileName
+    Else
+        wbNewBook.Application.ActiveWorkbook.SaveAs Filename:=strOutputDir & "\" & strFileName
+    End If
+'    wbNewBook.Application.ActiveWorkbook.SaveAs Filename:=strOutputDir & "\" & strFileName
+'------------<Modify End   azuma 2007/05/31 (PH3)> -----------------------
+    
+    Set wbNewBook = Nothing
+'Debug.Print "50新規ワークブックオープン"
+'    '新規ワークブックのオープン
+'    Application.Workbooks.Add
+'
+'    '新規ワークブックの別名保存
+'    ActiveWorkbook.SaveAs Filename:=strOutputDir & "\" & strFileName
+'------------<Modify End   azuma 2006/12/14 総No.35> -----------------------
+    
+    func_FileOpen = True
+    Exit Function
+ErrHandler:
+
+    func_FileOpen = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_FileOpen", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Set wbNewBook = Nothing
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：ワークシートコピー処理(別ブックにコピー)
+'
+'引　　数　：
+'           objDstBook      I       貼付先ブック
+'           objSrcBook      I       コピー元ブック
+'           strCopySheet    I       コピーシート名(省略可)
+'           strNewName      I       貼付後のシート名(省略可)
+'
+'戻り値　　：なし
+'
+'機能説明　：指定されたシートをブックの最後に追加する。シートの指定がない場合
+'           先頭のシートをコピーして貼付を行う。
+'
+'更新履歴　：2006/09/07 SRA H.Anpo  新規作成
+'
+'*************************************************************************
+Private Sub subSheetCopyOtherBook(ByVal objDstBook As Workbook _
+                             , ByVal objSrcBook As Workbook _
+                             , Optional ByVal strCopySheet As String = "" _
+                             , Optional ByVal strNewName As String = "")
+    
+    Dim lngMaxSheetNum      As Long
+    Dim blnDisplayAlerts    As Boolean
+    
+    lngMaxSheetNum = objDstBook.Sheets.Count
+
+'    Workbooks.Open ThisWorkbook.Path & "\" & TEMPLATE_FOLDER & "\" & strBook2
+    If Trim(strCopySheet) <> "" Then
+        objSrcBook.Sheets(strCopySheet).Copy After:=objDstBook.Sheets(lngMaxSheetNum)
+    Else
+        objSrcBook.Sheets(1).Copy After:=objDstBook.Sheets(lngMaxSheetNum)
+    End If
+    
+'    objSrcBook.Close savechanges:=False
+    
+    '貼付たシートの新たな名前をつける
+    If Trim(strNewName) <> "" Then
+        lngMaxSheetNum = objDstBook.Sheets.Count
+        objDstBook.Sheets(lngMaxSheetNum).Name = strNewName
+    End If
+
+End Sub
+
+
+'*************************************************************************
+'関数名　　：ワークシートのコピー貼付処理
+'
+'引　　数　：
+'           strBook1        I       貼付先ブック
+'           strBook2        I       コピー元ブック
+'           strCopySheet    I       コピーシート名(省略可)
+'           strNewName      I       貼付後のシート名(省略可)
+'
+'戻り値　　：なし
+'
+'機能説明　：指定されたシートをブックの最後に追加する。シートの指定がない場合
+'           先頭のシートをコピーして貼付を行う。
+'
+'更新履歴　：2006/08/09 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Private Sub sub_SheetCopyPaste(ByVal strBook1 As String _
+                             , ByVal strBook2 As String _
+                             , Optional ByVal strCopySheet As String = "" _
+                             , Optional ByVal strNewName As String = "")
+    
+    Dim lngMaxSheetNum As Long
+    
+    
+    lngMaxSheetNum = Workbooks(strBook1).Sheets.Count
+
+    Workbooks.Open ThisWorkbook.Path & "\" & TEMPLATE_FOLDER & "\" & strBook2
+    If Trim(strCopySheet) <> "" Then
+        Workbooks(strBook2).Sheets(strCopySheet).Copy After:=Workbooks(strBook1).Sheets(lngMaxSheetNum)
+    Else
+        Workbooks(strBook2).Sheets(1).Copy After:=Workbooks(strBook1).Sheets(lngMaxSheetNum)
+    End If
+    
+    Workbooks(strBook2).Close savechanges:=False
+    
+    '貼付たシートの新たな名前をつける
+    If Trim(strNewName) <> "" Then
+        lngMaxSheetNum = Workbooks(strBook1).Sheets.Count
+        Workbooks(strBook1).Sheets(lngMaxSheetNum).Name = strNewName
+    End If
+
+End Sub
+
+
+
+
+
+'==== 2006/09/08 Deleted By H.Anpo start
+''*************************************************************************
+''関数名　　：請求データ貼付処理
+''
+''引　　数　：
+''           iKind       I       削除対象
+''           AllDel      I       全削除フラグ
+''
+''戻り値　　：Boolean
+''
+''機能説明　：
+''
+''更新履歴　：2006/08/09 SRA Y.Azuma    新規作成
+''
+''*************************************************************************
+'Private Function func_PasteSeikyuData() As Boolean
+'
+'On Error GoTo ErrHandler
+'
+'
+'    func_PasteSeikyuData = False
+'
+''*******************************************************
+''* 関数開始　                                        　*
+''*******************************************************
+'
+'
+'
+'    func_PasteSeikyuData = True
+'
+'Exit Function
+'
+'ErrHandler:
+'
+'    func_PasteSeikyuData = False
+'
+''---- Error Log Start ----------------------------------------------------
+'    Dim lng As Long
+'    lng = Err.Number
+'    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_PasteSeikyuData", Err.Number, Err.Description)
+'    On Error GoTo 0
+'    Err.Raise lng
+''---- Error Log End   ----------------------------------------------------
+'
+'
+'End Function
+'==== 2006/09/08 Deleted By H.Anpo end
+

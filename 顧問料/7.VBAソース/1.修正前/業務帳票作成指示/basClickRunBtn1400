@@ -1,0 +1,932 @@
+Attribute VB_Name = "basClickRunBtn1400"
+Option Explicit
+
+'*************************************************************************
+'プロジェクト名：新契約管理システム・業務帳票作成指示
+'オブジェクト名：basClickRunBtn1400
+'機能概要　：メイン画面
+'更新履歴　：2006/08/22 SRA 金          新規作成
+'
+'*************************************************************************
+
+Const MODULE_NAME = "basClickRunBtn1400"
+
+'------------<Modify Start azuma 2007/04/27 > -----------------------
+''Private Const cSTART_RAW1 = 18
+''Private Const cSTART_RAW2 = 28
+'------------<Modify End   azuma 2007/04/27 > -----------------------
+
+Private Const cBaseFile = gc帳票Base4
+Private Const cPreFName = gc帳票名4
+
+' 段階料率名取得処理の為
+'------------<Modify 1兆円超対応20080218 2008/02/29 SRA市川 Start > ----------------------------------------
+'Private Const cKetaNo = 5            ' 桁数
+Private Const cKetaNo = 7            ' 桁数
+'------------<Modify 1兆円超対応20080218 2008/02/29 SRA市川 End   > ----------------------------------------
+Private Const cSpace = " "           ' 初期スペース
+Private Const cWaruNo = 10           ' 割る数
+Private Const cMinNo = 0             ' Min数
+'------------<Modify 1兆円超対応20080218 2008/02/29 SRA市川 Start > ----------------------------------------
+'Private Const cMaxNo = 99999         ' Max数
+Private Const cMaxNo = 9999999         ' Max数
+'------------<Modify 1兆円超対応20080218 2008/02/29 SRA市川 End   > ----------------------------------------
+
+'*************************************************************************
+'関数名　　：投資顧問料率案内書(帳票作成)
+'引　　数　：
+'           objTarget        I           対象のシート
+'戻り値　　：
+'機能説明　：
+'更新履歴　：2006/08/22 SRA             新規作成
+'更新履歴　：2007/04/27 SRA Y.Azuma     変更     (PH2)消費税取得方法変更
+'
+'*************************************************************************
+Public Function fncClickRunBtn1400(ByRef objTarget As Object) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncClickRunBtn1400"
+
+On Error GoTo ErrSection
+
+    Dim strDay              As String
+    Dim strKouza            As String
+    Dim strOutFName         As String
+    Dim strData1()          As String
+    Dim strData2()          As String
+    Dim strData3()          As String
+    Dim strRate             As String
+    
+'------------<Modify Start azuma 2007/04/27 > -----------------------
+    Dim strSeikyuKikanFrom  As String    '請求期間FROM
+'------------<Modify End   azuma 2007/04/27 > -----------------------
+    
+    Call subBeginProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    fncClickRunBtn1400 = False
+   
+    With objTarget
+
+        ' 作成選択の場合
+        If .chkMake.Value = True Then
+        
+            strKouza = Trim(.Range("口座番号2").Value)
+            strDay = Trim(.Range("適用開始日").Value)
+            
+'------------<Modify Start azuma 2007/04/27 > -----------------------
+            '請求期間FROMを取得する。
+            If fncGetDBData1400D(strKouza, strDay, strSeikyuKikanFrom) = False Then
+                GoTo RtnErrSection
+            End If
+            
+            ' 消費税(％単位)
+            If fncGetZeiRate(strSeikyuKikanFrom, strRate) = False Then
+               GoTo RtnErrSection
+            End If
+
+'            ' 消費税(％単位)
+'            If fncGetZeiRate(strRate) = False Then
+'               GoTo RtnErrSection
+'            End If
+
+'------------<Modify End   azuma 2007/04/27 > -----------------------
+            ' データ取得
+            ' --- 資産割合 --------------------------------------------------------------
+            If fncGetDBData1400A(strKouza, strDay, strData1()) = False Then
+                GoTo RtnErrSection
+            End If
+            ' --- 合成料率 --------------------------------------------------------------
+            If fncGetDBData1400B(strData1(), strData2()) = False Then
+                GoTo RtnErrSection
+            End If
+            ' --- 合成料率名 --------------------------------------------------------------
+            If fncGetDBData1400C(strData1(), strData3()) = False Then
+                GoTo RtnErrSection
+            End If
+        
+            ' 帳票ファイル取得
+            If fncGetFile1400(strKouza, strDay, strOutFName) = False Then
+                GoTo RtnErrSection
+            End If
+        
+            ' フォルダをつける。
+            strOutFName = .Range("保存フォルダ").Value & "\" & strOutFName
+            
+            ' ファイルコピー
+            If fncCopyBook(cBaseFile, strOutFName) = False Then
+                GoTo RtnErrSection
+            End If
+            
+            ' ファイル作成
+            If fncMakeBook1400(strOutFName, strRate, strKouza, strDay, _
+                               strData1(), strData2(), strData3()) = False Then
+                ' ファイル削除
+                fncDeleteFile (strOutFName)
+                
+                GoTo RtnErrSection
+            End If
+        End If
+    
+        ' 印刷選択の場合
+        If .chkPrint.Value = True Then
+            ' ファイル印刷
+            If fncPrintBook(cPreFName, .Range("保存フォルダ").Value) = False Then
+                GoTo RtnErrSection
+            End If
+        End If
+    
+    End With
+   
+    fncClickRunBtn1400 = True
+    Erase strData1
+    Erase strData2
+    Erase strData3
+    
+    Call subEndProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                    *
+'*******************************************************
+ErrSection:
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+'*******************************************************
+'* リターンエラーセクション                            *
+'*******************************************************
+RtnErrSection:
+                
+    fncClickRunBtn1400 = False
+    Erase strData1
+    Erase strData2
+    Erase strData3
+    
+End Function
+
+
+'*************************************************************************
+'関数名　　：投資顧問料率案内書(帳票ファイル取得)
+'引　　数　：
+'           strKouza           I           口座番号
+'           strDay             I           適用開始日
+'           strOutFName        O           出力ファイル名
+'戻り値　　：処理結果
+'機能説明　：投資顧問料率案内書を出力するファイルを取得する。
+'更新履歴　：2006/08/22 SRA             新規作成
+'
+'*************************************************************************
+Public Function fncGetFile1400(ByVal strKouza As String, ByVal strDay As String, _
+                               ByRef strOutFName As String) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncGetFile1400"
+
+On Error GoTo ErrSection
+
+    Dim strDate         As String
+    Dim strTime         As String
+
+    strOutFName = ""
+    
+    fncGetFile1400 = False
+    
+    Call gfunc_GetSvDateTime(strDate, strTime)
+       
+    ' 出力帳票ファイル
+    strOutFName = cPreFName
+    strOutFName = strOutFName & "_" & strDate
+    strOutFName = strOutFName & "_" & strTime
+    strOutFName = strOutFName & "-(" & strKouza
+    strOutFName = strOutFName & "-" & strDay
+    strOutFName = strOutFName & ")"
+    strOutFName = strOutFName & ".xls"
+    
+    fncGetFile1400 = True
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncGetFile1400 = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+End Function
+
+'*************************************************************************
+'関数名　　：投資顧問料率案内書(帳票データ取得)
+'引　　数　：
+'           strKouza           I           口座番号
+'           strDay             I           適用開始日
+'           strData1()         O           取得データ（資産割合）
+'戻り値　　：処理結果
+'機能説明　：投資顧問料率案内書のデータを取得する。
+'更新履歴　：2006/08/22 SRA             新規作成
+'        　：2007/10/29 SRA T.Ichikawa  変更     (PH4)SQLを修正(新テーブルを参照する)
+'
+'*************************************************************************
+Public Function fncGetDBData1400A(ByVal strKouza As String, ByVal strDay As String, _
+                                  ByRef strData1() As String) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncGetDBData1400"
+
+On Error GoTo ErrSection
+
+    Dim strSql      As String
+    Dim vData()     As Variant
+    Dim lngCol      As Long
+    Dim lngRow      As Long
+    Dim lngRowCnt   As Long
+    Dim lngColCnt   As Long
+    
+    fncGetDBData1400A = False
+    
+'*******************************************************
+'* SQL文作成                                           *
+'*******************************************************
+
+    strSql = ""
+'------------<Modify Start Ichikawa 2007/10/29 (PH4)> -----------------------
+'    strSql = strSql & " select "
+'    strSql = strSql & "  r.kohza_no ,"
+'    strSql = strSql & "  r.seikyu_kikan_id ,"
+'    strSql = strSql & "  r.rate_tekiyoh_kikan_id ,"
+'    strSql = strSql & "  RTRIM(y.seikyuu_name1) ,"
+'    strSql = strSql & "  r.rate_code ,"
+'    strSql = strSql & "  r.shisan_code ,"
+'    strSql = strSql & "  RTRIM(s.shisan_name) ,"
+'    strSql = strSql & "  nvl(r.shisan_wariai, 0) ,"
+'    strSql = strSql & "  r.kiso_suchi_keisan_hohhoh ,"
+'    strSql = strSql & "  DECODE(r.kiso_suchi_keisan_hohhoh , "
+'    strSql = strSql & "        '1', '運用資産の月末額の期中平均額'  , '2', '運用資産の月中額の期中平均額', "
+'    strSql = strSql & "        '3', '運用資産の前月末額の期中平均額', '4', '運用資産の前月中額の期中平均額'      ,"
+'    strSql = strSql & "        '5', '運用資産の期末額'             , '6', '運用資産の前期末額と今期末額の平均額',"
+'    strSql = strSql & "        '7', '運用資産の前期末額'           , "
+'    strSql = strSql & "        '' ) 基礎数値名 "
+''060929 ※PH1では1～4まで対応、5以後はPH2以降対応する。
+''060929   8,9,A は出力しない。
+'    strSql = strSql & " from kyk_rate_tekiyoh_kikan  r , "
+'    strSql = strSql & "      keiyaku_kouza           y , "
+'    strSql = strSql & "      kyk_shisan              s   "
+'    strSql = strSql & " where r.shisan_bunrui = '0' and r.sakujo_flg = '0' "
+'    strSql = strSql & "  and  r.kohza_no = '" & strKouza & "' "
+'    strSql = strSql & "  and  r.rate_tekiyoh_kikan_from = '" & strDay & "' "
+'    strSql = strSql & "  and  r.shisan_code <> '0000' "
+'    strSql = strSql & "  and  s.shisan_bunrui = r.shisan_bunrui "
+'    strSql = strSql & "  and  s.shisan_code = r.shisan_code  "
+'    strSql = strSql & "  and  s.sakujo_flg  = r.sakujo_flg  "
+'    strSql = strSql & "  and  y.kouza_no    = r.kohza_no "
+'    strSql = strSql & "  and EXISTS ( select g.kohza_no from  kyk_gohsei_rate g "
+'    strSql = strSql & "         where g.sakujo_flg = r.sakujo_flg and g.kohza_no = r.kohza_no "
+'    strSql = strSql & "          and  g.seikyu_kikan_id = r.seikyu_kikan_id       "
+'    strSql = strSql & "          and  g.rate_tekiyoh_kikan_id = r.rate_tekiyoh_kikan_id )"
+'    strSql = strSql & " order by r.shisan_code "
+    
+    strSql = strSql & "SELECT" & vbCrLf
+    strSql = strSql & "    R.KOHZA_NO," & vbCrLf
+    strSql = strSql & "    R.SEIKYU_KIKAN_ID," & vbCrLf
+    strSql = strSql & "    R.RATE_TEKIYOH_KIKAN_ID," & vbCrLf
+    strSql = strSql & "    RTRIM(KZ.SEIKYUU_NAME1)," & vbCrLf
+    strSql = strSql & "    R.RATE_CODE," & vbCrLf
+    strSql = strSql & "    R.SHISAN_CODE," & vbCrLf
+    strSql = strSql & "    RTRIM(S.SHISAN_NAME)," & vbCrLf
+    strSql = strSql & "    NVL(R.SHISAN_WARIAI, 0)," & vbCrLf
+    strSql = strSql & "    R.KISO_SUCHI_KEISAN_HOHHOH," & vbCrLf
+    strSql = strSql & "    DECODE(R.KISO_SUCHI_KEISAN_HOHHOH," & vbCrLf
+    strSql = strSql & "        '1', '運用資産の月末額の期中平均額'  , '2', '運用資産の月中額の期中平均額', " & vbCrLf
+    strSql = strSql & "        '3', '運用資産の前月末額の期中平均額', '4', '運用資産の前月中額の期中平均額'      ," & vbCrLf
+    strSql = strSql & "        '5', '運用資産の期末額'             , '6', '運用資産の前期末額と今期末額の平均額'," & vbCrLf
+    strSql = strSql & "        '7', '運用資産の前期末額'           , " & vbCrLf
+    strSql = strSql & "        '' ) 基礎数値名 " & vbCrLf
+    strSql = strSql & "FROM" & vbCrLf
+    strSql = strSql & "    KYK_RATE_TEKIYOH_KIKAN R," & vbCrLf
+    strSql = strSql & "    KYK_KOHZA_ZOKUSEI      KZ," & vbCrLf
+    strSql = strSql & "    KYK_SHISAN             S" & vbCrLf
+    strSql = strSql & "WHERE" & vbCrLf
+    strSql = strSql & "    R.SHISAN_BUNRUI = '0'" & vbCrLf
+    strSql = strSql & "AND R.SAKUJO_FLG = '0'" & vbCrLf
+    strSql = strSql & "AND R.KOHZA_NO = '" & strKouza & "'" & vbCrLf
+    strSql = strSql & "AND R.RATE_TEKIYOH_KIKAN_FROM = '" & strDay & "' " & vbCrLf
+    strSql = strSql & "AND R.SHISAN_CODE <> '0000'" & vbCrLf
+    strSql = strSql & "AND S.SHISAN_BUNRUI = R.SHISAN_BUNRUI" & vbCrLf
+    strSql = strSql & "AND S.SHISAN_CODE = R.SHISAN_CODE" & vbCrLf
+    strSql = strSql & "AND S.SAKUJO_FLG = R.SAKUJO_FLG" & vbCrLf
+    strSql = strSql & "AND KZ.KOHZA_NO = R.KOHZA_NO" & vbCrLf
+    strSql = strSql & "AND EXISTS (" & vbCrLf
+    strSql = strSql & "        SELECT" & vbCrLf
+    strSql = strSql & "            G.KOHZA_NO" & vbCrLf
+    strSql = strSql & "        FROM" & vbCrLf
+    strSql = strSql & "            KYK_GOHSEI_RATE G" & vbCrLf
+    strSql = strSql & "        WHERE" & vbCrLf
+    strSql = strSql & "            G.SAKUJO_FLG = R.SAKUJO_FLG" & vbCrLf
+    strSql = strSql & "        AND G.KOHZA_NO = R.KOHZA_NO" & vbCrLf
+    strSql = strSql & "        AND G.SEIKYU_KIKAN_ID = R.SEIKYU_KIKAN_ID" & vbCrLf
+    strSql = strSql & "        AND G.RATE_TEKIYOH_KIKAN_ID = R.RATE_TEKIYOH_KIKAN_ID)" & vbCrLf
+    strSql = strSql & "ORDER BY" & vbCrLf
+    strSql = strSql & "    R.SHISAN_CODE" & vbCrLf
+'------------<Modify End   Ichikawa 2007/10/29 (PH4)> -----------------------
+    
+    'データ取得
+    Call gclsDB.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow)
+    If lngRow > 0 Then
+        ' 動的配列変数に対するメモリ領域の再割り当てを行います
+        ReDim strData1(lngRow, lngCol)
+        
+        '取得データを配列に設定
+        For lngRowCnt = 0 To lngRow - 1
+            For lngColCnt = 0 To UBound(strData1, 2) - 1
+                strData1(lngRowCnt, lngColCnt) = CStr(vData(lngColCnt, lngRowCnt))
+            Next
+        Next lngRowCnt
+        fncGetDBData1400A = True
+    Else
+        ' 該当データが存在しません。
+'       Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3001, cPreFName & "(資産割合)", "")
+        Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3001, cPreFName, "")
+    End If
+    
+    Erase vData
+    
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncGetDBData1400A = False
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- エラーログ出力 End  ---------------------------------
+
+    Erase vData
+    Erase strData1
+   
+End Function
+
+
+'*************************************************************************
+'関数名　　：投資顧問料率案内書(帳票データ取得)
+'引　　数　：
+'           strData1()         I           条件データ（資産割合）
+'           strData2()         O           取得データ（合成料率）
+'戻り値　　：処理結果
+'機能説明　：投資顧問料率案内書のデータを取得する。
+'更新履歴　：2006/08/22 SRA             新規作成
+'
+'*************************************************************************
+Public Function fncGetDBData1400B(ByRef strData1() As String, _
+                                  ByRef strData2() As String) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncGetDBData1400"
+
+On Error GoTo ErrSection
+
+    Dim strSql      As String
+    Dim vData()     As Variant
+    Dim lngCol      As Long
+    Dim lngRow      As Long
+    Dim lngRowCnt   As Long
+    Dim lngColCnt   As Long
+    
+    fncGetDBData1400B = False
+    
+'*******************************************************
+'* SQL文作成                                           *
+'*******************************************************
+
+    strSql = ""
+    strSql = strSql & " select "
+    strSql = strSql & "  g.kohza_no , "
+    strSql = strSql & "  g.seikyu_kikan_id , "
+    strSql = strSql & "  g.rate_tekiyoh_kikan_id , "
+    strSql = strSql & "  g.rate_table_no , "
+    strSql = strSql & "  g.gohsei_rate "
+    strSql = strSql & " from  kyk_gohsei_rate g "
+    strSql = strSql & " where g.sakujo_flg = '0' "
+    strSql = strSql & "  and  g.kohza_no = '" & strData1(0, 0) & "' "
+    strSql = strSql & "  and  g.seikyu_kikan_id = '" & strData1(0, 1) & "' "
+    strSql = strSql & "  and  g.rate_tekiyoh_kikan_id = '" & strData1(0, 2) & "' "
+    strSql = strSql & " order by g.rate_table_no "
+    
+    'データ取得
+    Call gclsDB.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow)
+    If lngRow > 0 Then
+        ' 動的配列変数に対するメモリ領域の再割り当てを行います
+        ReDim strData2(lngRow, lngCol)
+        
+        '取得データを配列に設定
+        For lngRowCnt = 0 To lngRow - 1
+            For lngColCnt = 0 To UBound(strData2, 2) - 1
+                strData2(lngRowCnt, lngColCnt) = CStr(vData(lngColCnt, lngRowCnt))
+            Next
+        Next lngRowCnt
+        fncGetDBData1400B = True
+    Else
+        ' 該当データが存在しません。
+'       Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3001, cPreFName & "(合成料率)", "")
+        Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3001, cPreFName, "")
+    End If
+    
+    Erase vData
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncGetDBData1400B = False
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- エラーログ出力 End  ---------------------------------
+
+    Erase vData
+    Erase strData2
+   
+End Function
+
+
+'*************************************************************************
+'関数名　　：投資顧問料率案内書(帳票データ取得)
+'引　　数　：
+'           strData1()         I           条件データ（資産割合）
+'           strData3()         O           取得データ（合成料率名）
+'戻り値　　：処理結果
+'機能説明　：投資顧問料率案内書のデータを取得する。
+'更新履歴　：2006/08/22 SRA             新規作成
+'        　：2007/10/29 SRA T.Ichikawa  変更     (PH4)SQLを修正(新テーブルを参照する)
+'
+'*************************************************************************
+Public Function fncGetDBData1400C(ByRef strData1() As String, _
+                                  ByRef strData3() As String) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncGetDBData1400"
+
+On Error GoTo ErrSection
+
+    Dim strSql      As String
+    Dim vData()     As Variant
+    Dim lngCol      As Long
+    Dim lngRow      As Long
+    Dim lngRowCnt   As Long
+    Dim lngColCnt   As Long
+    
+    fncGetDBData1400C = False
+    
+'*******************************************************
+'* SQL文作成                                           *
+'*******************************************************
+
+    strSql = ""
+'------------<Modify Start Ichikawa 2007/10/29 (PH4)> -----------------------
+'    strSql = strSql & " select "
+'    strSql = strSql & "  k33.kingaku_from_01, k33.kingaku_from_02, k33.kingaku_from_03, k33.kingaku_from_04, "
+'    strSql = strSql & "  k33.kingaku_from_05, k33.kingaku_from_06, k33.kingaku_from_07, k33.kingaku_from_08, "
+'    strSql = strSql & "  k33.kingaku_from_09, k33.kingaku_from_10, k33.kingaku_from_11, k33.kingaku_from_12, "
+'    strSql = strSql & "  k33.kingaku_from_13, k33.kingaku_from_14, k33.kingaku_from_15, k33.kingaku_from_16, "
+'    strSql = strSql & "  k33.kingaku_from_17, k33.kingaku_from_18, k33.kingaku_from_19, k33.kingaku_from_20, "
+'    strSql = strSql & "  k33.kingaku_to_01  , k33.kingaku_to_02  , k33.kingaku_to_03  , k33.kingaku_to_04  , "
+'    strSql = strSql & "  k33.kingaku_to_05  , k33.kingaku_to_06  , k33.kingaku_to_07  , k33.kingaku_to_08  , "
+'    strSql = strSql & "  k33.kingaku_to_09  , k33.kingaku_to_10  , k33.kingaku_to_11  , k33.kingaku_to_12  , "
+'    strSql = strSql & "  k33.kingaku_to_13  , k33.kingaku_to_14  , k33.kingaku_to_15  , k33.kingaku_to_16  , "
+'    strSql = strSql & "  k33.kingaku_to_17  , k33.kingaku_to_18  , k33.kingaku_to_19  , k33.kingaku_to_20  , "
+'    strSql = strSql & "  k33.ryo_tuuka "
+'    strSql = strSql & " from  kk33  k33 "
+'    strSql = strSql & " where k33.ryoritsu_cd  = '" & strData1(0, 4) & "' "
+'    strSql = strSql & "  "
+    
+    strSql = strSql & "SELECT" & vbCrLf
+    strSql = strSql & "    KR.KINGAKU_FROM_01, KR.KINGAKU_FROM_02, KR.KINGAKU_FROM_03, KR.KINGAKU_FROM_04, " & vbCrLf
+    strSql = strSql & "    KR.KINGAKU_FROM_05, KR.KINGAKU_FROM_06, KR.KINGAKU_FROM_07, KR.KINGAKU_FROM_08, " & vbCrLf
+    strSql = strSql & "    KR.KINGAKU_FROM_09, KR.KINGAKU_FROM_10, KR.KINGAKU_FROM_11, KR.KINGAKU_FROM_12, " & vbCrLf
+    strSql = strSql & "    KR.KINGAKU_FROM_13, KR.KINGAKU_FROM_14, KR.KINGAKU_FROM_15, KR.KINGAKU_FROM_16, " & vbCrLf
+    strSql = strSql & "    KR.KINGAKU_FROM_17, KR.KINGAKU_FROM_18, KR.KINGAKU_FROM_19, KR.KINGAKU_FROM_20, " & vbCrLf
+    strSql = strSql & "    KR.KINGAKU_TO_01  , KR.KINGAKU_TO_02  , KR.KINGAKU_TO_03  , KR.KINGAKU_TO_04  , " & vbCrLf
+    strSql = strSql & "    KR.KINGAKU_TO_05  , KR.KINGAKU_TO_06  , KR.KINGAKU_TO_07  , KR.KINGAKU_TO_08  , " & vbCrLf
+    strSql = strSql & "    KR.KINGAKU_TO_09  , KR.KINGAKU_TO_10  , KR.KINGAKU_TO_11  , KR.KINGAKU_TO_12  , " & vbCrLf
+    strSql = strSql & "    KR.KINGAKU_TO_13  , KR.KINGAKU_TO_14  , KR.KINGAKU_TO_15  , KR.KINGAKU_TO_16  , " & vbCrLf
+    strSql = strSql & "    KR.KINGAKU_TO_17  , KR.KINGAKU_TO_18  , KR.KINGAKU_TO_19  , KR.KINGAKU_TO_20  , " & vbCrLf
+    strSql = strSql & "    KR.RYO_TUUKA" & vbCrLf
+    strSql = strSql & "FROM" & vbCrLf
+    strSql = strSql & "    KYK_RATE KR" & vbCrLf
+    strSql = strSql & "WHERE" & vbCrLf
+    strSql = strSql & "    KR.RATE_CODE = '" & strData1(0, 4) & "'" & vbCrLf
+'------------<Modify End   Ichikawa 2007/10/29 (PH4)> -----------------------
+    
+    'データ取得
+    Call gclsDB.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow)
+    If lngRow > 0 Then
+        ' 動的配列変数に対するメモリ領域の再割り当てを行います
+        ReDim strData3(lngRow, lngCol)
+        
+        '取得データを配列に設定
+        For lngRowCnt = 0 To lngRow - 1
+            For lngColCnt = 0 To UBound(strData3, 2) - 1
+                strData3(lngRowCnt, lngColCnt) = CStr(vData(lngColCnt, lngRowCnt))
+            Next
+        Next lngRowCnt
+        fncGetDBData1400C = True
+    Else
+        ' 該当データが存在しません。
+'       Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3001, cPreFName & "(合成料率名)", "")
+        Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3001, cPreFName, "")
+    End If
+    
+    Erase vData
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncGetDBData1400C = False
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- エラーログ出力 End  ---------------------------------
+
+    Erase vData
+    Erase strData3
+   
+End Function
+
+
+'*************************************************************************
+'関数名　　：投資顧問料率案内書(帳票作成)
+'引　　数　：
+'           strOutFName        I           出力ファイル名
+'           strRate            I           税率
+'           strKouza           I           口座番号
+'           strDay             I           適用開始日
+'           strData1()         I           出力データ:資産割合
+'           strData2()         I           出力データ:合成料率
+'           strData3()         I           出力データ:合成料率名
+'戻り値　　：処理結果
+'機能説明　：投資顧問料率案内書の作成を取得する。
+'更新履歴　：2006/08/22 SRA             新規作成
+'更新履歴　：2007/04/27 SRA Y.Azuma 　  変更     (PH2)資産割合行ズレ対応
+'
+'*************************************************************************
+Public Function fncMakeBook1400(ByVal strOutFName As String, ByVal strRate As String, _
+                                ByVal strKouza As String, ByVal strDay As String, _
+                                ByRef strData1() As String, _
+                                ByRef strData2() As String, _
+                                ByRef strData3() As String) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncMakeBook1400"
+
+On Error GoTo ErrSection
+
+    Dim lngRowCnt      As Long
+    Dim lngColCnt      As Long
+    Dim lngRow1        As Long
+    Dim lngRow2        As Long
+    Dim lngKetaNo      As Long
+    Dim lngLen         As Long
+    
+'------------<Modify Start azuma 2007/04/27 > -----------------------
+    Dim lngSTART_RAW1  As Long  '資産割合開始行
+    Dim lngSTART_RAW2  As Long  '合成料率開始行
+'------------<Modify End   azuma 2007/04/27 > -----------------------
+    
+    Call subBeginProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    ' ファイルOpen
+    Workbooks.Open Filename:=strOutFName
+    
+    lngRow1 = UBound(strData1, 1)
+    lngRow2 = UBound(strData2, 1)
+    fncMakeBook1400 = False
+       
+    With Workbooks(Workbooks.Count).Worksheets(1)
+      
+        ' ヘッダー、フッターの文字列設定
+'060929        .PageSetup.RightHeader = strKouza              ' 口座番号
+'060929        .PageSetup.RightFooter = strData1(0, 4)        ' 料率コード
+
+        .Range("口座番号").Value = strKouza                   ' 口座番号
+        .Range("請求書顧客名").Value = strData1(0, 3)         ' 請求書顧客名
+        .Range("適用開始日").Value = gfunc_YmdFormat(strDay)  ' 適用開始日
+        .Range("基礎数値名").Value = strData1(0, 9)           ' 基礎数値名
+
+'------------<Modify Start azuma 2007/04/27 > -----------------------
+        '資産割合の行増加処理
+        Call sub_IncreaseRow(Workbooks(Workbooks.Count).Worksheets(1), lngRow1)
+        lngSTART_RAW1 = .Range("資産割合開始行").Row
+        lngSTART_RAW2 = .Range("料率開始行").Row
+'------------<Modify End   azuma 2007/04/27 > -----------------------
+
+        ' 資産割合(％単位ではない)
+        For lngRowCnt = 0 To lngRow1 - 1
+'------------<Modify Start azuma 2007/04/27 > -----------------------
+            .Cells(lngSTART_RAW1 + lngRowCnt, 5).Value = (lngRowCnt + 1) & "."
+            .Cells(lngSTART_RAW1 + lngRowCnt, 6).Value = strData1(lngRowCnt, 6)
+            .Cells(lngSTART_RAW1 + lngRowCnt, 17).Value = strData1(lngRowCnt, 7)
+''            .Cells(cSTART_RAW1 + lngRowCnt, 5).Value = (lngRowCnt + 1) & "."
+''            .Cells(cSTART_RAW1 + lngRowCnt, 6).Value = strData1(lngRowCnt, 6)
+''            .Cells(cSTART_RAW1 + lngRowCnt, 17).Value = strData1(lngRowCnt, 7)
+'------------<Modify End   azuma 2007/04/27 > -----------------------
+        Next lngRowCnt
+        
+        ' 合成料率(％単位)
+        For lngRowCnt = 0 To lngRow2 - 1
+'------------<Modify Start azuma 2007/04/27 > -----------------------
+            .Cells(lngSTART_RAW2 + lngRowCnt, 16).Value = (strData2(lngRowCnt, 4) / 100) * (1 + (strRate / 100))
+            .Cells(lngSTART_RAW2 + lngRowCnt, 20).Value = strData2(lngRowCnt, 4) / 100
+''            .Cells(cSTART_RAW2 + lngRowCnt, 16).Value = (strData2(lngRowCnt, 4) / 100) * (1 + (strRate / 100))
+''            .Cells(cSTART_RAW2 + lngRowCnt, 20).Value = strData2(lngRowCnt, 4) / 100
+'------------<Modify End   azuma 2007/04/27 > -----------------------
+        Next lngRowCnt
+         
+        ' Max桁数取得
+        lngKetaNo = cKetaNo
+        For lngRowCnt = 0 To lngRow2 - 1
+            lngLen = Len(strData3(0, 20 + lngRowCnt)) - 1
+            If lngKetaNo < lngLen Then
+                lngKetaNo = lngLen
+            End If
+        Next lngRowCnt
+        
+        ' 合成料率名
+        For lngRowCnt = 0 To lngRow2 - 1
+'------------<Modify 1兆円超対応20080218 2008/02/29 SRA市川 Start > ----------------------------------------
+''------------<Modify Start azuma 2007/04/27 > -----------------------
+'            .Cells(lngSTART_RAW2 + lngRowCnt, 6).Value = fncGetKubunName(lngKetaNo, strData3(0, lngRowCnt), strData3(0, 20 + lngRowCnt))
+'''            .Cells(cSTART_RAW2 + lngRowCnt, 6).Value = fncGetKubunName(lngKetaNo, strData3(0, lngRowCnt), strData3(0, 20 + lngRowCnt))
+''------------<Modify End   azuma 2007/04/27 > -----------------------
+    
+            .Cells(lngSTART_RAW2 + lngRowCnt, 5).Value = fncGetKubunName(lngKetaNo, strData3(0, lngRowCnt), strData3(0, 20 + lngRowCnt))
+'------------<Modify 1兆円超対応20080218 2008/02/29 SRA市川 End   > ----------------------------------------
+        Next lngRowCnt
+         
+        ' カソル位置を異動する。
+        .Activate     ' シートが２個以上の場合要る。
+        .Range("A1").Activate
+       
+    End With
+    
+    ActiveWindow.ScrollRow = 1
+    ActiveWindow.ScrollColumn = 1
+
+'------------<Modify Start azuma 2007/04/27 > -----------------------
+    With Workbooks(Workbooks.Count).ActiveSheet.PageSetup
+
+        '印刷範囲を1ページに収まるよう設定
+        .Zoom = False
+        .FitToPagesWide = 1
+        .FitToPagesTall = 1
+
+        '印刷の向きを縦に設定
+        .Orientation = xlPortrait
+
+        '印刷のサイズをＡ４に設定
+        .PaperSize = xlPaperA4
+        
+    End With
+    
+    Workbooks(Workbooks.Count).Application.DisplayAlerts = False
+'------------<Modify End   azuma 2007/04/27 > -----------------------
+
+    Workbooks(Workbooks.Count).Close SaveChanges:=True
+    
+'------------<Modify Start azuma 2007/04/27 > -----------------------
+    Workbooks(Workbooks.Count).Application.DisplayAlerts = True
+'------------<Modify End   azuma 2007/04/27 > -----------------------
+    
+    fncMakeBook1400 = True
+    
+    Call subEndProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    Workbooks(Workbooks.Count).Close SaveChanges:=True
+    fncMakeBook1400 = False
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- エラーログ出力 End  ---------------------------------
+   
+End Function
+
+
+'*************************************************************************
+'関数名　　：料率コード区分名編集
+'引　　数　：
+'           lngKetaNo   I       桁数
+'           strFrom     I       開始
+'           strTo       I       終了
+'戻り値　　：区分名
+'機能説明　：料率コード区分名編集する。
+'更新履歴　：2006/08/22 SRA             新規作成
+'
+'*************************************************************************
+Public Function fncGetKubunName(ByVal lngKetaNo As Long, _
+                                ByVal strFrom As String, _
+                                ByVal strTo As String) As String
+    
+    Dim strFrom10      As String
+    Dim strTo10        As String
+    Dim strWork        As String
+
+    ' 編集用スペース
+    strWork = String(lngKetaNo, " ")
+
+    ' 表示書式編集（strFrom）
+    strFrom10 = strFrom / cWaruNo
+    If strFrom10 < 1 Then
+        strFrom10 = Format(strFrom10, "0.0")
+    End If
+
+    ' 表示書式編集（strTo）
+    strTo10 = strTo / cWaruNo
+    If strTo10 < 1 Then
+        strTo10 = Format(strTo10, "0.0")
+    End If
+
+    fncGetKubunName = cSpace
+
+    ' 区分内容の設定
+    If strFrom = cMinNo And strTo >= cMaxNo Then
+        fncGetKubunName = "　　本契約資産額に対し"
+
+    ElseIf strFrom = cMinNo And strTo < cMaxNo Then
+        ' Max桁で出力（lngKetaNo）すること。
+        fncGetKubunName = cSpace & Right(strWork & strTo10, lngKetaNo) & "億円以下の金額"
+
+    ElseIf strFrom > cMinNo And strTo < cMaxNo Then
+'------------<Modify 1兆円超対応20080218 2008/02/29 SRA市川 Start > ----------------------------------------
+'        ' Toのみ5桁で出力（cKetaNo）すること。  <<< 必ず >>>
+        ' Toのみ7桁で出力（cKetaNo）すること。  <<< 必ず >>>
+'------------<Modify 1兆円超対応20080218 2008/02/29 SRA市川 End   > ----------------------------------------
+        fncGetKubunName = cSpace & Right(strWork & strFrom10, lngKetaNo) & "億円超" _
+                        & Right(strWork & strTo10, cKetaNo) & "億円以下の金額"
+
+    ElseIf strTo >= cMaxNo Then
+        ' Max桁で出力（lngKetaNo）すること。
+        fncGetKubunName = cSpace & Right(strWork & strFrom10, lngKetaNo) & "億円超の金額"
+    End If
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：
+'引　　数　：
+'           lngKetaNo   I       桁数
+'           strFrom     I       開始
+'           strTo       I       終了
+'戻り値　　：区分名
+'機能説明　：料率コード区分名編集する。
+'更新履歴　：2006/08/22 SRA             新規作成
+'
+'*************************************************************************
+Sub sub_IncreaseRow(ByRef objWorkSheet As Object, ByVal lngInc As Long)
+
+'
+    Dim lngCopyRow  As Long     'コピー行
+    Dim lngPasteRow As Long     '貼付け行
+    Dim lngCnt      As Long
+    Dim lngRows     As Long
+    
+    With objWorkSheet
+        lngCopyRow = .Range("資産割合開始行").Row
+        lngPasteRow = lngCopyRow + 1
+    
+        If lngInc <= 5 Then
+            lngRows = 5
+        Else
+            lngRows = lngInc
+        End If
+    
+        For lngCnt = 1 To lngRows - 1
+            .Rows(lngCopyRow & ":" & lngCopyRow).Copy
+            .Rows(lngPasteRow & ":" & lngPasteRow).Insert Shift:=xlDown
+        Next lngCnt
+    End With
+    
+End Sub
+
+'*************************************************************************
+'関数名　　：投資顧問料率案内書(請求期間FROM取得)
+'引　　数　：
+'           strKouza           I           口座番号
+'           strDay             I           適用開始日
+'           strSeikyuKikanFrom O           取得データ（請求期間FROM）
+'戻り値　　：Boolean
+'機能説明　：口座番号と料率適用期間FROMから請求期間FROMを取得する。
+'更新履歴　：2007/04/27 SRA             新規作成
+'
+'*************************************************************************
+Public Function fncGetDBData1400D(ByVal strKouza As String, ByVal strDay As String, _
+                                  ByRef strSeikyuKikanFrom As String) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncGetDBData1400"
+
+On Error GoTo ErrSection
+
+    Dim strSql      As String
+    Dim vData()     As Variant
+    Dim lngCol      As Long
+    Dim lngRow      As Long
+    Dim lngRowCnt   As Long
+    Dim lngColCnt   As Long
+    
+    fncGetDBData1400D = False
+    
+'*******************************************************
+'* SQL文作成                                           *
+'*******************************************************
+
+    '数値チェック
+    If IsNumeric(strDay) = False Then
+        Call gfunc_ErrorMsg(gcMsgKbn_3, 8, cPreFName, "適用開始日：" & strDay)
+        Exit Function
+    End If
+
+    strSql = ""
+    strSql = strSql & " SELECT TO_CHAR(SEIKYU_KIKAN_FROM)"
+    strSql = strSql & "   FROM KYK_SEIKYU_KIKAN"
+    strSql = strSql & "  WHERE KOHZA_NO='" & strKouza & "'"
+    strSql = strSql & "    AND SEIKYU_KIKAN_FROM <= TO_NUMBER('" & strDay & "')"
+    strSql = strSql & "    AND SEIKYU_KIKAN_TO   >= TO_NUMBER('" & strDay & "')"
+    strSql = strSql & "    AND SAKUJO_FLG='0'"
+    
+    'データ取得
+    Call gclsDB.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow)
+    
+    If lngRow > 0 Then
+        strSeikyuKikanFrom = CStr(vData(0, 0))
+        fncGetDBData1400D = True
+    Else
+        ' 該当データが存在しません。
+        Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3001, cPreFName, "請求期間FROMの取得に失敗しました。")
+    End If
+    
+    Erase vData
+    
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncGetDBData1400D = False
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- エラーログ出力 End  ---------------------------------
+
+    Erase vData
+   
+End Function
+
+

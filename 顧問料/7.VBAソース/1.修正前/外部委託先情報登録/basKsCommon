@@ -1,0 +1,836 @@
+Attribute VB_Name = "basKsCommon"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：外部委託ライセンスフィー計算システム
+'
+'オブジェクト名：basKsCommon
+'
+'機能概要　：プロジェクト内共通モジュール
+'
+'更新履歴　：2008/08/03 SRA H.Anpo      新規作成
+'
+'*************************************************************************
+Const MODULE_NAME = "basKsCommon"
+
+'*************************************************************************
+'プロジェクト内定数
+'*************************************************************************
+'=======================================
+'シート名称の定義
+'=======================================
+Public Const MAIN_SHEETNAME = "main"
+Public Const TEMPLATE_SHEETNAME = "Template"
+Public Const DATA_SHEETNAME = "Data"
+
+'=======================================
+'チェックボックスの定義
+'=======================================
+Public Const mCELLNAME = "B"                                        'チェックボックスの表示位置
+Public Const mLINKCELLNAME = "AQ"                                   'チェックボックスリンクセルの位置(チェックボックスの値を格納)
+
+'=======================================
+'コート値テーブルのコードNO定義
+'=======================================
+Public Const mC_CODENO_KEIYAKU_KBN = "56"                           '契約区分
+Public Const mC_CODENO_KEISAN_HOHHOH = "57"                         '外部委託計算方法
+Public Const mC_CODENO_SHOUHI_ZEI_FLG = "58"                        '消費税フラグ
+Public Const mC_CODENO_GENSEN_ZEI_FLG = "59"                        '源泉税フラグ
+Public Const mC_CODENO_NENKAN_NISSU_KBN = "7"                       '年間日数区分
+Public Const mC_CODENO_SAISHU_KBN = "63"                            '外部委託最終区分
+Public Const mC_CODENO_HIZUKE_SHURUI = "9"                          '国内顧問日付種類
+Public Const mC_CODENO_CNT = 7                                      '使用するコードNOの数
+
+'=======================================
+'Templateシートの列番号定義
+'=======================================
+Public Const mC_DATASHEET_COLNO_KEIYAKU_KBN = 1                     '契約区分
+Public Const mC_DATASHEET_COLNO_KEISAN_HOHHOH = 2                   '外部委託計算方法
+Public Const mC_DATASHEET_COLNO_SHOUHI_ZEI_FLG = 3                  '消費税フラグ
+Public Const mC_DATASHEET_COLNO_GENSEN_ZEI_FLG = 4                  '源泉税フラグ
+Public Const mC_DATASHEET_COLNO_NENKAN_NISSU_KBN = 5                '年間日数区分
+Public Const mC_DATASHEET_COLNO_SAISHU_KBN = 6                      '外部委託最終区分
+Public Const mC_DATASHEET_COLNO_HIZUKE_SHURUI = 7                   '国内顧問日付種類
+Public Const mC_DATASHEET_COLNO_RATE = 8                            '料率
+Public Const mC_DATASHEET_COLNO_END = 8                             '最終列番号
+
+'=======================================
+'Templateシートのリストの名前定義
+'=======================================
+Public Const mC_NAME_LIST_KEIYAKU_KBN = "契約区分リスト"            '契約区分リスト
+Public Const mC_NAME_LIST_KEISAN_HOHHOH = "外部委託計算方法リスト"  '外部委託計算方法リスト
+Public Const mC_NAME_LIST_SHOUHI_ZEI_FLG = "消費税フラグリスト"     '消費税フラグリスト
+Public Const mC_NAME_LIST_GENSEN_ZEI_FLG = "源泉税フラグリスト"     '源泉税フラグリスト
+Public Const mC_NAME_LIST_NENKAN_NISSU_KBN = "年間日数区分リスト"   '年間日数区分リスト
+Public Const mC_NAME_LIST_SAISHU_KBN = "外部委託最終区分リスト"     '外部委託最終区分リスト
+Public Const mC_NAME_LIST_HIZUKE_SHURUI = "国内顧問日付種類リスト"  '国内顧問日付種類リスト
+Public Const mC_NAME_LIST_RATE = "料率リスト"                       '料率リスト
+    
+'=======================================
+'初期表示値の定義
+'=======================================
+Public Const mC_INIT_VALUE_GINO = "1:RAFI"                          '外部委託先の初期値
+Public Const mC_INIT_VALUE_SAISHU_KBN = "0:通常"                    '外部委託最終区分の初期値
+
+
+
+
+
+
+'
+'*************************************************************************
+'関数名　　：明細行追加(１行追加)メイン処理
+'
+'引　　数　：TargetSheets  I            対象シート
+'            iInsRow       I            追加対象ROW
+'            iSrcRow       I            複写元ROW
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：指定された明細行の追加を行う。
+'
+'更新履歴　：2008/06/12 SRA H.Anpo    新規作成
+'
+'*************************************************************************
+Public Function gKsC_fncKsCmnInsRow( _
+                    TargetSheets As Object, _
+                    iInsRow As Long, _
+                    iSrcRow As Long) As Long
+    
+On Error GoTo ErrorHandler
+
+    gKsC_fncKsCmnInsRow = 0
+    
+    With TargetSheets
+        ThisWorkbook.Sheets(TEMPLATE_SHEETNAME).Rows(iSrcRow & ":" & iSrcRow).Copy
+        .Select
+        .Rows(iInsRow & ":" & iInsRow).Insert Shift:=xlDown
+        ThisWorkbook.Application.CutCopyMode = False
+    
+        'チェックボックスの追加
+        Call fncCmnSetCheckBox(TargetSheets, mCELLNAME & iInsRow, mLINKCELLNAME & iInsRow)
+        
+        TargetSheets.Cells(iInsRow, .Range("計算期間FROM").Column).Select
+    
+    End With
+    
+    Exit Function
+
+ErrorHandler:
+    gKsC_fncKsCmnInsRow = Err.Number
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gKsC_fncKsCmnInsRow", Err.Number, Err.Description)
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    On Error GoTo 0
+    
+End Function
+
+'*************************************************************************
+'関数名　　：明細行追加(複数行追加)メイン処理
+'
+'引　　数　：TargetSheets  I            対象シート
+'            iAddRowCnt    I            追加行数
+'            iSrcRow       I            複写元ROW
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：指定された明細行の追加を行う。
+'
+'更新履歴　：2008/06/12 SRA H.Anpo    新規作成
+'
+'*************************************************************************
+Public Function gKsC_fncKsCmnInsSumRow( _
+                    TargetSheets As Object, _
+                    iAddRowCnt As Long, _
+                    iSrcRow As Long) As Long
+    
+On Error GoTo ErrorHandler
+
+    Dim lngRowCnt   As Long
+
+    gKsC_fncKsCmnInsSumRow = 0
+    
+    With TargetSheets
+        ThisWorkbook.Sheets(TEMPLATE_SHEETNAME).Rows(iSrcRow & ":" & iSrcRow).Copy
+        .Select
+        .Rows(.Range("先頭行").Row + 1 & ":" & .Range("先頭行").Row + iAddRowCnt).Insert Shift:=xlDown
+        ThisWorkbook.Application.CutCopyMode = False
+    
+        For lngRowCnt = .Range("先頭行").Row + 1 To Range("先頭行").Row + iAddRowCnt
+            'チェックボックスの追加
+            Call fncCmnSetCheckBox(TargetSheets, mCELLNAME & lngRowCnt, mLINKCELLNAME & lngRowCnt)
+        Next lngRowCnt
+        
+        TargetSheets.Cells(lngRowCnt - 1, 2).Select
+    
+    End With
+    
+    Exit Function
+
+ErrorHandler:
+    gKsC_fncKsCmnInsSumRow = Err.Number
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gKsC_fncKsCmnInsSumRow", Err.Number, Err.Description)
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    On Error GoTo 0
+    
+End Function
+
+
+'*************************************************************************
+'関数名　　：明細行削除メイン処理
+'
+'引　　数　：TargetSheets I             対象シート
+'            AllDel       I Optional    全削除フラグ(初期値:False)　True:全削除
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：明細行の削除を行う。
+'            AllDelが「False」の場合、
+'               チェックボックスがチェックされている明細行を削除する
+'            AllDelが「True」の場合、
+'               明細行を全て削除する
+'
+'更新履歴　：2008/06/11 SRA H.Anpo    新規作成
+'
+'*************************************************************************
+Public Function gKsC_fncKsCmnCheckRowDelete(TargetSheets As Object, Optional AllDel As Boolean = False) As Long
+    Dim lngCnt As Long
+
+On Error GoTo ErrorHandler
+
+    gKsC_fncKsCmnCheckRowDelete = 0
+        
+    If AllDel = True Then
+        '全削除
+        'チェックボックスの削除処理(一括削除)
+        Call fncCmnDelCheckBox(TargetSheets, "", True)
+        '明細行削除(一括削除)
+        Call fncKsCmnDeleteRow(TargetSheets, 0, True)
+    Else
+        '選択削除
+        With TargetSheets
+            lngCnt = .Range("先頭行").Row + 1
+            Do While (.Range(mLINKCELLNAME & lngCnt) <> vbNullString)
+                If .Range(mLINKCELLNAME & lngCnt) Then
+                    Call fncKsCmnDeleteRow(TargetSheets, lngCnt)
+                Else
+                    lngCnt = lngCnt + 1
+                End If
+            Loop
+        End With
+    End If
+        
+    Exit Function
+
+ErrorHandler:
+    gKsC_fncKsCmnCheckRowDelete = Err.Number
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gKsC_fncKsCmnCheckRowDelete", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+
+
+'*************************************************************************
+'関数名　　：明細行削除処理
+'
+'引　　数　：TargetSheets I             対象シート
+'  　　  　：iDelRow      I             削除対象行番号
+'            AllDel       I Optional    全削除フラグ(初期値:False)　True:全削除
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：指定された明細行の削除を行う。
+'
+'更新履歴　：2008/06/11 SRA H.Anpo    新規作成
+'
+'*************************************************************************
+Private Function fncKsCmnDeleteRow(TargetSheets As Object, iDelRow As Long, Optional AllDel As Boolean = False) As Long
+On Error GoTo ErrorHandler
+
+    fncKsCmnDeleteRow = 0
+    
+    With TargetSheets
+        If AllDel = False Then
+            '1行削除
+            If .Range(mLINKCELLNAME & iDelRow) = "" Then
+                Exit Function
+            End If
+            
+            '全削除以外の場合、チェックボックスの削除処理
+            Call fncCmnDelCheckBox(TargetSheets, mLINKCELLNAME & iDelRow)
+        
+            '明細行の削除処理
+            .Rows(iDelRow & ":" & iDelRow).Select
+            ThisWorkbook.Application.CutCopyMode = False
+            Selection.Delete Shift:=xlUp
+        
+            .Cells(iDelRow, 2).Select
+        Else
+            '全行削除
+            
+            If .Range("最終行").Row - .Range("先頭行").Row > 1 Then
+                '明細行の削除処理
+                ThisWorkbook.Application.CutCopyMode = False
+                .Rows(.Range("先頭行").Row + 1 & ":" & .Range("最終行").Row - 1).Delete Shift:=xlUp
+            
+                TargetSheets.Cells(.Range("最終行").Row, 2).Select
+            End If
+        End If
+    
+    End With
+
+    Exit Function
+
+ErrorHandler:
+    fncKsCmnDeleteRow = Err.Number
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "fncKsCmnDeleteRow", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：チェックボックスの作成
+'
+'引　　数　：objTarget    I         対象シート
+'  　　  　：CellName     I         作成対象セル ex) "B30"
+'            LinkCellName I         リンクセル   ex) "AQ30"
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：指定された行にチェックボックスを作成する
+'
+'更新履歴　：2008/06/11 SRA H.Anpo    新規作成
+'
+'*************************************************************************
+Public Function fncCmnSetCheckBox(ByRef objTarget As Object _
+                                , ByVal CellName As String _
+                                , ByVal LinkCellName As String) As Long
+    
+On Error GoTo ErrorHandler
+    fncCmnSetCheckBox = 0
+    
+    Dim lngZoom As Long
+    Dim objX    As Object
+    
+    '倍率変更時対応
+    '元の倍率を退避
+    lngZoom = ThisWorkbook.Application.ActiveWindow.Zoom
+    '倍率を100%に設定
+    ThisWorkbook.Application.ActiveWindow.Zoom = 100
+    
+    '指定セルにチェックボックスを作成
+    With objTarget.Range(CellName)
+        Set objX = objTarget.Shapes.AddFormControl( _
+            xlCheckBox, _
+            .Left + 3, _
+            .Top - 1, _
+            10.5, _
+            10)
+        With objX.OLEFormat.Object
+            .Display3DShading = True
+            .Caption = ""
+            .LinkedCell = LinkCellName
+            .PrintObject = False
+        End With
+    End With
+
+    '初期値をチェックなしに設定
+    objTarget.Range(LinkCellName) = False
+
+    '倍率を元の倍率に設定
+    ThisWorkbook.Application.ActiveWindow.Zoom = lngZoom
+    
+    Exit Function
+
+ErrorHandler:
+    fncCmnSetCheckBox = Err.Number
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "fncCmnSetCheckBox", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+End Function
+
+
+'*************************************************************************
+'関数名　　：チェックボックスの削除
+'
+'引　　数　：objTarget    I             対象シート
+'  　　  　：CellName     I             リンクセル ex) "AQ30"
+'            AllDel       I Optional    全削除フラグ(初期値:False)　True:全削除
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：チェックボックスを削除する
+'            AllDelが「False」の場合、
+'               LinkedCellの値が、CellNameと等しいチェックボックスを削除する
+'            AllDelが「True」の場合、
+'               objTarget上の全てのチェックボックスを削除する
+'
+'更新履歴　：2008/06/11 SRA H.Anpo    新規作成
+'
+'*************************************************************************
+Public Function fncCmnDelCheckBox(ByRef objTarget As Object, CellName As String, Optional AllDel As Boolean = False) As Long
+Dim c As Object
+    
+On Error GoTo ErrorHandler
+    
+    fncCmnDelCheckBox = 0
+    
+    With objTarget
+        For Each c In .Shapes
+            If c.Type = msoFormControl Then
+                If c.FormControlType = xlCheckBox Then
+                    'チェックボックスコントロールの場合
+                    If AllDel = True Then
+                        '全削除の場合
+                        c.Delete
+                    Else
+                        '全削除以外の場合
+                        If c.OLEFormat.Object.LinkedCell = CellName Then
+                            'LinkedCellの値がCellNameと等しい場合、削除する
+                            c.Delete
+                            Exit For
+                        End If
+                    End If
+                End If
+            End If
+        Next
+    End With
+
+    Exit Function
+
+ErrorHandler:
+    fncCmnDelCheckBox = Err.Number
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "fncCmnDelCheckBox", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+End Function
+
+
+'*************************************************************************
+'関数名　　：画面内の全文字列取得関数
+'
+'引　　数　：なし
+'
+'戻り値　　：取得した文字列
+'
+'機能説明　：
+'
+'更新履歴　：2007/01/10 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Function fucGetAllString() As String
+On Error GoTo ErrorHandler
+    
+    Const START_ROW = 6     '開始行
+    Const START_COL = 2     '開始列"B"から
+    Const END_ROW = 14      '最終行の最小値
+    Const END_COL = 34      '最終列"AI"まで
+    
+    Dim vArea       As Variant
+    Dim lngRow      As Long
+    Dim lngCol      As Long
+    Dim lngMaxRow   As Long     '最終　行
+    Dim lngMaxCol   As Long     '最終　列
+    Dim strBuff     As String
+    Dim strCell     As String
+    
+    strBuff = ""
+    
+    '結合最終行を求める
+    lngMaxRow = ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range(mLINKCELLNAME & "65536").End(xlUp).Row
+    If END_ROW > lngMaxRow Then
+        lngMaxRow = END_ROW
+    End If
+    lngMaxCol = END_COL
+    
+    vArea = ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range(Cells(START_ROW, START_COL), Cells(lngMaxRow, lngMaxCol))
+
+    For lngRow = 1 To lngMaxRow - START_ROW + 1
+    
+        For lngCol = 1 To lngMaxCol - START_COL + 1
+            strCell = ""
+            strCell = CStr(vArea(lngRow, lngCol))
+            strBuff = strBuff & Trim(strCell)
+        Next lngCol
+        
+    Next lngRow
+
+    strBuff = Replace(strBuff, vbCr, "")
+    strBuff = Replace(strBuff, vbLf, "")
+    strBuff = CStr(Mid(strBuff, 1, 32767))
+    fucGetAllString = strBuff
+    
+    Set vArea = Nothing
+
+    Exit Function
+
+ErrorHandler:
+
+    fucGetAllString = ""
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "fucGetAllString", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+    Set vArea = Nothing
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：リスト内の文字列検索
+'
+'引　　数　：
+'           TargetSheets    I       対象のシート
+'           strSrchStr      I       検索する文字列
+'           strListNm       I       検索するリスト名
+'           strFoundStr     O       検索結果の文字列
+'
+'戻り値　　：検索結果のアドレス
+'
+'機能説明　：検索文字列を入力するとその文字列とアドレスを返す
+'
+'更新履歴　：2007/03/16 SRA H.Anpo    新規作成
+'
+'*************************************************************************
+Public Function func_SearchListAddress( _
+    ByRef TargetSheets As Object _
+  , ByVal strSrchStr As String _
+  , ByVal strListNm As String _
+  , ByRef strFoundStr As String _
+  ) As String
+
+    Dim c       As Variant
+    Dim lngCut  As Long
+    
+    func_SearchListAddress = ""
+    strFoundStr = ""
+    
+    If strSrchStr = "" Then Exit Function
+    
+    For Each c In TargetSheets.Range(strListNm)
+        If Trim(c.Value) <> "" Then
+            If strSrchStr = Left(c.Value, Len(strSrchStr)) Then
+                strFoundStr = c.Value
+                func_SearchListAddress = c.Address
+                Exit For
+            End If
+        End If
+    Next c
+    
+    Set c = Nothing
+
+End Function
+
+
+''*************************************************************************
+''関数名　　：リスト入力規則(参照セル範囲)変更
+''
+''引　　数　：
+''           TargetSheets        I           対象のシート(main)
+''           objTarget           I           変更するセル(RANGE)
+''           strFormula1         I           変更するリストの参照
+''
+''戻り値　　：Boolean
+''
+''機能説明　：画面項目の設定値により、リスト項目を絞込む
+''
+''更新履歴　：2007/03/14 SRA H.Anpo     新規作成
+''
+''*************************************************************************
+'Private Function func_ChangeListValidationFormula1( _
+'    ByRef TargetSheets As Object _
+'  , ByVal objTarget As Range _
+'  , ByVal strFormula1 As String _
+') As Boolean
+'
+'On Error GoTo ErrorSection
+'
+'    func_ChangeListValidationFormula1 = False
+'
+'
+''*** オートメーションエラー対応
+'    Call gCom01_SheetProtect(TargetSheets, False) 'シート保護解除
+''*** オートメーションエラー対応
+'
+'    objTarget.Validation.Modify Formula1:=strFormula1
+'
+'    func_ChangeListValidationFormula1 = True
+'
+'    Exit Function
+'
+'ErrorSection:
+'Debug.Print "objTarget is object"
+'
+'Debug.Print strFormula1 & "   [" & objTarget.Text & "]"
+''---- Error Log Start ----------------------------------------------------
+'    Dim lng As Long
+'    lng = Err.Number
+'    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_ChangeListValidationFormula1", Err.Number, Err.Description)
+'    On Error GoTo 0
+'    Err.Raise lng
+''---- Error Log End   ----------------------------------------------------
+'
+'End Function
+
+
+'*************************************************************************
+'関数名　　：コードリストサーチ
+'
+'引　　数　：
+'           strItemAll      I       サーチソース文字列
+'           strBookName     I       サーチ対象リストが定義されているブック名
+'           strListSheet    I       サーチ対象リストが定義されているデータシート名
+'           strListName     I       サーチ対象リスト文字列(リスト定義名)
+'           blnDataFlg      O       該当フラグ(あり：True、なし：False)
+'
+'戻り値　　：
+'           リストに該当なし    ：NULL
+'           リストに該当あり    ：該当文字列
+'　　　　　　　　　　　　　　　　※但し該当文字列とソース文字列が一致する場合NULL
+'           その他エラーなし    ：NULL
+'
+'機能説明　：ソース文字列でリストを検索し該当するリストの文字列を戻す。
+'
+'更新履歴　：2008/06/05 SRA H.Anpo    新規作成
+'
+'*************************************************************************
+Public Function gKsC_func_CodeListSearch(ByVal strItemAll As String _
+                                  , ByVal strBookName As String _
+                                  , ByVal strListSheet As String _
+                                  , ByVal strListName As String _
+                                  , ByRef blnDataFlg As Boolean) As String
+
+On Error GoTo Error_Section
+    
+    Dim strCode         As String
+    Dim strR1C1Cd       As String
+    Dim strA1Cd         As String
+    Dim lngRow          As Long
+    Dim lngCdLen        As Long     'コード長さ
+    Dim strResult       As String
+    Dim strListCode     As String
+    
+    
+    gKsC_func_CodeListSearch = ""
+    blnDataFlg = False
+    
+    'コード長さの設定
+    Select Case strListName
+        Case mC_NAME_LIST_RATE
+        '料率コードリスト
+            lngCdLen = 3
+        
+        Case Else
+            Exit Function
+    End Select
+    
+    'ソース文字列からコードを取り出す(ゼロパディング)
+    If Trim(strItemAll) = "" Then
+        strCode = ""
+    Else
+        strCode = Right(String(lngCdLen, "0") & Trim(Mid(strItemAll, 1, lngCdLen)), lngCdLen)
+    End If
+
+    With Workbooks(strBookName).Worksheets(strListSheet)
+        If Trim(strCode) <> "" And Len(strItemAll) <= lngCdLen Then
+'            strR1C1Cd = "R" & .Range(strListName).Row & "C" & .Range(strListName).Column
+            strR1C1Cd = "R1C" & .Range(strListName).Column
+            strA1Cd = Application.ConvertFormula(strR1C1Cd, xlR1C1, xlA1, xlRelative)
+            
+            'リストをサーチする
+            For lngRow = 1 To .Range(strListName).Count
+                strListCode = ""
+                strListCode = Mid(.Range(strA1Cd).Offset(lngRow, 0).Text, 1, lngCdLen)
+
+                If strCode = strListCode Then
+                    Exit For
+                End If
+            Next lngRow
+            
+            If lngRow <= .Range(strListName).Count Then
+                strResult = .Range(strA1Cd).Offset(lngRow, 0).Text
+                blnDataFlg = True
+            Else
+                strResult = ""
+                blnDataFlg = False
+            End If
+            
+            'ソース文字列と検索結果が同じ場合は結果にnullを返す
+            If Trim(strResult) = Trim(strItemAll) Then
+                strResult = ""
+            End If
+            
+            gKsC_func_CodeListSearch = strResult
+        End If
+    End With
+    
+    Exit Function
+
+Error_Section:
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_CodeListSearch", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    gKsC_func_CodeListSearch = ""
+    blnDataFlg = False
+
+End Function
+
+'*************************************************************************
+'関数名　　：コレクションデータ作成
+'
+'引　　数　：ARG1   I   colTarget   Collection  コレクション
+'　　　　　：ARG2   I   strKey      String      KEY
+'　　　　　：ARG3   I   vntData     Variant     DATA
+'
+'戻り値　　：なし
+'
+'機能説明　：コレクションに指定されたKEY、データをセットする。
+'
+'更新履歴　：2008/06/12 SRA H.Anpo    新規作成
+'
+'*************************************************************************
+Public Function gKsC_fncSetCollectionItem( _
+            ByVal colTarget As Collection, _
+            ByVal strKey As String, _
+            ByVal vntData As Variant) As Boolean
+
+On Error GoTo ErrHandler
+  
+    Dim intCnt As Integer
+    
+    gKsC_fncSetCollectionItem = False
+    
+    colTarget.Add Item:=vntData, Key:=strKey
+    
+    gKsC_fncSetCollectionItem = True
+
+    Exit Function
+
+ErrHandler:
+
+End Function
+
+'*************************************************************************
+'関数名　　：コレクションデータ取得
+'
+'引　　数　：ARG1   I   colTarget   Collection  コレクション
+'　　　　　：ARG2   I   strKey      String      KEY
+'
+'戻り値　　：なし
+'
+'機能説明　：コレクションから指定されたKEYのデータを取得する。
+'
+'更新履歴　：2008/06/12 SRA H.Anpo    新規作成
+'
+'*************************************************************************
+Public Function gKsC_fncGetCollectionItem( _
+            ByVal colTarget As Collection, _
+            ByVal strKey As String) As String
+
+On Error GoTo ErrHandler
+  
+    gKsC_fncGetCollectionItem = vbNullString
+'    fncGetCollectionItem = colTarget(strKey)
+
+        gKsC_fncGetCollectionItem = colTarget.Item(strKey)
+    
+    
+    Exit Function
+
+ErrHandler:
+'MsgBox "fncGetCollectionItem : " & strKey
+End Function
+
+
+'*************************************************************************
+'関数名　　：料率コードコレクション作成
+'
+'引　　数　：
+'           colTarget       I       コレクション
+'
+'戻り値　　：Boolean (TRUE:正常、FALSE:エラー)
+'
+'機能説明　：料率リストデータより料率コードコレクションを作成する
+'
+'更新履歴　：2008/06/12 SRA H.Anpo     新規作成
+'
+'*************************************************************************
+Public Function gKsC_funcMakeRateCollection(ByRef colTarget As Collection) As Boolean
+On Error GoTo ErrorSection
+
+    Dim lngRow          As Long
+    Dim blnRet          As Boolean
+
+    gKsC_funcMakeRateCollection = False
+
+    With ThisWorkbook.Worksheets(DATA_SHEETNAME)
+        For lngRow = 2 To 65535
+            If .Cells(lngRow, mC_DATASHEET_COLNO_RATE) = "" Then
+                Exit For
+            Else
+                blnRet = gKsC_fncSetCollectionItem( _
+                            colTarget, _
+                            Mid(.Cells(lngRow, mC_DATASHEET_COLNO_RATE), 1, 3), _
+                            .Cells(lngRow, mC_DATASHEET_COLNO_RATE))
+                If blnRet = False Then
+                    Exit Function
+                End If
+            End If
+        Next lngRow
+    End With
+
+    gKsC_funcMakeRateCollection = True
+    Exit Function
+
+ErrorSection:
+
+    gKsC_funcMakeRateCollection = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gKsC_funcMakeRateCollection", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+

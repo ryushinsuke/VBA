@@ -1,0 +1,746 @@
+Attribute VB_Name = "bas20Kensaku"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：国内顧問料・資産登録
+'
+'オブジェクト名：bas20Kensaku
+'
+'機能概要　：検索ボタン処理
+'
+'更新履歴　：2008/02/22 SRA 東       新規作成
+'　　　　　：2009/01/19 SRA Y.Azuma    変更   自己設定投信の委託者報酬額の内訳管理
+'
+'*************************************************************************
+
+Const MODULE_NAME = "bas20Kensaku"
+
+
+
+'*************************************************************************
+'関数名　　：検索処理メイン処理
+'
+'引　　数　：
+'           objTarget        I           対象のシート
+'
+'戻り値　　：なし
+'
+'機能説明　：検索時の主処理
+'
+'更新履歴　：2008/02/22 SRA Y.Azuma    新規作成
+'更新履歴　：2008/03/07 SRA Y.Azuma    変更     資産登録20080218 分類"A"の追加
+'          ：2009/10/15 SRA T.Mizutani 資産登録画面における資産コード削除対応
+'
+'*************************************************************************
+Public Sub gsub_KensakuMain(ByRef objTarget As Object)
+
+On Error GoTo ErrorSection
+
+    Dim blnRet          As Boolean
+    Dim lngShisanCnt    As Long     '資産テーブル取得データ数
+    
+    blnRet = False
+    
+    
+    With objTarget
+    
+        '明細部の初期化
+        Call g_subCodeIniScreenD(objTarget)   '明細部
+        
+        '入力チェック処理(検索時)
+        blnRet = gfuncCodeInputCheck(objTarget)
+        
+        If blnRet = False Then
+            Call g_subCodeIniScreenD(objTarget)   '明細部
+            Exit Sub
+        End If
+        
+        blnRet = False
+        
+        '検索処理とデータ設定
+        blnRet = gfuncCode_DoSearch(objTarget, lngShisanCnt)
+        
+        If blnRet = False Then
+            
+            'システムエラー
+            Call gfunc_ErrorMsg(4, 17008, "", "資産検索に失敗しました。")
+            
+            .cmdUp.Enabled = False
+'------------<Modify Start   T.Mizutani 2009/10/15> 資産登録画面における資産コード削除対応------------
+            .cmdDel.Enabled = False
+'------------<Modify End     T.Mizutani 2009/10/15> 資産登録画面における資産コード削除対応------------
+
+            Call g_subCodeIniScreenD(objTarget)   '明細部
+            .Range("資産コード").Select
+            
+            Exit Sub
+        End If
+        
+'------------<資産登録20080218 20080325 SRA東 START> -----------------------
+'''------------<資産登録20080218 20080307 SRA東 START> -----------------------
+''        If CStr(Mid(.Range("資産コード"), 1, 1)) = "A" And lngShisanCnt = 0 Then
+''            '正常終了でも資産分類"A"の新規は登録不可
+''            Call gfunc_ErrorMsg(3, 17047, "資産コード", "")
+''            .cmdUp.Enabled = False
+''            Call g_subCodeIniScreenD(objTarget)   '明細部
+''            .Range("資産コード").Select
+''        Else
+'''------------<資産登録20080218 20080307 SRA東 END  > -----------------------
+''        '通常の正常処理
+''            .Select
+''            .Range("資産名").Select
+''        End If
+    
+        '通常の正常処理
+        .Select
+        .Range("資産名").Select
+'------------<資産登録20080218 20080325 SRA東 END  > -----------------------
+    End With
+    
+    Exit Sub
+    
+ErrorSection:
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gsub_KensakuMain", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+    Call g_subCodeIniScreenD(objTarget)   '明細部
+
+End Sub
+
+
+'*************************************************************************
+'関数名　　：入力チェック処理
+'
+'引　　数　：
+'           TargetSheets        I           チェック対象のシート
+'
+'戻り値　　：処理正常(True)、処理異常(False)
+'
+'機能説明　：入力チェックを行う
+'
+'更新履歴　：2008/02/22 SRA Y.Azuma    新規作成
+'更新履歴　：2008/03/07 SRA Y.Azuma    変更     資産登録20080218 分類"A"の追加
+'
+'*************************************************************************
+Public Function gfuncCodeInputCheck(ByRef TargetSheets As Object) As Boolean
+
+On Error GoTo ErrorSection
+
+    Dim strCode     As String
+    Dim Bunrui()    As String
+    Dim lngCnt      As Long
+    
+    Bunrui = Split(SHISAN_ICHIRAN_BUNRUI, ",")
+    
+    gfuncCodeInputCheck = False
+    strCode = ""
+    
+'１．【資産コード】
+    strCode = Trim(TargetSheets.Range("資産コード"))
+
+    '①入力必須ﾁｪｯｸ
+      If Trim(strCode) = "" Then
+        Call gfunc_ErrorMsg(3, 17004, "資産コード", "")
+        TargetSheets.Range("資産コード").Select
+        Exit Function
+      End If
+    
+    '②桁数ﾁｪｯｸ
+    If LenB(StrConv(strCode, vbFromUnicode)) <> 5 Then
+        '資産コード：入力桁数が不正です。
+        Call gfunc_ErrorMsg(3, 17005, "資産コード", "半角5桁で入力して下さい。")
+        TargetSheets.Range("資産コード").Select
+        Exit Function
+    End If
+    
+    '③資産分類チェック
+    For lngCnt = 0 To UBound(Bunrui)
+        If CStr(Mid(strCode, 1, 1)) = Bunrui(lngCnt) Then
+            Exit For
+        End If
+    Next lngCnt
+    If lngCnt > UBound(Bunrui) Then
+        '資産コード：入力が不正です。資産コードには”0,B,Z”で始まる資産コードを入力して下さい。
+'------------<資産登録20080218 20080307 SRA東 START> -----------------------
+        Call gfunc_ErrorMsg(3, 17006, "資産コード", "資産コードには""0,A,B,Z""で始まる資産コードを入力して下さい。")
+'        Call gfunc_ErrorMsg(3, 17006, "資産コード", "資産コードには""0,B,Z""で始まる資産コードを入力して下さい。")
+'------------<資産登録20080218 20080307 SRA東 END  > -----------------------
+        TargetSheets.Range("資産コード").Select
+        Exit Function
+    End If
+    
+    gfuncCodeInputCheck = True
+
+
+    Exit Function
+    
+ErrorSection:
+
+    gfuncCodeInputCheck = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gfuncCodeInputCheck", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+
+End Function
+
+    
+
+    
+    
+
+'*************************************************************************
+'関数名　　：コード検索処理
+'
+'引　　数　：
+'           TargetSheets       I/O     シート
+'           lngShisanCnt       O       資産テーブル取得データ数
+'
+'戻り値　　：処理正常(True)、処理異常(False)
+'
+'機能説明　：コード検索処理
+'
+'更新履歴　：2008/02/22 SRA Y.Azuma    新規作成
+'          ：2009/10/15 SRA T.Mizutani 資産登録画面における資産コード削除対応
+'
+'*************************************************************************
+Public Function gfuncCode_DoSearch(ByRef TargetSheets As Object, ByRef lngShisanCnt As Long) As Boolean
+On Error GoTo Error_Section
+    
+    Dim blnRet              As Boolean
+    Dim strCode             As String
+    Dim vDatShisan()        As Variant  '資産テーブル取得データ
+'    Dim lngShisanCnt        As Long     '資産テーブル取得データ数
+    Dim vDatGohseShisan()   As Variant  '合成資産テーブル取得データ
+    Dim lngGohseiShisanCnt  As Long     '合成資産テーブル取得データ数
+    
+    Erase vDatShisan
+    Erase vDatGohseShisan
+    
+    gfuncCode_DoSearch = False
+
+'*******************************************************
+'* 関数開始　                                        　*
+'*******************************************************
+
+    '検索キー情報取得
+    strCode = CStr(TargetSheets.Range("資産コード"))
+
+    '資産テーブル検索
+    lngShisanCnt = 0
+    blnRet = func_GetShisanInfo(strCode, vDatShisan, lngShisanCnt)
+                                   
+    If blnRet = False Then
+        Erase vDatShisan
+        Exit Function
+    End If
+        
+    
+    '合成資産テーブル検索
+    If lngShisanCnt > 0 Then
+        If vDatShisan(EmShisanSearch1.KANJOH_MEIGARA_OYA_KBN, 0) = OYA_KBN Then
+            lngGohseiShisanCnt = 0
+            blnRet = func_GetGohseiShisanInfo(strCode, vDatGohseShisan, lngGohseiShisanCnt)
+                                           
+            If blnRet = False Then
+                Erase vDatShisan
+                Erase vDatGohseShisan
+                Exit Function
+            End If
+        Else
+            '勘定・銘柄・親区分が"3:親"以外は合成資産の検索をしない
+        End If
+    Else
+        '0件の場合は何もしない
+    End If
+    
+    '取得データの表示
+    '情報の画面設定
+    blnRet = func_SetShisanInfo(TargetSheets, vDatShisan, lngShisanCnt, vDatGohseShisan, lngGohseiShisanCnt)
+    
+    If blnRet = False Then
+        With TargetSheets
+            .cmdUp.Enabled = False
+'------------<Modify Start T.Mizutani 2009/10/15> 資産登録画面における資産コード削除対応------------
+            .cmdDel.Enabled = False
+'------------<Modify End   T.Mizutani 2009/10/15> 資産登録画面における資産コード削除対応------------
+        End With
+        Erase vDatShisan
+        Erase vDatGohseShisan
+        Exit Function
+    End If
+    
+    With TargetSheets
+        '正常終了時は更新ボタンを有効にする。
+        .cmdUp.Enabled = True
+'------------<Modify Start T.Mizutani 2009/10/15> 資産登録画面における資産コード削除対応------------
+        '削除ボタンも有効にするが、新規登録時は無効のまま。
+        If lngShisanCnt > 0 Then
+            .cmdDel.Enabled = True
+        End If
+'------------<Modify End   T.Mizutani 2009/10/15> 資産登録画面における資産コード削除対応------------
+    End With
+    
+    '取得データをメモリーから破棄
+    Erase vDatShisan
+    Erase vDatGohseShisan
+    
+    gfuncCode_DoSearch = True
+
+    Exit Function
+
+Error_Section:
+
+    gfuncCode_DoSearch = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gfuncCode_DoSearch", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+    TargetSheets.cmdUp.Enabled = False       '更新ボタン
+'------------<Modify Start T.Mizutani 2009/10/15> 資産登録画面における資産コード削除対応------------
+    TargetSheets.cmdDel.Enabled = False      '削除ボタン
+'------------<Modify End   T.Mizutani 2009/10/15> 資産登録画面における資産コード削除対応------------
+    
+    Erase vDatShisan
+    Erase vDatGohseShisan
+
+End Function
+
+
+
+'*************************************************************************
+'関数名　　：コードテーブル情報取得処理
+'
+'引　　数　：
+'           strCode         I       コード(分類＋コード)
+'           vdata()         O       取得結果
+'           lngRow          O       取得件数
+'
+'戻り値　　：Boolean
+'
+'機能説明　：コードテーブル情報を取得する
+'
+'更新履歴　：2008/02/22 SRA Y.Azuma    新規作成
+'　　　　　：2009/01/19 SRA Y.Azuma    変更   自己設定投信の委託者報酬額の内訳管理
+'
+'*************************************************************************
+Public Function func_GetShisanInfo(ByVal strCode As String _
+                               , ByRef vData() As Variant _
+                               , ByRef lngRow As Long) As Boolean
+On Error GoTo ErrHandler
+    Dim strSql      As String
+    Dim lngCol      As Long
+    Dim strErrCode  As String
+    
+    func_GetShisanInfo = False
+
+    strSql = ""
+    strSql = strSql & " SELECT"
+    strSql = strSql & "     A.SHISAN_NAME,"
+    strSql = strSql & "     A.SHISAN_PNAME,"
+    strSql = strSql & "     A.KANJOH_MEIGARA_OYA_KBN,"
+    strSql = strSql & "     DECODE(A.SHISAN_BUNRUI"
+    strSql = strSql & "           ,'Z', C.GAIBU_CODE"
+    strSql = strSql & "               , B.GAIBU_CODE) GAIBU_CODE,"
+    strSql = strSql & "     C.HOHSHU_RATE,"
+'------------<Modify Start azuma 2009/01/19 > 自己設定投信の委託者報酬額の内訳管理---------------
+    strSql = strSql & "    TO_CHAR(C.UNYOH_HOHSHU_RATE),"
+'------------<Modify End   azuma 2009/01/19 > 自己設定投信の委託者報酬額の内訳管理---------------
+    strSql = strSql & "     C.JIKA_TANI_KUCHISU,"
+    strSql = strSql & "     C.T21_KOHZA_NO,"
+    strSql = strSql & "     A.KOUSHIN_YMD"
+    strSql = strSql & " FROM"
+    strSql = strSql & "     " & TBL_SHISAN & "     A"
+    strSql = strSql & "    ," & TBL_SHISAN_PX & "  B"
+    strSql = strSql & "    ," & TBL_SHISAN_T21 & " C"
+    strSql = strSql & " WHERE"
+    strSql = strSql & "     A.SAKUJO_FLG    = '0' "
+    strSql = strSql & " AND A.SHISAN_BUNRUI = B.SHISAN_BUNRUI(+)"
+    strSql = strSql & " AND A.SHISAN_CODE   = B.SHISAN_CODE  (+)   "
+    strSql = strSql & " AND B.SAKUJO_FLG(+) = '0' "
+    strSql = strSql & " AND A.SHISAN_BUNRUI = C.SHISAN_BUNRUI(+) "
+    strSql = strSql & " AND A.SHISAN_CODE   = C.SHISAN_CODE  (+)   "
+    strSql = strSql & " AND C.SAKUJO_FLG(+) = '0' "
+    strSql = strSql & " AND A.SHISAN_BUNRUI = '" & func_ChkQuoteshon(Mid(strCode, 1, 1), "'") & "' "
+    strSql = strSql & " AND A.SHISAN_CODE   = '" & func_ChkQuoteshon(Mid(strCode, 2, 4), "'") & "' "
+    strSql = strSql & " "
+    
+    'データ取得
+    Call gclsdb.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow, strErrCode)
+    
+    If Trim(strErrCode) <> "" Then
+        lngRow = 0
+        Exit Function
+    End If
+    
+    func_GetShisanInfo = True
+    
+    Exit Function
+
+ErrHandler:
+    func_GetShisanInfo = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_GetShisanInfo", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+'    Erase vData
+    lngRow = 0
+
+
+End Function
+
+'*************************************************************************
+'関数名　　：合成資産テーブル情報取得処理
+'
+'引　　数　：
+'           strCode         I       コード(分類＋コード)
+'           vdata()         O       取得結果
+'           lngRow          O       取得件数
+'
+'戻り値　　：Boolean
+'
+'機能説明　：資産分類テーブル情報を取得する
+'
+'更新履歴　：2008/02/22 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Function func_GetGohseiShisanInfo(ByVal strCode As String _
+                                       , ByRef vData() As Variant _
+                                       , ByRef lngRow As Long) As Boolean
+On Error GoTo ErrHandler
+    Dim strSql      As String
+    Dim lngCol      As Long
+    Dim strErrCode  As String
+    
+    func_GetGohseiShisanInfo = False
+
+    strSql = ""
+    strSql = strSql & " SELECT DECODE(A.SHISAN_KAGEN_KBN, 1,'+', -1,'-', '')"
+    strSql = strSql & "       ,A.KO_SHISAN_BUNRUI||A.KO_SHISAN_CODE"
+    strSql = strSql & "       ,B.SHISAN_NAME"
+    strSql = strSql & "  FROM  " & TBL_GOHSEI_SHISAN & " A"
+    strSql = strSql & "       ," & TBL_SHISAN & "        B"
+    strSql = strSql & " WHERE  A.KO_SHISAN_BUNRUI  = SHISAN_BUNRUI(+)"
+    strSql = strSql & "   AND  A.KO_SHISAN_CODE    = SHISAN_CODE(+)"
+    strSql = strSql & "   AND  A.OYA_SHISAN_BUNRUI = '" & func_ChkQuoteshon(Mid(strCode, 1, 1), "'") & "' "
+    strSql = strSql & "   AND  A.OYA_SHISAN_CODE   = '" & func_ChkQuoteshon(Mid(strCode, 2, 4), "'") & "' "
+    strSql = strSql & "  ORDER BY"
+    strSql = strSql & "        A.KO_SHISAN_BUNRUI"
+    strSql = strSql & "       ,A.KO_SHISAN_CODE"
+    
+    'データ取得
+    Call gclsdb.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow, strErrCode)
+    
+    If Trim(strErrCode) <> "" Then
+        lngRow = 0
+        Exit Function
+    End If
+    
+    func_GetGohseiShisanInfo = True
+    
+    Exit Function
+
+ErrHandler:
+    func_GetGohseiShisanInfo = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_GetGohseiShisanInfo", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+'    Erase vData
+    lngRow = 0
+
+
+End Function
+
+
+
+'*************************************************************************
+'関数名　　：ワークシートに取得情報を設定する
+'
+'引　　数　：
+'           TargetSheets        O       処理対象ワークシート
+'           vDatShisan()        I       資産データ
+'           lngShisanCnt        I       資産データ件数
+'           vDatGohseShisan()   I       合成資産データ
+'           lngGohseiShisanCnt  I       合成資産データ件数
+'
+'戻り値　　：Boolean
+'
+'機能説明　：処理対象ワークシートにデータを設定する。
+'
+'更新履歴　：2008/02/22 SRA Y.Azuma    新規作成
+'更新履歴　：2008/03/25 SRA Y.Azuma    修正     資産登録仕様変更
+'更新履歴　：2009/01/19 SRA Y.Azuma    変更   自己設定投信の委託者報酬額の内訳管理
+'
+'*************************************************************************
+Private Function func_SetShisanInfo(ByRef TargetSheets As Object _
+                                   , ByVal vDatShisan As Variant _
+                                   , ByVal lngShisanCnt As Long _
+                                   , ByVal vDatGohseShisan As Variant _
+                                   , ByVal lngGohseiShisanCnt As Long) As Boolean
+On Error GoTo ErrHandler
+
+    Dim strBunrui   As String
+    Dim lngCnt      As Long
+    
+    func_SetShisanInfo = False
+    
+    
+    strBunrui = CStr(Mid(TargetSheets.Range("資産コード"), 1, 1))
+    
+    ThisWorkbook.Worksheets(DATA_SHEETNAME).Range("検索時資産コード") = TargetSheets.Range("資産コード")
+
+    If lngShisanCnt = 0 Then
+    '新規登録
+        Select Case strBunrui
+            Case "0"
+                Call subInit_Ippan(TargetSheets, True, False)       '一般資産       unlocked
+                Call subInit_Chohsei(TargetSheets, False, True)     '調整資産       locked
+                Call subInit_T21(TargetSheets, False, True)         'T21調整資産    locked
+                Call subInit_Gohsei(TargetSheets, False, False)     '合成資産       unlocked
+'------------<資産登録20080218 20080325 SRA東 START> -----------------------
+                TargetSheets.Range("区分名").Value = ""
+'------------<資産登録20080218 20080325 SRA東 END  > -----------------------
+                
+'------------<資産登録20080218 20080325 SRA東 START> -----------------------
+            Case "A"
+                Call subInit_Ippan(TargetSheets, False, True)       '一般資産       locked
+                Call subInit_Chohsei(TargetSheets, False, True)     '調整資産       locked
+                Call subInit_T21(TargetSheets, False, True)         'T21調整資産    locked
+                Call subInit_Gohsei(TargetSheets, False, True)      '合成資産       locked
+                TargetSheets.Range("区分名").Value = KBN_NAME_KNJ
+'------------<資産登録20080218 20080325 SRA東 END  > -----------------------
+            
+            Case "B"
+                Call subInit_Ippan(TargetSheets, False, True)       '一般資産       locked
+                Call subInit_Chohsei(TargetSheets, True, False)     '調整資産       unlocked
+                Call subInit_T21(TargetSheets, False, True)         'T21調整資産    locked
+                Call subInit_Gohsei(TargetSheets, False, True)      '合成資産       locked
+'------------<資産登録20080218 20080325 SRA東 START> -----------------------
+                TargetSheets.Range("区分名").Value = KBN_NAME_PX
+'------------<資産登録20080218 20080325 SRA東 END  > -----------------------
+                
+            Case "Z"
+                Call subInit_Ippan(TargetSheets, False, True)       '一般資産       locked
+                Call subInit_Chohsei(TargetSheets, False, True)     '調整資産       locked
+                Call subInit_T21(TargetSheets, True, False)         'T21調整資産    unlocked
+                Call subInit_Gohsei(TargetSheets, False, True)      '合成資産       locked
+'------------<資産登録20080218 20080325 SRA東 START> -----------------------
+                TargetSheets.Range("区分名").Value = KBN_NAME_T21
+'------------<資産登録20080218 20080325 SRA東 END  > -----------------------
+            
+            Case Else
+            '検索チェックで"0"、"A"、"B"、"Z"以外入力されない為処理なし
+        End Select
+    
+    Else
+    '登録済の表示
+    
+        ThisWorkbook.Worksheets(DATA_SHEETNAME).Range("資産更新日付") = vDatShisan(EmShisanSearch1.KOUSHIN_YMD, 0)
+        With TargetSheets
+            .Range("資産名") = CStr(Trim(vDatShisan(EmShisanSearch1.SHISAN_NAME, 0)))
+            .Range("帳票資産名") = CStr(Trim(vDatShisan(EmShisanSearch1.SHISAN_PNAME, 0)))
+        End With
+        
+        
+        If CStr(Trim(vDatShisan(EmShisanSearch1.KANJOH_MEIGARA_OYA_KBN, 0))) = KANJOH Then
+        '勘定の資産("A"の資産も含む)
+            Call subInit_Ippan(TargetSheets, False, True)       '一般資産       locked
+            Call subInit_Chohsei(TargetSheets, False, True)     '調整資産       locked
+            Call subInit_T21(TargetSheets, False, True)         'T21調整資産    locked
+            Call subInit_Gohsei(TargetSheets, False, True)      '合成資産       locked
+'------------<資産登録20080218 20080325 SRA東 START> -----------------------
+            TargetSheets.Range("区分名").Value = KBN_NAME_KNJ
+'------------<資産登録20080218 20080325 SRA東 END  > -----------------------
+            
+        ElseIf CStr(Trim(vDatShisan(EmShisanSearch1.KANJOH_MEIGARA_OYA_KBN, 0))) = MEIGARA Then
+        '銘柄の資産
+        
+            Select Case strBunrui
+                Case "0"
+                '一般資産
+                    Call subInit_Ippan(TargetSheets, True, False)       '一般資産       unlocked
+                    Call subInit_Chohsei(TargetSheets, False, True)     '調整資産       locked
+                    Call subInit_T21(TargetSheets, False, True)         'T21調整資産    locked
+                    Call subInit_Gohsei(TargetSheets, False, True)      '合成資産       locked
+                    With TargetSheets
+                        .Range("一般PX銘柄コード") = CStr(Trim(vDatShisan(EmShisanSearch1.GAIBU_CODE, 0)))
+'------------<資産登録20080218 20080325 SRA東 START> -----------------------
+                        .Range("区分名").Value = KBN_NAME_PX
+'------------<資産登録20080218 20080325 SRA東 END  > -----------------------
+                    End With
+                
+                Case "B"
+                '調整資産
+                    Call subInit_Ippan(TargetSheets, False, True)       '一般資産       locked
+                    Call subInit_Chohsei(TargetSheets, True, False)     '調整資産       unlocked
+                    Call subInit_T21(TargetSheets, False, True)         'T21調整資産    locked
+                    Call subInit_Gohsei(TargetSheets, False, True)      '合成資産       locked
+                    With TargetSheets
+                        .Range("調整PX銘柄コード") = CStr(Trim(vDatShisan(EmShisanSearch1.GAIBU_CODE, 0)))
+'------------<資産登録20080218 20080325 SRA東 START> -----------------------
+                        .Range("区分名").Value = KBN_NAME_PX
+'------------<資産登録20080218 20080325 SRA東 END  > -----------------------
+                    End With
+                
+                Case "Z"
+                'T21調整資産
+                    Call subInit_Ippan(TargetSheets, False, True)       '一般資産       locked
+                    Call subInit_Chohsei(TargetSheets, False, True)     '調整資産       locked
+                    Call subInit_T21(TargetSheets, True, False)         'T21調整資産    unlocked
+                    Call subInit_Gohsei(TargetSheets, False, True)      '合成資産       locked
+                    With TargetSheets
+                        .Range("T21PX銘柄コード") = CStr(Trim(vDatShisan(EmShisanSearch1.GAIBU_CODE, 0)))
+                        .Range("T21委託者報酬率") = CStr(Trim(vDatShisan(EmShisanSearch1.HOHSHU_RATE, 0)))
+'------------<Modify Start azuma 2009/01/19 > 自己設定投信の委託者報酬額の内訳管理---------------
+                        .Range("T21運用報酬率") = CStr(Trim(vDatShisan(EmShisanSearch1.UNYOH_HOHSHU_RATE, 0)))
+'------------<Modify End   azuma 2009/01/19 > 自己設定投信の委託者報酬額の内訳管理---------------
+                        .Range("T21時価単位口数") = CStr(Trim(vDatShisan(EmShisanSearch1.JIKA_TANI_KUCHISU, 0)))
+                        .Range("T21口座番号") = CStr(Trim(vDatShisan(EmShisanSearch1.T21_KOHZA_NO, 0)))
+'------------<資産登録20080218 20080325 SRA東 START> -----------------------
+                        .Range("区分名").Value = KBN_NAME_T21
+'------------<資産登録20080218 20080325 SRA東 END  > -----------------------
+                    End With
+                    
+                Case Else
+                '検索チェックで"0"、"B"、"Z"以外入力されない為処理なし
+                    
+            End Select
+        
+        ElseIf CStr(Trim(vDatShisan(EmShisanSearch1.KANJOH_MEIGARA_OYA_KBN, 0))) = OYA_KBN Then
+        '合成資産
+            Call subInit_Ippan(TargetSheets, False, True)       '一般資産       locked
+            Call subInit_Chohsei(TargetSheets, False, True)     '調整資産       locked
+            Call subInit_T21(TargetSheets, False, True)         'T21調整資産    locked
+            Call subInit_Gohsei(TargetSheets, True, False)      '合成資産       unlocked
+            
+            If lngGohseiShisanCnt > 0 Then
+                For lngCnt = 1 To lngGohseiShisanCnt
+                    If lngCnt > 6 Then Exit For
+                    With TargetSheets
+                        .Range("合成加減" & lngCnt) = CStr(Trim(vDatGohseShisan(EmGohseiShisan.SHISAN_KAGEN_KBN, lngCnt - 1)))
+                        .Range("合成子資産コード" & lngCnt) = CStr(Trim(vDatGohseShisan(EmGohseiShisan.KO_SHISAN_CODE, lngCnt - 1)))
+                        .Range("合成子資産名" & lngCnt) = CStr(Trim(vDatGohseShisan(EmGohseiShisan.SHISAN_NAME, lngCnt - 1)))
+'------------<資産登録20080218 20080325 SRA東 START> -----------------------
+                        .Range("区分名").Value = KBN_NAME_OYA
+'------------<資産登録20080218 20080325 SRA東 END  > -----------------------
+                    End With
+                Next lngCnt
+            End If
+        
+        Else
+        'それ以外の区分
+            Call gfunc_ErrorMsg(4, 17007, "", "勘定・銘柄・親区分に想定外の区分が入力されてます。" & vbCrLf & _
+                                "区分：" & vDatShisan(EmShisanSearch1.KANJOH_MEIGARA_OYA_KBN, 0))
+            Exit Function
+        End If
+    End If
+
+    func_SetShisanInfo = True
+
+    Exit Function
+
+ErrHandler:
+    func_SetShisanInfo = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_SetShisanInfo", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+'    MsgBox "Error:func_SetShisanInfo" & vbCrLf & Err.Description
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：子資産名称取得
+'
+'引　　数　：
+'           strBunrui       I       資産分類
+'           strCode         I       資産コード
+'
+'戻り値　　：資産名　エラー時は""
+'
+'機能説明　：子資産コードから資産名を取得して値を返す
+'
+'更新履歴　：2008/02/22 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Function func_GetKoShisaName(ByVal strBunrui As String, ByVal strCode As String) As String
+
+On Error GoTo ErrHandler
+    
+    Dim strSql          As String
+    Dim vData()         As Variant
+    Dim lngCol          As Long
+    Dim lngRow          As Long
+    Dim strBuff         As String
+    
+    func_GetKoShisaName = ""
+    
+    '資産テーブル検索SQL作成
+    Call sub_ShisanSqlCreate(KO_SHISAN_LIST, strSql)
+    
+    strSql = strSql & "  AND SHISAN_BUNRUI = '" & func_ChkQuoteshon(strBunrui, "'") & "'"
+    strSql = strSql & "  AND SHISAN_CODE   = '" & func_ChkQuoteshon(strCode, "'") & "'"
+    
+    
+    'データ取得
+    Call gclsdb.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow)
+    
+    ThisWorkbook.Worksheets(DATA_SHEETNAME).Activate
+    
+    
+    '取得データをセルに設定
+    If lngRow > 0 Then
+        strBuff = CStr(vData(1, 0))
+    Else
+        strBuff = ""
+    End If
+    
+    Erase vData
+    
+    
+    func_GetKoShisaName = strBuff
+    
+    Exit Function
+ErrHandler:
+    func_GetKoShisaName = ""
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_GetKoShisaName", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Erase vData
+
+
+End Function

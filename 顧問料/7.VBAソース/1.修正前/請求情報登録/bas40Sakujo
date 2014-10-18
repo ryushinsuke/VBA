@@ -1,0 +1,298 @@
+Attribute VB_Name = "bas40Sakujo"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：国内顧問料計算システム・請求情報登録
+'
+'オブジェクト名：bas40Sakujo
+'
+'機能概要　：削除処理
+'
+'更新履歴　：2006/08/15 SRA T.Sato       新規作成
+'
+'*************************************************************************
+
+Const MODULE_NAME = "bas40Sakujo"
+
+
+'*************************************************************************
+'関数名　　：削除ボタン押下処理関数
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：削除ボタン押下じの行追加処理
+'
+'更新履歴　：2006/08/15 SRA T.Sato    新規作成
+'
+'*************************************************************************
+Public Sub gsub_DelClick()
+       
+    Call gCom01_SheetProtect(Worksheets(MAIN_SHEETNAME), False)    'シート保護解除
+    Call fncCheckRowDelete(Worksheets(MAIN_SHEETNAME))
+    Call gCom01_SheetProtect(Worksheets(MAIN_SHEETNAME), True)     'シート保護
+    
+End Sub
+
+'*************************************************************************
+'関数名　　：明細行削除処理
+'
+'引　　数　：
+'           TargetSheets    I   対象のシート
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：明細行の削除を行う。
+'
+'更新履歴　：2006/08/15 SRA T.Sato    新規作成
+'
+'*************************************************************************
+Private Function fncCheckRowDelete(TargetSheets As Object) As Long
+    Dim lngCnt          As Long
+    Dim strError        As String
+    Dim strStatus       As String
+    Dim lngRow          As Long
+    Dim lngStatus       As Long
+    Dim lngMsgId        As Long
+
+'*** PH3対応 2007/04/12 Added By H.Anpo Start ***
+    Dim strDeltFlg      As String
+'*** PH3対応 2007/04/12 Added By H.Anpo End ***
+
+
+On Error GoTo ErrorHandler
+
+    fncCheckRowDelete = 0
+    
+    '削除行取得
+    lngCnt = gfncKsCmnSearchDataTopRow(TargetSheets)
+        
+    'トランザクション開始
+    cnAdo.BeginTrans
+    
+    With TargetSheets
+        Do While (.Range(mLINKCELLNAME & lngCnt) <> vbNullString)
+'------------<Modify Start azuma 2006/11/10 > -----------------------
+'            If .Range(mLINKCELLNAME & lngCnt) Then
+'            '削除対象の場合
+'
+'                If .Range("AL" & lngCnt) = 1 Then
+'                '検索データの場合
+'
+'                    '請求管理テーブル存在チェック
+'                    If gfunc_GetKYK_SEIKYU_KANRI(.Range("F" & lngCnt), _
+'                                                 .Range("AK" & lngCnt), _
+'                                                 Left(.Range("X" & lngCnt), 1), _
+'                                                 "1", _
+'                                                 strStatus, _
+'                                                 lngRow, _
+'                                                 lngStatus) = False Then
+
+            'ステータスが請求済：２のデータは削除しない。
+            If .Range(mLINKCELLNAME & lngCnt) And Left(.Range(gcSTATUS & lngCnt), 1) = "2" Then
+                 Call gfunc_ErrorMsg(3, 5401, "ステータス ", _
+                                    "口座番号  ： " & .Range("F" & lngCnt) & vbCrLf & _
+                                    "請求期間  ： " & .Range("O" & lngCnt) & " ～ " & .Range("R" & lngCnt) & vbCrLf & _
+                                    "請求日    ： " & .Range("U" & lngCnt) & vbCrLf & _
+                                    "区分      ： " & .Range("X" & lngCnt))
+                 lngCnt = lngCnt + 1
+            Else
+                If .Range(mLINKCELLNAME & lngCnt) Then
+                '削除対象の場合(チェックボックがTRUE　かつ　ステータスが請求済：２でないもの)
+                
+                    If .Range(gcSHORI_KBN & lngCnt) = 1 Then
+                    '検索データの場合
+                    
+                    
+                        '請求管理テーブル存在チェック
+'*** PH3対応 2007/04/12 Modified By H.Anpo Start ***
+'                        If gfunc_GetKYK_SEIKYU_KANRI(.Range("F" & lngCnt), _
+'                                                     .Range(gcSEIKYU_KIKAN_ID & lngCnt), _
+'                                                     Left(.Range("X" & lngCnt), 1), _
+'                                                     "1", _
+'                                                     strStatus, _
+'                                                     lngrow, _
+'                                                     lngStatus) = False Then
+                        If gfunc_GetKYK_SEIKYU_KANRI(.Range("F" & lngCnt), _
+                                                     .Range(gcSEIKYU_KIKAN_ID & lngCnt), _
+                                                     Left(.Range("X" & lngCnt), 1), _
+                                                     .Range("O" & lngCnt), _
+                                                     "1", _
+                                                     strStatus, _
+                                                     lngRow, _
+                                                     lngStatus, _
+                                                     strDeltFlg) = False Then
+'*** PH3対応 2007/04/12 Modified By H.Anpo End ***
+    '------------<Modify End   azuma 2006/11/10 > -----------------------
+                            
+                            If lngStatus = 1 Or lngStatus = 2 Then
+                                '0:正常,1:ロック,2:削除済,-1:その他
+                                Select Case lngStatus
+                                    Case 1
+                                    '他セッションからのロック
+                                        lngMsgId = 5101
+                                    Case 2
+                                    '削除済み
+                                        lngMsgId = 5102
+                                End Select
+                    
+                                'エラーメッセージ出力
+                                Call gfunc_ErrorMsg(3, lngMsgId, "", "")
+                            End If
+                            GoTo RollbackSection
+                        End If
+                        
+                        '請求管理テーブル削除(削除FLG更新)
+    '------------<Modify Start azuma 2006/11/10 > -----------------------
+'*** PH3対応 2007/04/12 Modified By H.Anpo Start ***
+'                        If fncKYK_SEIKYU_KANRI_Delete(.Range("F" & lngCnt), _
+'                                                      .Range(gcSEIKYU_KIKAN_ID & lngCnt), _
+'                                                      Left(.Range("X" & lngCnt), 1), _
+'                                                      strError) = False Then
+                        If fncKYK_SEIKYU_KANRI_Delete(.Range("F" & lngCnt), _
+                                                      .Range(gcSEIKYU_KIKAN_ID & lngCnt), _
+                                                      Left(.Range("X" & lngCnt), 1), _
+                                                     .Range("O" & lngCnt), _
+                                                      strError) = False Then
+'*** PH3対応 2007/04/12 Modified By H.Anpo End ***
+                            GoTo RollbackSection
+                        End If
+    '                    If fncKYK_SEIKYU_KANRI_Delete(.Range("F" & lngCnt), _
+    '                                                  .Range("AK" & lngCnt), _
+    '                                                  Left(.Range("X" & lngCnt), 1), _
+    '                                                  strError) = False Then
+    '                        GoTo RollbackSection
+    '                    End If
+    '------------<Modify End   azuma 2006/11/10 > -----------------------
+                    
+'*** PH3対応 2007/04/12 Modified By H.Anpo Start ***
+''------------<Modify Start azuma 2007/03/02 > -----------------------
+'                        '請求管理関連テーブル削除処理
+'                        If func_Del_SEIKYU_GROUP(.Range("F" & lngCnt), _
+'                                                 .Range(gcSEIKYU_KIKAN_ID & lngCnt), _
+'                                                  Left(.Range("X" & lngCnt), 1), _
+'                                                 .Range(gcSEIKYU_KIKAN_TO & lngCnt), _
+'                                                 strError) = False Then
+'                            GoTo RollbackSection
+'                        End If
+''------------<Modify End   azuma 2007/03/02 > -----------------------
+                        '請求管理関連テーブル削除処理
+                        If func_Del_SEIKYU_GROUP(.Range("F" & lngCnt), _
+                                                 .Range(gcSEIKYU_KIKAN_ID & lngCnt), _
+                                                  Left(.Range("X" & lngCnt), 1), _
+                                                 .Range("O" & lngCnt), _
+                                                 .Range(gcSEIKYU_KIKAN_TO & lngCnt), _
+                                                 strError) = False Then
+                            GoTo RollbackSection
+                        End If
+'*** PH3対応 2007/04/12 Modified By H.Anpo End ***
+                    End If
+                    
+                    '行削除
+                    Call gfncKsCmnDeleteRow(TargetSheets, lngCnt)
+                Else
+                    lngCnt = lngCnt + 1
+                End If
+                
+            End If  '<------------ Modify azuma 2006/11/10
+        Loop
+    End With
+    
+    'コミット
+    cnAdo.CommitTrans
+
+    Exit Function
+
+RollbackSection:
+    'ロールバック
+    cnAdo.RollbackTrans
+    
+    Exit Function
+
+ErrorHandler:
+    fncCheckRowDelete = Err.Number
+    
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "fncCheckRowDelete", Err.Number, Err.Description)
+
+End Function
+
+'*************************************************************************
+'関数名　　：請求管理テーブル削除処理
+'
+'引　　数　：
+'           strKohzaNo          I       口座番号
+'           lngSeikyuKikanId    I       請求期間ID
+'           strHizukeSyurui     I       日付種類
+'           strKikanFrom        I       請求書期間FROM
+'           strError            O       エラーコード
+'
+'戻り値　　：Boolean
+'
+'機能説明　：契約管理テーブルの削除を行う
+'
+'更新履歴　：2006/08/15 SRA T.Sato    新規作成
+'更新履歴　：2007/03/12 SRA H.Anpo    PH3対応(請求書期間FROM追加)
+'
+'*************************************************************************
+Private Function fncKYK_SEIKYU_KANRI_Delete(ByVal strKohzaNo As String, _
+                                            ByVal lngSeikyuKikanId As Long, _
+                                            ByVal strHizukeSyurui As String, _
+                                            ByVal strKikanFrom As String, _
+                                            ByRef strError As String) As Boolean
+    Dim strsql      As String
+    Dim vdata()     As Variant
+    Dim lngCol      As Long
+    Dim lngRow      As Long
+    Dim lngCnt      As Long
+    Dim blnret      As Boolean
+    Dim strErrCode  As String
+    
+On Error GoTo ErrHandler
+
+    fncKYK_SEIKYU_KANRI_Delete = False
+
+    strsql = ""
+    strsql = strsql & " UPDATE KYK_SEIKYU_KANRI"
+    strsql = strsql & " SET "
+    strsql = strsql & " KOHSHIN_YMD          = SYSDATE "
+    strsql = strsql & ",KOHSHIN_PGM_ID       = '" & UPDATE_PGM_ID & "'"
+    strsql = strsql & ",KOHSHIN_TANTOHSHA    = '" & UPDATE_USER & "'"
+    strsql = strsql & ",SAKUJO_FLG           = '1'"
+    strsql = strsql & " WHERE "
+    strsql = strsql & " KOHZA_NO             = '" & strKohzaNo & "' AND"
+    strsql = strsql & " SEIKYU_KIKAN_ID      = '" & lngSeikyuKikanId & "' AND"
+    strsql = strsql & " HIZUKE_SHURUI        = '" & strHizukeSyurui & "' AND"
+'*** PH3対応 2007/04/12 Added By H.Anpo Start ***
+    strsql = strsql & " SEIKYUSHO_KIKAN_FROM        = '" & strKikanFrom & "' AND"
+'*** PH3対応 2007/04/12 Added By H.Anpo End ***
+    strsql = strsql & " SAKUJO_FLG           = '0'"
+    
+    '実行
+    blnret = gclsdb.DoExequteSql(gcUPDATE, strsql, vdata, lngCol, lngRow, strErrCode)
+        
+    If blnret = False Then
+    
+        If Trim(strErrCode) <> "" Then
+            strError = strErrCode
+        End If
+        
+        Exit Function
+    End If
+
+    Erase vdata
+
+    fncKYK_SEIKYU_KANRI_Delete = True
+
+    Exit Function
+
+ErrHandler:
+    fncKYK_SEIKYU_KANRI_Delete = False
+    Erase vdata
+    
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "fncKYK_SEIKYU_KANRI_Delete", Err.Number, Err.Description)
+
+End Function
+
+

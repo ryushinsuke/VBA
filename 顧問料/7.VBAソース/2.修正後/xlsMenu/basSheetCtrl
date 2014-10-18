@@ -1,0 +1,166 @@
+Attribute VB_Name = "basSheetCtrl"
+Option Explicit
+'
+' モジュール内共有変数
+Const MODULE_NAME = "basSheetCtrl"
+Dim strSaveHideTBarNm()     As String       ' 非表示としたツールバー名の格納域
+Dim lngSaveHideTBarIdx()    As Long         ' 非表示としたメニューバーのサブアイテムの索引格納域
+
+'*************************************************************************
+'関数名　　：シート上のツールバーなどを非表示にする。
+'
+'引　　数　：
+'
+'戻り値　　：
+'
+'機能説明　：
+'
+'更新履歴　：2006/07/12 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Sub HideItem()
+'
+' 非表示設定
+    Dim objCmdBar           As Object
+    Dim lngCnt              As Long
+    Const strNoTouchBars    As String = _
+        "/Worksheet Menu Bar/////////"
+
+   '行番号非表示
+    ActiveWindow.DisplayHeadings = False
+
+'    カーソル右移動
+    
+'    罫線表示
+    ActiveWindow.DisplayGridlines = False
+    
+    With Application
+        .DisplayFormulaBar = False                          '数式バー
+        .DisplayStatusBar = False                           'ステータスバー
+    
+        lngCnt = 0          'ツールバー名格納カウンタ初期化
+        For Each objCmdBar In .CommandBars
+            With objCmdBar
+                If .Visible Then
+                    If InStr(1, strNoTouchBars, "/" & .Name & "/", vbTextCompare) <= 0 Then
+                        .Visible = False
+                        lngCnt = lngCnt + 1
+                        ReDim Preserve strSaveHideTBarNm(lngCnt)
+                        strSaveHideTBarNm(lngCnt) = .Name
+                    End If
+                End If
+            End With
+        Next
+
+'メニューバーの一部を非表示（全非表示とするには単にenabled=false）
+''        lngCnt = 0          'コントロール索引格納カウンタ初期化
+''        For Each objCmdBar In .CommandBars("Worksheet Menu Bar").Controls
+''            With objCmdBar
+''                Select Case True
+''                Case .OLEMenuGroup = msoOLEMenuGroupWindow
+''                Case .Visible
+''                    .Visible = False
+''                    lngCnt = lngCnt + 1
+''                    ReDim Preserve lngSaveHideTBarIdx(lngCnt)
+''                    lngSaveHideTBarIdx(lngCnt) = .Index
+''                End Select
+''            End With
+''        Next
+    End With
+End Sub
+
+'*************************************************************************
+'関数名　　：シート上のツールバーなどを再表示にする。
+'
+'引　　数　：
+'
+'戻り値　　：
+'
+'機能説明　：
+'
+'更新履歴　：2006/07/12 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Sub 再表示()
+Attribute 再表示.VB_Description = "ツールバー再表示"
+Attribute 再表示.VB_ProcData.VB_Invoke_Func = "r\n14"
+'
+' 再表示設定
+'
+    Dim lngCnt      As Long
+
+   '行番号表示
+    On Error Resume Next
+
+    Application.MoveAfterReturnDirection = xlDown
+    With Application
+'        .DisplayFormulaBar = True
+'        .DisplayStatusBar = True
+        For lngCnt = 1 To UBound(strSaveHideTBarNm)
+            .CommandBars(strSaveHideTBarNm(lngCnt)).Visible = True
+        Next
+        
+''        For lngCnt = 1 To UBound(lngSaveHideTBarIdx)
+''            .CommandBars("Worksheet Menu Bar").Controls(lngSaveHideTBarIdx(lngCnt)).Visible = True
+''        Next
+    End With
+    Application.DisplayFormulaBar = True
+    Application.DisplayStatusBar = True
+    
+'    ActiveWindow.DisplayHeadings = True     '終了時は不要(ActiveWindowが終わる)
+'    ActiveWindow.DisplayGridlines = True    '  同
+End Sub
+
+
+'コマンドボタンの作成
+'*************************************************************************
+'関数名　　：コマンドボタンの作成
+'
+'引　　数　：
+'           objTarget      I       作成対象ワークシート
+'           CellName       I       作成対象位置基準セル
+'           strBtnNm       I       ボタン表示文字（及びリンクEXCELシート名）
+'           blnControl     I       ボタン操作可能不能指定
+'
+'戻り値　　：
+'
+'機能説明　：
+'
+'更新履歴　：2006/07/07 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Function fncCmnSetCommandButton(ByRef objTarget As Object _
+                                , ByVal CellName As String _
+                                , ByRef strBtnNm As String _
+                                , ByVal blnControl As Boolean) As Long
+On Error GoTo ErrorHandler
+    fncCmnSetCommandButton = 0
+    
+    Dim lngZoom As Long
+    Dim lngCnt  As Long
+    Dim objX As Object
+    
+    lngZoom = ActiveWindow.Zoom
+    ActiveWindow.Zoom = 100
+    
+    With objTarget.Range(CellName)
+        Set objX = objTarget.OLEObjects.Add( _
+            ClassType:="Forms.CommandButton.1", _
+            Link:=False, _
+            DisplayAsIcon:=False, _
+            Left:=.Left, _
+            Top:=.Top, _
+            Width:=SHEET_BUTTON_DispWidth, _
+            Height:=SHEET_BUTTON_DispHeight)
+        objX.Object.Caption = strBtnNm
+        objX.Object.Enabled = blnControl
+    End With
+
+    ActiveWindow.Zoom = lngZoom
+    Exit Function
+
+ErrorHandler:
+    MsgBox Err.Description
+    fncCmnSetCommandButton = Err.Number
+    
+End Function

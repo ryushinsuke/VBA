@@ -1,0 +1,682 @@
+Attribute VB_Name = "bas20Kensaku"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：外部委託ライセンスフィー計算システム
+'
+'オブジェクト名：bas20Kensaku
+'
+'機能概要　：検索ボタン処理
+'
+'更新履歴　：2006/06/04 SRA H.Anpo       新規作成
+'
+'*************************************************************************
+
+Const MODULE_NAME = "bas20Kensaku"
+
+
+'*************************************************************************
+'関数名　　：検索処理メイン処理
+'
+'引　　数　：
+'           objTarget        I           対象のシート
+'
+'戻り値　　：Boolean　(TRUE:正常, FALSE:エラー)
+'
+'機能説明　：検索処理のメインモジュール
+'
+'更新履歴　：2008/06/04 SRA H.Anpo    新規作成
+'
+'*************************************************************************
+Public Sub gsub_KensakuMain(ByRef objTarget As Object)
+
+On Error GoTo ErrorSection
+
+    Dim blnRet  As Boolean
+    Dim strDate As String
+    Dim strTime As String
+    Dim vDate   As Variant
+    
+    With objTarget
+    
+        '画面クリア処理
+        Call g_subKeisanIniScreenH(objTarget)   'ヘッダー部
+        Call g_subKeisanIniScreenD(objTarget)   '明細部
+        '更新ボタンの有効化
+        .cmdUp.Enabled = True
+        
+        '入力チェック処理(検索時)
+        blnRet = gfuncKeisan_SearchInputCheck(objTarget)
+        
+        If blnRet = False Then
+            '印刷ボタンの無効化
+            .cmdPrint.Enabled = False
+            Exit Sub
+        End If
+        
+        blnRet = False
+        
+        '検索処理とデータ設定
+        blnRet = gfuncKeisan_DoSearch(objTarget)
+        
+        If blnRet = False Then
+            '印刷ボタンの無効化
+            .cmdPrint.Enabled = False
+            
+'            'システムエラー
+'            Call gfunc_ErrorMsg(4, 18001, "", "")
+            
+            Exit Sub
+        End If
+        
+        '先頭行にスクロール
+        ThisWorkbook.Application.ActiveWindow.ScrollRow = 1
+        
+        'サーバ日付の取得
+        Call gfunc_GetSvDateTime(strDate, strTime)
+        
+        'データ取得日時の設定
+        Call gCom01_SheetProtect(objTarget, False)
+        .Range("データ取得日時").Value2 = gfunc_ymdFormat(strDate) & " " _
+            & Mid(strTime, 1, 2) & ":" & Mid(strTime, 3, 2) & ":" & Mid(strTime, 5, 2)
+        Call gCom01_SheetProtect(objTarget, True)
+
+        ThisWorkbook.Worksheets(TEMPLATE_SHEETNAME).Range("検索時文字列") = fucGetAllString
+
+        '印刷ボタンの有効化
+        .cmdPrint.Enabled = True
+    
+        '支払日が表示された場合は更新不可
+        If .Range("支払日") <> "" Then
+            '更新ボタンの無効化
+            .cmdUp.Enabled = False
+        Else
+            '更新ボタンの有効化
+            .cmdUp.Enabled = True
+        End If
+    
+    End With
+    
+    Exit Sub
+    
+ErrorSection:
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gsub_KensakuMain", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Sub
+
+
+'*************************************************************************
+'関数名　　：入力チェック処理(検索時)
+'
+'引　　数　：
+'            TargetSheets        I           チェック対象のシート
+'
+'戻り値　　：Boolean　(TRUE:正常, FALSE:エラー)
+'
+'機能説明　：検索時の入力チェックを行う
+'
+'更新履歴　：2008/06/04 SRA H.Anpo    新規作成
+'
+'*************************************************************************
+Public Function gfuncKeisan_SearchInputCheck(ByRef TargetSheets As Object) As Boolean
+On Error GoTo ErrorSection
+    
+    Dim strGiNo         As String   '外部委託先
+    Dim strKikan        As String   '支払期間
+    Dim strDate         As String   'サーバ日付取得用(年月日)
+    Dim strTime         As String   'サーバ日付取得用(時分秒)
+    
+    gfuncKeisan_SearchInputCheck = False
+    
+    ThisWorkbook.Worksheets(TEMPLATE_SHEETNAME).Range("検索時外部委託先") = ""    '検索時外部委託先の初期化
+
+    With TargetSheets
+        '外部委託先
+        strGiNo = Trim(.Range("外部委託先"))
+        '入力必須チェック
+        If Trim(strGiNo) = "" Then
+            .Range("外部委託先").Activate
+            '"外部委託先：未入力です。"
+            Call gfunc_ErrorMsg(3, 18200, "外部委託先", "")
+            Exit Function
+        End If
+        
+        '支払期間
+        strKikan = Trim(.Range("支払期間"))
+        If Trim(strKikan) <> "" Then
+        '入力あり
+            If gfunc_CheckDate(strKikan) = False Then
+                .Range("支払期間").Activate
+                '"支払期間：入力に誤りがあります。"
+                Call gfunc_ErrorMsg(3, 18201, "支払期間", "")
+                Exit Function
+            End If
+        Else
+        '未入力
+            'サーバ日付取得
+            Call gfunc_GetSvDateTime(strDate, strTime)
+            
+            If Trim(strDate) <> "" Then
+                .Range("支払期間") = Mid(strDate, 1, 4) & "/" & Mid(strDate, 5, 2) & "/" & Mid(strDate, 7, 2)
+            Else
+                .Range("支払期間") = ""
+            End If
+            
+        End If
+
+        '検索時の外部委託先を退避
+        ThisWorkbook.Worksheets(TEMPLATE_SHEETNAME).Range("検索時外部委託先") = .Range("外部委託先")
+    
+    End With
+    
+    gfuncKeisan_SearchInputCheck = True
+
+    Exit Function
+    
+ErrorSection:
+
+    gfuncKeisan_SearchInputCheck = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gfuncKeisan_SearchInputCheck", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：検索実行処理
+'
+'引　　数　：
+'            TargetSheets       I       対象ワークシート
+'
+'戻り値　　：Boolean　(TRUE:正常, FALSE:エラー)
+'
+'機能説明　：検索を実行する
+'
+'更新履歴　：2008/06/04 SRA H.Anpo     新規作成
+'
+'*************************************************************************
+Public Function gfuncKeisan_DoSearch(ByRef TargetSheets As Object) As Boolean
+On Error GoTo Error_Section
+
+    Dim blnRet          As Boolean
+    
+    Dim strGiNo         As String       '外部委託先
+    Dim strKikan        As String       '支払期間
+    Dim strKikanId      As String       '支払期間ID(外部委託支払期間テーブルから取得)
+
+    Dim vDatKeiyaku()   As Variant      '契約情報データ
+    Dim lngKeiyakuCnt   As Long         '契約情報データ件数
+
+    Dim vDatKumiire()   As Variant      '組入れ情報データ
+    Dim lngKumiireCnt   As Long         '組入れ情報データ件数
+
+    '変数の初期化
+    strKikanId = ""
+    Erase vDatKeiyaku
+    Erase vDatKumiire
+
+    gfuncKeisan_DoSearch = False
+
+    ThisWorkbook.Worksheets(TEMPLATE_SHEETNAME).Range("検索時支払期間ID") = ""   '検索時の検索時支払期間IDの初期化
+
+    '検索キー情報取得
+    strGiNo = Mid(Trim(TargetSheets.Range("外部委託先")), 1, 1)
+    strKikan = Trim(gfunc_ymdFormat(TargetSheets.Range("支払期間")))
+
+    '契約情報の取得
+    blnRet = func_GetKeiyakuInfo(TargetSheets, strGiNo, Replace(strKikan, "/", "") _
+                                   , vDatKeiyaku, lngKeiyakuCnt)
+    If blnRet = False Then
+        Exit Function
+    End If
+
+    '支払期間IDの取得
+    If lngKeiyakuCnt > 0 Then
+        strKikanId = Trim(vDatKeiyaku(0, 0))
+        ThisWorkbook.Worksheets(TEMPLATE_SHEETNAME).Range("検索時支払期間ID") = Trim(vDatKeiyaku(0, 0))      '検索時の検索時支払期間IDを保持
+    End If
+
+    If Trim(strKikanId) <> "" Then
+
+        '組入れ情報の取得
+        blnRet = func_GetKumiireInfo(TargetSheets, strGiNo, strKikanId, vDatKumiire, lngKumiireCnt)
+        If blnRet = False Then
+            Exit Function
+        End If
+
+        '取得データの表示
+        '契約情報の画面設定
+        blnRet = func_SetKeiyakuInfo(TargetSheets, vDatKeiyaku, lngKeiyakuCnt)
+        If blnRet = False Then
+            Exit Function
+        End If
+
+        '組入れ情報の画面設定
+        If lngKeiyakuCnt > 0 Then
+            blnRet = func_SetKumiireInfo(TargetSheets, vDatKumiire, lngKumiireCnt)
+            If blnRet = False Then
+                Exit Function
+            End If
+        End If
+
+    End If
+
+    '取得データをメモリーから破棄
+    Erase vDatKumiire
+
+    gfuncKeisan_DoSearch = True
+
+    Exit Function
+
+Error_Section:
+
+    gfuncKeisan_DoSearch = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gfuncKeisan_DoSearch", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+    Erase vDatKumiire
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：契約情報取得処理
+'
+'引　　数　：
+'           TargetSheets    I       処理対象ワークシート
+'           strGiNo         I       外部委託先番号
+'           strKikan        I       支払期間
+'           vdata()         O       取得結果
+'           lngRow          O       取得件数
+'
+'戻り値　　：Boolean　(TRUE:正常, FALSE:エラー)
+'
+'機能説明　：契約情報を取得する
+'
+'更新履歴　：2008/06/04 SRA H.Anpo     新規作成
+'
+'*************************************************************************
+Private Function func_GetKeiyakuInfo(ByRef TargetSheets As Object _
+                                   , ByVal strGiNo As String _
+                                   , ByVal strKikan As String _
+                                   , ByRef vData() As Variant _
+                                   , ByRef lngRow As Long) As Boolean
+    Dim strSql      As String
+    Dim lngCol      As Long
+    Dim lngCnt      As Long
+    Dim strErrCode  As String
+    
+    func_GetKeiyakuInfo = False
+    
+   strSql = ""
+   strSql = strSql & " SELECT"
+   strSql = strSql & "     GSK.GI_SHIHARAI_KIKAN_ID,"                           ' 0:支払期間ID
+   strSql = strSql & "     GSK.GI_SHIHARAI_KIKAN_FROM,"                         ' 1:支払期間FROM
+   strSql = strSql & "     GSK.GI_SHIHARAI_KIKAN_TO,"                           ' 2:支払期間TO
+   strSql = strSql & "     GSK.GI_KEIYAKU_KIKAN_FROM,"                          ' 3:計算期間FROM
+   strSql = strSql & "     GSK.GI_KEIYAKU_KIKAN_TO,"                            ' 4:計算期間TO
+   strSql = strSql & "     DECODE("
+   strSql = strSql & "         GSK.NENKAN_NISSU_KBN,"
+   strSql = strSql & "         NULL, NULL,"
+   strSql = strSql & "         GSK.NENKAN_NISSU_KBN || ':' || KCV1.VALUE_NAME"
+   strSql = strSql & "     ),"                                                  ' 5:年間日数区分
+   strSql = strSql & "     DECODE("
+   strSql = strSql & "         GSK.GENSENZEI_FLG,"
+   strSql = strSql & "         NULL, NULL,"
+   strSql = strSql & "         GSK.GENSENZEI_FLG || ':' || KCV2.VALUE_NAME"
+   strSql = strSql & "     ),"                                                  ' 6:源泉税フラグ
+   strSql = strSql & "     TO_CHAR(GSK.GENSENZEI_RITSU),"                       ' 7:源泉税率
+   strSql = strSql & "     DECODE("
+   strSql = strSql & "         GSK.SHOHIZEI_FLG,"
+   strSql = strSql & "         NULL, NULL,"
+   strSql = strSql & "         GSK.SHOHIZEI_FLG || ':' || KCV3.VALUE_NAME"
+   strSql = strSql & "     ),"                                                  ' 8:消費税フラグ
+   strSql = strSql & "     TO_CHAR(GSK.SHOHIZEI_RITSU),"                        ' 9:消費税率
+   strSql = strSql & "     TO_CHAR(GSK.SHIHARAI_WARIAI_BUNSHI),"                '10:支払割合(分子)
+   strSql = strSql & "     TO_CHAR(GSK.SHIHARAI_WARIAI_BUNBO),"                 '11:支払割合(分母)
+   strSql = strSql & "     GKN.SOUFU_YMD,"                                      '12:送付日
+   strSql = strSql & "     GKN.SHIHARAI_YOTEI_YMD,"                             '13:支払予定日
+   strSql = strSql & "     GKN.SHIHARAI_YMD"                                    '14:支払日
+   strSql = strSql & " FROM"
+   strSql = strSql & "     KYK_GI_SHIHARAI_KIKAN GSK,"                          '外部委託支払期間
+   strSql = strSql & "     KYK_GI_SHIHARAI_KANRI GKN,"                          '外部委託支払管理
+   strSql = strSql & "     KYK_CODE_VALUE        KCV1,"                         'コード値
+   strSql = strSql & "     KYK_CODE_VALUE        KCV2,"                         'コード値
+   strSql = strSql & "     KYK_CODE_VALUE        KCV3"                          'コード値
+   strSql = strSql & " WHERE"
+   strSql = strSql & "     GSK.GI_NO                  = GKN.GI_NO (+)"
+   strSql = strSql & " AND GSK.GI_SHIHARAI_KIKAN_ID   = GKN.GI_SHIHARAI_KIKAN_ID (+)"
+   strSql = strSql & " AND GKN.SHIHARAI_FLG        (+)= '1'"                    '1:支払
+   strSql = strSql & " AND GKN.SAKUJO_FLG          (+)= '0'"
+   strSql = strSql & " AND GSK.NENKAN_NISSU_KBN       = KCV1.CODE_VALUE (+)"
+   strSql = strSql & " AND KCV1.CODE_NO            (+)= '7'"                    '7:年間日数区分
+   strSql = strSql & " AND KCV1.SAKUJO_FLG         (+)= '0'"
+   strSql = strSql & " AND GSK.GENSENZEI_FLG          = KCV2.CODE_VALUE (+)"
+   strSql = strSql & " AND KCV2.CODE_NO            (+)= '59'"                   '59:源泉税フラグ
+   strSql = strSql & " AND KCV2.SAKUJO_FLG         (+)= '0'"
+   strSql = strSql & " AND GSK.SHOHIZEI_FLG           = KCV3.CODE_VALUE (+)"
+   strSql = strSql & " AND KCV3.CODE_NO            (+)= '58'"                   '58:消費税フラグ
+   strSql = strSql & " AND KCV3.SAKUJO_FLG         (+)= '0'"
+   strSql = strSql & " AND GSK.SAKUJO_FLG             = '0'"
+   strSql = strSql & " AND GSK.GI_NO                  = '" & strGiNo & "'"
+   strSql = strSql & " AND GSK.GI_SHIHARAI_KIKAN_FROM <= " & strKikan
+   strSql = strSql & " AND GSK.GI_SHIHARAI_KIKAN_TO   >= " & strKikan
+    
+    'データ取得
+    Call gclsdb.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow, strErrCode)
+    
+    If Trim(strErrCode) <> "" Or lngRow = 0 Then
+        Exit Function
+    End If
+    
+    func_GetKeiyakuInfo = True
+    
+    Exit Function
+
+ErrHandler:
+    func_GetKeiyakuInfo = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_GetKeiyakuInfo", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+'    Erase vdata
+'    MsgBox "Error:func_GetKeiyakuInfo" & vbCrLf & Err.Description
+
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：組入れ情報取得処理
+'
+'引　　数　：
+'           TargetSheets    I       処理対象ワークシート
+'           strGiNo         I       外部委託先番号
+'           strKikanId      I       顧問料請求期間ID
+'           vdata()         O       取得結果
+'           lngRow          O       取得件数
+'
+'戻り値　　：Boolean
+'
+'機能説明　：組入れ情報を取得する
+'
+'更新履歴　：2008/06/04 SRA H.Anpo    新規作成
+'
+'*************************************************************************
+Private Function func_GetKumiireInfo(ByRef TargetSheets As Object _
+                                   , ByVal strGiNo As String _
+                                   , ByVal strKikanId As String _
+                                   , ByRef vData() As Variant _
+                                   , ByRef lngRow As Long) As Boolean
+On Error GoTo ErrHandler
+    
+    Dim strSql      As String
+    Dim lngCol      As Long
+    Dim lngCnt      As Long
+    Dim strErrCode  As String
+    
+    func_GetKumiireInfo = False
+    
+    strSql = ""
+    strSql = strSql & " SELECT"
+    strSql = strSql & "     GKK.GI_KEISAN_KIKAN_ID,"                                    ' 0:計算期間ID
+    strSql = strSql & "     GKK.GI_KEISAN_KIKAN_FROM,"                                  ' 1:計算期間FROM
+    strSql = strSql & "     GKK.GI_KEISAN_KIKAN_TO,"                                    ' 2計算期間TO
+    strSql = strSql & "     GKK.KOHZA_NO,"                                              ' 3:口座番号
+    strSql = strSql & "     DECODE("
+    strSql = strSql & "         GKK.GI_KEISAN_HOHHOH,"
+    strSql = strSql & "         NULL, NULL,"
+    strSql = strSql & "         GKK.GI_KEISAN_HOHHOH || ':' || KCV1.VALUE_NAME"
+    strSql = strSql & "     ),"                                                         ' 4:計算方法
+    strSql = strSql & "     GKK.ISSCD,"                                                 ' 5:PX銘柄コード
+    strSql = strSql & "     DECODE("
+    strSql = strSql & "         GKK.RATE_CODE,"
+    strSql = strSql & "         NULL, NULL,"
+    strSql = strSql & "         GKK.RATE_CODE || ':' || KR1.RATE_NAME"
+    strSql = strSql & "     ),"                                                         ' 6:料率コード
+    strSql = strSql & "     DECODE("
+    strSql = strSql & "         GKK.UNYOH_HOHSHU_RATE_CODE,"
+    strSql = strSql & "         NULL, NULL,"
+    strSql = strSql & "         GKK.UNYOH_HOHSHU_RATE_CODE || ':' || KR2.RATE_NAME"
+    strSql = strSql & "     ),"                                                         ' 7:運用報酬料率コード
+    strSql = strSql & "     GKK.COMMITMENT_GAKU,"                                       ' 8:コミットメント金額
+    strSql = strSql & "     GKK.COMMITMENT_MNGCD,"                                      ' 9:コミットメント通貨
+    strSql = strSql & "     GKK.SEIKOH_HOHSHU_WARIAI_BUNSHI,"                           '10:成功報酬支払割合(分子)
+    strSql = strSql & "     GKK.SEIKOH_HOHSHU_WARIAI_BUNBO,"                            '11:成功報酬支払割合(分母)
+    strSql = strSql & "     DECODE("
+    strSql = strSql & "         GKK.TAISHOH_HIZUKE_SHURUI,"
+    strSql = strSql & "         NULL, NULL,"
+    strSql = strSql & "         GKK.TAISHOH_HIZUKE_SHURUI  || ':' || KCV2.VALUE_NAME"
+    strSql = strSql & "     ),"                                                         '12:対象日付種類
+    strSql = strSql & "     DECODE("
+    strSql = strSql & "         GKK.GI_SAISHU_KBN,"
+    strSql = strSql & "         NULL, NULL,"
+    strSql = strSql & "         GKK.GI_SAISHU_KBN || ':' || KCV3.VALUE_NAME"
+    strSql = strSql & "     ),"                                                         '13:最終区分
+    strSql = strSql & "     GKK.BIKOH"                                                  '14:備考
+    strSql = strSql & " FROM"
+    strSql = strSql & "     KYK_GI_KEISAN_KIKAN GKK,"                                   '外部委託計算期間
+    strSql = strSql & "     KYK_CODE_VALUE      KCV1,"                                  'コード値
+    strSql = strSql & "     KYK_CODE_VALUE      KCV2,"                                  'コード値
+    strSql = strSql & "     KYK_CODE_VALUE      KCV3,"                                  'コード値
+    strSql = strSql & "     KYK_RATE            KR1,"                                   '料率
+    strSql = strSql & "     KYK_RATE            KR2"                                    '料率
+    strSql = strSql & " WHERE"
+    strSql = strSql & "     GKK.GI_KEISAN_HOHHOH       = KCV1.CODE_VALUE (+)"
+    strSql = strSql & " AND KCV1.CODE_NO            (+)= '57'"                          '57:外部委託計算方法
+    strSql = strSql & " AND KCV1.SAKUJO_FLG         (+)= '0'"
+    strSql = strSql & " AND GKK.TAISHOH_HIZUKE_SHURUI  = KCV2.CODE_VALUE (+)"
+    strSql = strSql & " AND KCV2.CODE_NO            (+)= '9'"                           '9:日付種類(国内顧問)
+    strSql = strSql & " AND KCV2.SAKUJO_FLG         (+)= '0'"
+    strSql = strSql & " AND GKK.GI_SAISHU_KBN          = KCV3.CODE_VALUE (+)"
+    strSql = strSql & " AND KCV3.CODE_NO            (+)= '63'"                          '63:外部委託最終区分
+    strSql = strSql & " AND KCV3.SAKUJO_FLG         (+)= '0'"
+    strSql = strSql & " AND GKK.RATE_CODE              = KR1.RATE_CODE (+)"
+    strSql = strSql & " AND KR1.SAKUJO_FLG          (+)= '0'"
+    strSql = strSql & " AND GKK.UNYOH_HOHSHU_RATE_CODE = KR2.RATE_CODE (+)"
+    strSql = strSql & " AND KR2.SAKUJO_FLG          (+)= '0'"
+    strSql = strSql & " AND GKK.SAKUJO_FLG             = '0'"
+    strSql = strSql & " AND GKK.GI_NO                  = '" & strGiNo & "'"
+    strSql = strSql & " AND GKK.GI_SHIHARAI_KIKAN_ID   = '" & strKikanId & "'"
+    strSql = strSql & " ORDER BY"
+    strSql = strSql & "     GKK.KOHZA_NO,"                                              '口座番号
+    strSql = strSql & "     GKK.ISSCD,"                                                 'PX銘柄コード
+    strSql = strSql & "     GKK.GI_KEISAN_KIKAN_FROM"                                   '計算期間FROM
+    
+    'データ取得
+    Call gclsdb.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow, strErrCode)
+
+    If Trim(strErrCode) <> "" Then
+        Exit Function
+    End If
+    
+    func_GetKumiireInfo = True
+    
+    Exit Function
+
+ErrHandler:
+    func_GetKumiireInfo = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_GetSisanInfo", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+'    Erase vdata
+'    MsgBox "Error:func_GetSisanInfo" & vbCrLf & Err.Description
+
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：ワークシートに契約情報を設定する
+'
+'引　　数　：
+'           TargetSheets    O       処理対象ワークシート
+'           vdata()         I       設定データ
+'           lngRow          I       設定データ件数
+'
+'戻り値　　：Boolean
+'
+'機能説明　：処理対象ワークシートにデータを設定する。
+'
+'更新履歴　：2008/06/04 SRA H.Anpo     新規作成
+'
+'*************************************************************************
+Private Function func_SetKeiyakuInfo(ByRef TargetSheets As Object _
+                                   , ByVal vData As Variant _
+                                   , ByVal lngRow As Long) As Boolean
+
+On Error GoTo ErrHandler
+
+    func_SetKeiyakuInfo = False
+
+    With TargetSheets
+        .Range("支払期間FROM") = CStr(vData(1, 0))
+        .Range("支払期間TO") = CStr(vData(2, 0))
+        .Range("契約期間FROM") = CStr(vData(3, 0))
+        .Range("契約期間TO") = CStr(vData(4, 0))
+        .Range("年間日数") = CStr(vData(5, 0))
+        .Range("源泉税") = CStr(vData(6, 0))
+        .Range("源泉税率") = CStr(vData(7, 0))
+        .Range("消費税") = CStr(vData(8, 0))
+        .Range("消費税率") = CStr(vData(9, 0))
+        .Range("支払割合分子") = CStr(vData(10, 0))
+        .Range("支払割合分母") = CStr(vData(11, 0))
+        .Range("送付日") = CStr(vData(12, 0))
+        .Range("支払予定日") = CStr(vData(13, 0))
+        .Range("支払日") = CStr(vData(14, 0))
+    End With
+
+    func_SetKeiyakuInfo = True
+
+    Exit Function
+
+ErrHandler:
+    func_SetKeiyakuInfo = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_SetKeiyakuInfo", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+'    MsgBox "Error:func_SetKeiyakuInfo" & vbCrLf & Err.Description
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：ワークシートに組入れ情報を設定する
+'
+'引　　数　：
+'           TargetSheets    O       処理対象ワークシート
+'           strType         I       取得タイプ(1:一般,2:月末顧問料調整,3:T21調整)
+'           vdata()         I       設定データ
+'           lngRow          I       設定データ件数
+'
+'戻り値　　：Boolean
+'
+'機能説明　：処理対象ワークシートにデータを設定する。
+'
+'更新履歴　：2008/06/04 SRA H.Anpo     新規作成
+'
+'*************************************************************************
+Private Function func_SetKumiireInfo(ByRef TargetSheets As Object _
+                                   , ByVal vData As Variant _
+                                   , ByVal lngRow As Long) As Boolean
+
+On Error GoTo ErrHandler
+
+    Dim lngCnt      As Long
+    Dim lngStartRow As Long
+    Dim lngRet      As Long
+
+    func_SetKumiireInfo = False
+
+    '明細行の追加
+    With TargetSheets
+        
+        '明細行の追加
+        If lngRow > 0 Then
+            lngRet = gKsC_fncKsCmnInsSumRow(TargetSheets, lngRow, ThisWorkbook.Sheets(TEMPLATE_SHEETNAME).Range("明細行").Row)
+            If lngRet <> 0 Then
+                Exit Function
+            End If
+        
+            '明細行の先頭番号取得
+            lngStartRow = .Range("先頭行").Row + 1
+            
+            For lngCnt = 1 To lngRow
+                'データの設定
+                .Cells(lngStartRow, .Range("計算期間FROM").Column).Value = vData(1, lngCnt - 1)         '計算期間From
+                .Cells(lngStartRow, .Range("計算期間TO").Column).Value = vData(2, lngCnt - 1)           '計算期間To
+                .Cells(lngStartRow, .Range("口座番号").Column).Value = vData(3, lngCnt - 1)             '口座番号
+                .Cells(lngStartRow, .Range("計算方法").Column).Value = vData(4, lngCnt - 1)             '計算方法
+                .Cells(lngStartRow, .Range("PX銘柄コード").Column).Value = vData(5, lngCnt - 1)         'PX銘柄コード(Type of Investment)
+                .Cells(lngStartRow, .Range("料率コード").Column).Value = vData(6, lngCnt - 1)           '料率コード
+                .Cells(lngStartRow, .Range("運用報酬料率コード").Column).Value = vData(7, lngCnt - 1)   '運用報酬料率コード
+                .Cells(lngStartRow, .Range("コミットメント金額").Column).Value = vData(8, lngCnt - 1)   'コミットメント金額
+                .Cells(lngStartRow, .Range("コミットメント通貨").Column).Value = vData(9, lngCnt - 1)   'コミットメント通貨
+                .Cells(lngStartRow, .Range("成功報酬割合分子").Column).Value = vData(10, lngCnt - 1)    '成功報酬割合分子
+                .Cells(lngStartRow, .Range("成功報酬割合分母").Column).Value = vData(11, lngCnt - 1)    '成功報酬割合分母
+                .Cells(lngStartRow, .Range("国内顧問日付種類").Column).Value = vData(12, lngCnt - 1)    '国内顧問日付種類
+                .Cells(lngStartRow, .Range("最終区分").Column).Value = vData(13, lngCnt - 1)            '最終区分
+                .Cells(lngStartRow, .Range("備考").Column).Value = vData(14, lngCnt - 1)                '備考
+                .Cells(lngStartRow, .Range("計算期間ID").Column).Value = vData(0, lngCnt - 1)           '計算期間ID
+    
+                'カレント明細行番号取得
+                lngStartRow = lngStartRow + 1
+    
+            Next lngCnt
+        
+        End If
+        
+    End With
+
+    func_SetKumiireInfo = True
+
+    Exit Function
+
+ErrHandler:
+    func_SetKumiireInfo = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_SetKumiireInfo", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+'    MsgBox "Error:func_SetSisanInfo" & vbCrLf & Err.Description
+
+End Function
+

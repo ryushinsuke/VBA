@@ -1,0 +1,148 @@
+Attribute VB_Name = "bas00Define"
+Option Explicit
+'*************************************************************************
+'
+'プロジェクト名：外部委託ライセンスフィー算出システム・計算確認書作成指示
+'
+'オブジェクト名：bas00Define
+'
+'機能概要　：定数定義
+'
+'更新履歴　：2008/06/30 SRA 東       新規作成
+'
+'*************************************************************************
+Const MODULE_NAME As String = "bas00Define"
+
+'****************************************************
+'*  外部委託先のコード定義
+'****************************************************
+Public Const GI_CODE_RAFI = "1"
+Public Const GI_CODE_BLACKROCK = "2"
+Public Const GI_CODE_FQC = "3"
+Public Const GI_CODE_PEFRI = "4"
+Public Const GI_CODE_NFRTA = "5"
+
+'****************************************************
+'*  計算確認書作成指示.XLSのリスト名定義
+'****************************************************
+Public Const DATA_GI_SAKI_LIST = "外部委託先リスト"
+
+'****************************************************
+'*  計算確認書作成指示.XLSのワークシート名定義
+'****************************************************
+Public Const MAIN_SHEETNAME = "main"    'メインシート名
+Public Const DATA_SHEETNAME = "Data"    'データシート名
+Public Const ERROR_SHEETNAME = "error"  'データシート名
+Public Const MARK_SHEETNAME = "MARK"    'ドラフトマークのシート
+'Public Const ERROR_SHEETNAME_J = "error_j"    'データシート名
+
+'****************************************************
+'*　計算確認書作成指示で利用するファイル名定義
+'****************************************************
+Public Const TEMPLATE_FOLDER = "TEMPLATE"       'テンプレート元ファイルの場所
+Public Const TEMPLATE_FILENAME_RAFI = "計算確認書_RAFIテンプレート.xls" 'データシート・テンプレートファイル名
+Public Const NAM_INFO_FILENAME = "NAM情報.xls"                          'NAM情報ファイル
+
+
+'****************************************************
+'* データシート・テンプレートの[シート名]列
+'****************************************************
+Public Const DATASHEET_TEMP_DATA = "データシート"       'データシートのテンプレート
+Public Const DATASHEET_DATA = "data_sheet"              '作成するデータシート
+
+Public Const DATASHEET_BASIC = "共通"
+Public Const DATASHEET_RAFI_LETTER = "RAFIレター"
+Public Const DATASHEET_RAFI_LETTER_LIST = "RAFIレター・リスト"
+Public Const DATASHEET_RAFI_KOHZA_BT = "RAFI口座別"
+Public Const DATASHEET_RAFI_KOHZA_BT_KKN_NO = "RAFI口座別・期間番号"
+Public Const DATASHEET_RAFI_KOHZA_BT_KIKAN = "RAFI口座別・期間共通"
+Public Const DATASHEET_RAFI_KOHZA_BT_KISO = "RAFI口座別・期間基礎数値"
+Public Const DATASHEET_RAFI_KOHZA_BT_KIKANRATE = "RAFI口座別・期間料率"
+Public Const DATASHEET_RAFI_KOHZA_BT_KEISAN = "RAFI口座別・期間計算"
+
+'****************************************************
+'* データシート・テンプレートのその他行の列名定義
+'****************************************************
+Public Const DATASHEET_DOCSEQ_COL = "A"         '書類順(シート印刷順)
+Public Const DATASHEET_SHEETHEAD_COL = "B"      'シート名ヘッダ
+Public Const DATASHEET_SHEETNAME_COL = "C"      'シート名
+Public Const DATASHEET_ITEMNAME_COL = "D"       '項目名
+Public Const DATASHEET_OFFSET_COL = "G"         '行数(オフセット)
+Public Const DATASHEET_TID_COL = "H"            'テーブルID
+Public Const DATASHEET_COLID_COL = "J"          'カラムID
+Public Const DATASHEET_DATA_TYPE = "E"          'データ取得条件(検索、固定、変数・・・)
+Public Const DATASHEET_KEY_START = "K"          '検索キー項目の始まり
+Public Const DATASHEET_RESULT_COL = "F"         'データ項目(結果)
+Public Const DATASHEET_KEYEND_COL = "AH" '"Z"         '検索キー項目最後の値
+Public Const DATASHEET_MULTI1_COL = "AC" '"AA"        'マルチ項目１
+
+
+'****************************************************
+'* 増幅文字列の定義
+'****************************************************
+Public Const DATASHEET_INC_KOHZALIST = "口座リスト"
+Public Const DATASHEET_INC_KIKAN = "期間"
+Public Const DATASHEET_INC_KIKAN001 = "期間001"
+Public Const DATASHEET_INC_XX = "xx"
+Public Const DATASHEET_INC_XXX = "xxx"
+Public Const DATASHEET_INC_KIJUN = "基準年月"
+Public Const DATASHEET_INC_DANKAI = "段階"
+Public Const DATASHEET_INC_KOHZA = "口座"
+
+
+'****************************************************
+'* 計算確認書作成処理の定義
+'****************************************************
+Public Const GASSAN_OFFSET_BASE = "10000"   '合算計算確認書の口座オフセットの基準値
+Public Const COLADR_DELETE_FLAG = "IV"      '削除フラグの列アドレス
+Public Const DELETE_FLAG_VALUE = "1"        '削除フラグの設定値
+
+'****************************************************
+'* 計算確認書作成印刷の定義
+'****************************************************
+'出力シートの形式定義
+Public Const OUT_SHEET_ZOOM = 85            'ズーム75%
+Public Const OUT_SHEET_DEFAULT_CELL = "A1"  '初期表示カーソル位置"
+
+
+Public Const DATASHEET_MARK_NAME = "WordArt 1"      'DRAFT文字のオブジェクト名
+Public Const DATASHEET_DRAFT_CELL = "DRAFT_MARK"    '”DRAFT”文字の設定セル名
+'****************************************************
+'* 計算確認書作成のテーブル名定義
+'****************************************************
+'Public Const TBL_KOHZA_ZOKUSEI = "KYK_KOHZA_ZOKUSEI"
+
+
+'****************************************************
+'* 計算確認書作成のPageSetupの順序定義
+'****************************************************
+Public Enum PAGE_SETUP_NUM
+    PrintArea = 0
+    LeftHeader
+    CenterHeader
+    RightHeader
+    LeftFooter
+    CenterFooter
+    RightFooter
+    LeftMargin
+    RightMargin
+    TopMargin
+    BottomMargin
+    HeaderMargin
+    FooterMargin
+    PrintHeadings
+    PrintGridlines
+    PrintComments
+    PrintQuality
+    CenterHorizontally
+    CenterVertically
+    Orientation
+    Draft
+    PaperSize
+    FirstPageNumber
+    Order
+    BlackAndWhite
+    Zoom
+    PrintErrors
+End Enum
+

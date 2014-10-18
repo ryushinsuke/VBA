@@ -1,0 +1,623 @@
+VERSION 1.0 CLASS
+BEGIN
+  MultiUse = -1  'True
+END
+Attribute VB_Name = "Sheet1"
+Attribute VB_GlobalNameSpace = False
+Attribute VB_Creatable = False
+Attribute VB_PredeclaredId = True
+Attribute VB_Exposed = True
+Option Explicit
+'*************************************************************************
+'
+'プロジェクト名：新顧問料契約管理システム・WEB時価ﾃﾞｰﾀ取込処理
+'
+'機能概要　：メイン画面
+'
+'更新履歴　：2006/01/17 SRA T.Tanaka    新規作成
+'　　　　　：2006/01/27 SRA T.Tanaka    作成処理の完了メッセージを修正
+'　　　　　：2006/01/28 SRA T.Tanaka    入力されたダウンロードファイルのみ処理する。
+'          :2006/12/09 SRA IIDA        エンハンス
+'
+'*************************************************************************
+'<2006/12/09 UPDATE  S iida>
+Private Const MODULE_NAME As String = "メイン画面"
+'Private Const MODULE_NAME As String = "Sheet1"
+'<2006/12/09 UPDATE E iida>
+Private mstrFile()   As String
+    
+'*************************************************************************
+'関数名　　：参照ボタンクリックイベント
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：
+'
+'更新履歴　：2006/01/17 SRA T.Tanaka    新規作成
+'
+'*************************************************************************
+Private Sub cmdFile1_Click()
+
+    Const PROCEDURE_NAME As String = "cmdFile1_Click"
+    On Error GoTo ErrHandler
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    txtFile1.Text = fncClickCmdFile(txtFile1.Text)
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    Exit Sub
+ErrHandler:
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Sub
+'------------------------------------------------------------------------------
+
+Private Sub cmdFile2_Click()
+    Const PROCEDURE_NAME As String = "cmdFile2_Click"
+    On Error GoTo ErrHandler
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    txtFile2.Text = fncClickCmdFile(txtFile2.Text)
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    Exit Sub
+ErrHandler:
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Sub
+'------------------------------------------------------------------------------
+Private Sub cmdFile3_Click()
+    Const PROCEDURE_NAME As String = "cmdFile3_Click"
+    On Error GoTo ErrHandler
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    txtFile3.Text = fncClickCmdFile(txtFile3.Text)
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    Exit Sub
+ErrHandler:
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Sub
+
+'*************************************************************************
+'関数名　　：テキストボックスフォーカス取得イベント
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：
+'
+'更新履歴　：2006/01/17 SRA T.Tanaka    新規作成
+'
+'*************************************************************************
+Private Sub txtDate_GotFocus()
+    Call subGotFocusControl(txtDate)
+End Sub
+'------------------------------------------------------------------------------
+Private Sub txtFile1_GotFocus()
+    Call subGotFocusControl(txtFile1)
+End Sub
+'------------------------------------------------------------------------------
+Private Sub txtFile2_GotFocus()
+    Call subGotFocusControl(txtFile2)
+End Sub
+'------------------------------------------------------------------------------
+Private Sub txtFile3_GotFocus()
+    Call subGotFocusControl(txtFile3)
+End Sub
+'------------------------------------------------------------------------------
+Private Sub cmbBank_GotFocus()
+    Call subGotFocusControl(cmbBank)
+End Sub
+
+'*************************************************************************
+'関数名　　：参照ボタンクリック処理
+'
+'引　　数　：ARG1   I/O   FileName     String 参照ファイル名表示テキスト
+'
+'戻り値　　：Strinng    参照ファイル名表示テキスト
+'
+'機能説明　：参照ファイル名を戻り値にセットする。
+'
+'更新履歴　：2006/01/17 SRA T.Tanaka    新規作成
+'
+'*************************************************************************
+Private Function fncClickCmdFile(ByRef FileName As String)
+    
+    Const PROCEDURE_NAME As String = "fncClickCmdFile"
+    
+    On Error GoTo ErrHandler
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    fncClickCmdFile = fncSelFile(FileName)
+    
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+ErrHandler:
+     
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+
+'*************************************************************************
+'関数名　　：アップロードデータ作成ボタンクリック処理
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：ダウンロードデータ取込とアップロードデータ作成を行う。
+'
+'更新履歴　：2006/01/18 SRA T.Tanaka    新規作成
+'　　　　　：2006/01/27 SRA T.Tanaka    入力エラーならば完了メッセージを表示しない。
+'*************************************************************************
+Private Sub cmdMake_Click()
+    
+    Const PROCEDURE_NAME As String = "cmdMake_Click"
+    
+    On Error GoTo ErrHandler
+    
+    Dim lngRet  As Long
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    Application.ScreenUpdating = False
+    
+    lngRet = fncMakeData
+    
+    Application.ScreenUpdating = True
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Sub
+ErrHandler:
+     
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Sub
+
+'*************************************************************************
+'関数名　　：アップロードデータ作成処理
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：ダウンロードデータ取込とアップロードデータ作成を行う。
+'
+'更新履歴　：2006/01/18 SRA T.Tanaka    新規作成
+'　　　　　：2006/01/28 SRA T.Tanaka    入力されたダウンロードファイルのみ処理する。
+'　　　　　：2006/01/30 SRA T.Tanaka    エラーシートの初期化を追加
+'　　　　　：2006/02/07 SRA T.Tanaka    初期処理にブックの初期化を追加
+'　　　　　：2006/02/08 SRA T.Tanaka    初期処理にＤＢ接続を追加
+'　　　　　：2006/12/09 SRA IIDA        MENUにDB接続を持たせるためＤＢ接続を削除
+'*************************************************************************
+Private Function fncMakeData()
+    
+    Const PROCEDURE_NAME As String = "fncMakeData"
+    
+    On Error GoTo ErrHandler
+    
+    Dim lngcnt      As Long
+    Dim lngRet      As Long
+    Dim strmsg      As String
+    Dim strTitle    As String
+    Dim lngIcon     As Long
+    Dim strbuff     As String
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    gusrErr.UserEvent = EVENT_MAKE
+    
+    'ダウンロードファイル
+    With Sheets(SHEET_MAIN)
+        ReDim mstrFile(1 To 3, 0 To 1)
+        mstrFile(IDX_PRICES_TRUST, levsFIPass) = Trim(.txtFile1.Text)
+        mstrFile(IDX_PRC_BY_ASSET, levsFIPass) = Trim(.txtFile2.Text)
+        mstrFile(IDX_PRC_SPCASSET, levsFIPass) = Trim(.txtFile3.Text)
+        mstrFile(IDX_PRICES_TRUST, levsFIName) = D_PRICES_TRUST
+        mstrFile(IDX_PRC_BY_ASSET, levsFIName) = D_PRC_BY_ASSET
+        mstrFile(IDX_PRC_SPCASSET, levsFIName) = D_PRC_SPCASSET
+    End With
+    
+    Do
+        '標準装備のエクセルシート初期設定
+        lngRet = fncIniBook(True)
+        If lngRet <> 0 Then
+            GoTo ErrHandler
+        End If
+        
+        '入力データチェック
+        lngRet = fncChkMakeData(mstrFile)
+        If lngRet <> 0 Then
+            GoTo ErrHandler
+        End If
+        
+        'ユーザーファイルを複写
+        lngRet = fncImportData(mstrFile)
+        If lngRet <> 0 Then
+            GoTo ErrHandler
+        End If
+        
+        'シートを追加
+        lngRet = fncAddSheets(mstrFile)
+        If lngRet <> 0 Then
+            GoTo ErrHandler
+        End If
+    
+        If mstrFile(IDX_PRICES_TRUST, levsFIPass) <> vbNullString Then
+            '<2006/11/09 DEL S Iida > 共通化のため
+'            lngRet = fncConnectDb
+'            If lngRet <> 0 Then
+'                strMsg = ERRMSG_DB_CONN
+'                Exit Do
+'            End If
+            '<2006/11/09 DEL E Iida >
+            '①信託時価取込
+            lngRet = fncMakePricesTrust()
+            If lngRet <> 0 Then
+                Exit Do
+            End If
+        End If
+        
+        If mstrFile(IDX_PRC_BY_ASSET, levsFIPass) <> vbNullString Then
+            '<2006/11/09 DEL S Iida > 共通化のため
+'            lngRet = fncConnectDb
+'            If lngRet <> 0 Then
+'                strMsg = ERRMSG_DB_CONN
+'                Exit Do
+'            End If
+            '<2006/11/09 DEL E Iida >
+            '②資産別時価取込
+            lngRet = fncMakePrcsByAsset()
+            If lngRet <> 0 Then
+                Exit Do
+            End If
+        End If
+        
+        If mstrFile(IDX_PRC_SPCASSET, levsFIPass) <> vbNullString Then
+            '<2006/11/09 DEL S Iida > 共通化のため
+'            lngRet = fncConnectDb
+'            If lngRet <> 0 Then
+'                strMsg = ERRMSG_DB_CONN
+'                Exit Do
+'            End If
+            '<2006/11/09 DEL E Iida >
+            '③特定資産時価取込
+            lngRet = fncMakePrcSpcAsset()
+            If lngRet <> 0 Then
+                Exit Do
+            End If
+        End If
+        
+    Loop Until True
+    
+    Sheets(SHEET_MAIN).Select
+    '<2006/12/09 ADD S iida>
+    
+    '<2006/12/25 DEL  iida>
+    'strTitle = MSG_TTL_MAKE
+    Application.ScreenUpdating = True
+
+    If lngRet = 0 Then
+        If glngErrNum > 0 Then
+            Call gfunc_ErrorMsg(1, MSG_FINISH_MAKE_END, "", "", True)
+        Else
+            If glngErrNum = 0 Then
+                Call gfunc_ErrorMsg(1, MSG_FINISH_MAKE_SCC, "", "", True)
+            End If
+        End If
+    Else
+        If glngErrNum > 0 Then
+            Call gfunc_ErrorMsg(1, MSG_FINISH_MAKE_ERR, "", "", True)
+        Else
+            Call gfunc_ErrorMsg(1, MSG_FINISH_MAKE_STOP, "", "", True)
+        End If
+    End If
+    
+    '<2006/12/09 DEL S iida>
+    '----------------------------------------------------
+'    If lngRet = -1 Then
+'        strmsg = MSG_FINISH_CXL
+'        lngIcon = vbInformation
+'    ElseIf fncChkErrorSheet(strmsg, strTitle) <> 0 Then
+'        strmsg = MSG_FINISH_END
+'        lngIcon = vbExclamation
+'
+'    ElseIf glngErrNum > 0 Then
+'        strmsg = MSG_FINISH_ERR
+'        lngIcon = vbExclamation
+'    ElseIf lngRet = 0 Then
+'        strmsg = MSG_FINISH_SCC
+'        lngIcon = vbInformation
+'    Else
+'    End If
+'    If strmsg <> vbNullString Then
+'        MsgBox strmsg, lngIcon, MSG_TTL_MAKE
+'    End If
+    '----------------------------------------------------
+    '<2006/12/09 DEL E iida>
+
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    Exit Function
+    '----------------------------------------------------
+ErrHandler:
+     
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+
+'*************************************************************************
+'関数名　　：アップロード実行ボタンクリック処理
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：ダウンロードデータ取込とアップロードデータ作成を行う。
+'
+'更新履歴　：2006/12/07 SRA Iida    新規作成
+'
+'*************************************************************************
+Private Sub cmdUpdate_Click()
+
+    Const PROCEDURE_NAME As String = "cmdUpdate_Click"
+
+    On Error GoTo ErrHandler
+
+    Dim strmsg      As String
+    Dim lngRet      As Long
+    Dim lngcnt      As Long
+    Dim lngflg      As Long
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    Application.ScreenUpdating = False
+
+    lngRet = -1
+    
+    Application.ScreenUpdating = False
+    
+    '最終処理確認
+    lngflg = 0
+    For lngcnt = 1 To 3
+        If gfunXlsWSSet(Application.ActiveWorkbook, "upload" & CStr(lngcnt)) = 0 Then
+            lngflg = 1
+            Exit For
+        End If
+    Next
+    
+    Application.ScreenUpdating = True
+    If lngflg = 0 Then
+        Call gfunc_ErrorMsg(3, ERRMSG_NO_SHEET, "", "", True)
+        Exit Sub
+    End If
+    
+    strmsg = gfunc_ErrorMsg(2, 1600, "", "", False)
+    lngRet = MsgBox(strmsg, vbQuestion + vbOKCancel)
+    If lngRet = vbCancel Then
+        Exit Sub
+    End If
+    
+    '更新前シートチェック
+    lngRet = fncUpdateData
+    
+    Application.ScreenUpdating = True
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Sub
+ErrHandler:
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(MODULE_NAME, "cmdUpdate_Click", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Application.ScreenUpdating = True
+
+End Sub
+
+'<2006/12/07 DEL S iida>
+''*************************************************************************
+''関数名　　：アップロード実行ボタンクリック処理
+''
+''引　　数　：なし
+''
+''戻り値　　：なし
+''
+''機能説明　：ダウンロードデータ取込とアップロードデータ作成を行う。
+''
+''更新履歴　：2006/01/20 SRA T.Tanaka    新規作成
+''
+''*************************************************************************
+'Private Sub cmdUpdate_Click()
+'
+'    Const PROCEDURE_NAME As String = "cmdUpdate_Click"
+'
+'    On Error GoTo ErrHandler
+'
+'    Dim lngRet  As Long
+'
+'    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+'    Application.ScreenUpdating = False
+'
+'    lngRet = fncUpdateData
+'
+'    Application.ScreenUpdating = True
+'    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+'
+'    Exit Sub
+'ErrHandler:
+'
+'    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+'
+'End Sub
+'<2006/12/07 DEL E iida>
+
+'*************************************************************************
+'関数名　　：アップロード実行処理
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：アップロードデータを基にＤＢ登録を行う。
+'
+'更新履歴　：2006/01/20 SRA T.Tanaka    新規作成
+'　　　　　：2006/01/27 SRA T.Tanaka    入力されたダウンロードファイルのみ処理する。
+'　　　　　：2006/02/02 SRA T.Tanaka    アップロード処理共通化
+'　　　　　：2006/12/05 SRA Iida        ストアドプロシジャー使用しない,必要なﾌｧｲﾙのみチェックして処理する
+'*************************************************************************
+Private Function fncUpdateData()
+    
+    Const PROCEDURE_NAME As String = "fncUpdateData"
+    
+    On Error GoTo ErrHandler
+    
+    Dim lngRet          As Long
+    Dim strmsg          As String
+    Dim strTitle        As String
+    Dim lngIcon         As Long
+    Dim lngErrNumBefore As Long
+    Dim strBank         As String
+    Dim lngi            As Long
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Do
+        gusrErr.UserEvent = EVENT_UPDATE
+        strBank = Sheets(SHEET_MAIN).cmbBank.Value
+    
+        '<2007/01/11 UPDATE S IIDA>
+        glngErrNum = 0
+        'lngErrNumBefore = glngErrNum
+        lngRet = fncIniErrSheet
+        Call fncSetSheetsVisible
+        '<2007/01/11 UPDATE E IIDA>
+        
+        '<2006/12/12 DEL S IIDA>
+        'UPLOAD実行　チェック
+'        lngRet = fncChkErrorSheet(strmsg, strTitle)
+'        If lngRet <> 0 Then
+'            Exit Do
+'        End If
+        '<2006/12/12 DEL E IIDA>
+        
+        '<2006/12/06 ADD S iida>
+        If Sheets(SHEET_MAIN).txtFile1 <> vbNullString Then
+            gusrErr.UserEvent = EVENT_UPDATE & "(" & D_PRICES_TRUST & ")"
+            If gfunXlsWSSet(Application.ActiveWorkbook, SHEET_UPD1) = -1 Then
+                Call gfunc_ErrorMsg(3, ERRMSG_NO_UPSHEET1, "", "", True)
+                GoTo ErrHandler
+            End If
+            lngRet = fncUpLoad(D_PRICES_TRUST, SHEET_UPD1, strBank)
+            If lngRet <> 0 Then
+                Exit Do
+            End If
+            'DB登録実行
+        End If
+        '<2006/12/06 ADD E iida>
+        '<2006/12/06 DEL S iida>
+'        gusrErr.UserEvent = EVENT_UPDATE & "(" & D_PRICES_TRUST & ")"
+'        lngRet = fncUpLoad(D_PRICES_TRUST, SHEET_UPD1, SP_PRICES_TRUST, PARA_PRICES_TRUST)
+'        If lngRet <> 0 Then
+'            Exit Do
+'        End If
+        '<2006/12/06 DEL E iida>
+        
+        '<2006/12/06 ADD S iida>
+        If Sheets(SHEET_MAIN).txtFile2 <> vbNullString Then
+            gusrErr.UserEvent = EVENT_UPDATE & "(" & D_PRC_BY_ASSET & ")"
+            If gfunXlsWSSet(Application.ActiveWorkbook, SHEET_UPD2) = -1 Then
+                Call gfunc_ErrorMsg(3, ERRMSG_NO_UPSHEET2, "", "", True)
+                GoTo ErrHandler
+            End If
+            
+            lngRet = fncUpLoad(D_PRC_BY_ASSET, SHEET_UPD2, strBank)
+            If lngRet <> 0 Then
+                Exit Do
+            End If
+        End If
+        
+        '<2006/12/06 DEL S iida>
+'        gusrErr.UserEvent = EVENT_UPDATE & "(" & D_PRC_BY_ASSET & ")"
+'        lngRet = fncUpLoad(D_PRC_BY_ASSET, SHEET_UPD2, SP_PRC_BY_ASSET, PARA_PRC_BY_ASSET)
+'        If lngRet <> 0 Then
+'            Exit Do
+'        End If
+        '<2006/12/06 DEL E iida>
+        
+        '<2006/12/06 ADD S iida>
+        If Sheets(SHEET_MAIN).txtFile3 <> vbNullString Then
+            gusrErr.UserEvent = EVENT_UPDATE & "(" & D_PRC_SPCASSET & ")"
+            If gfunXlsWSSet(Application.ActiveWorkbook, SHEET_UPD3) = -1 Then
+                Call gfunc_ErrorMsg(3, ERRMSG_NO_UPSHEET3, "", "", True)
+                GoTo ErrHandler
+            End If
+            lngRet = fncUpLoad(D_PRC_SPCASSET, SHEET_UPD3, strBank)
+            If lngRet <> 0 Then
+                Exit Do
+            End If
+        End If
+        '<2006/12/06 ADD E iida>
+        '<2006/12/06 DEL S iida>
+'        gusrErr.UserEvent = EVENT_UPDATE & "(" & D_PRC_SPCASSET & ")"
+'        lngRet = fncUpLoad(D_PRC_SPCASSET, SHEET_UPD3, SP_PRC_SPCASSET, PARA_PRC_SPCASSET)
+'        If lngRet <> 0 Then
+'            Exit Do
+'        End If
+        '<2006/12/06 DEL E iida>
+    Loop Until True
+
+    Sheets(SHEET_MAIN).Select
+    
+    'Error判定
+'    With Sheets(SHEET_ERR1)
+'        If .Cells.SpecialCells(xlCellTypeLastCell).Row > 1 Then
+'            lngRet = -1
+'        Else
+'            lngRet = 0
+'        End If
+'    End With
+    
+    '<2006/12/06 DEL S iida>
+    'strTitle = MSG_TTL_UPD
+    If lngRet = 0 Then
+        If glngErrNum > 0 Then
+            Call gfunc_ErrorMsg(1, MSG_FINISH_UPDATE_END, "", "", True)
+        Else
+            If glngErrNum = 0 Then
+                Call gfunc_ErrorMsg(1, MSG_FINISH_UPDATE_SCC, "", "", True)
+            End If
+        End If
+    Else
+        If glngErrNum > 0 Then
+            Call gfunc_ErrorMsg(1, MSG_FINISH_UPDATE_ERR, "", "", True)
+        Else
+            Call gfunc_ErrorMsg(1, MSG_FINISH_UPDATE_STOP, "", "", True)
+        End If
+    End If
+
+    '---------------------------------------
+'    If glngErrNum > lngErrNumBefore Then
+'        strmsg = MSG_FINISH_ERR
+'        strTitle = MSG_TTL_UPD
+'        lngIcon = vbExclamation
+'    Else
+'        Select Case lngRet
+'        Case ERR_CHECK
+'            lngIcon = vbExclamation
+'        Case 0
+'            strmsg = MSG_FINISH_SCC
+'            strTitle = MSG_TTL_UPD
+'            lngIcon = vbInformation
+'        Case Else
+'            strmsg = MSG_FINISH_ERR
+'            strTitle = MSG_TTL_UPD
+'            lngIcon = vbExclamation
+'        End Select
+'    End If
+'    MsgBox strmsg, lngIcon, strTitle
+
+    '---------------------------------------
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+ErrHandler:
+     
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+
+

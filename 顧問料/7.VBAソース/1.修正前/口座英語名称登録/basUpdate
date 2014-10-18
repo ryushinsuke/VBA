@@ -1,0 +1,362 @@
+Attribute VB_Name = "basUpdate"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：外部委託ライセンスフィー算出システム・口座英語名称登録
+'
+'オブジェクト名：basUpdate
+'
+'機能概要　：口座英語名称の更新
+'
+'更新履歴　：2008/07/03 NRI堀江   新規作成
+'
+'*************************************************************************
+    Const MODULE_NAME As String = "basUpdate"
+
+'*************************************************************************
+'
+'関数名　　：更新ボタン処理
+'
+'引　数　　：なし
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：更新ボタン処理
+'
+'更新履歴　：2008/07/03　NRI堀江   新規作成
+'          ：2009/01/09  SRA水谷   口座英語名称桁数拡張
+'
+'*************************************************************************
+Function fncUpdate() As Long
+
+    Const PROCEDURE_NAME As String = "fncUpdate"
+
+On Error GoTo ErrorHandler
+
+    Dim lngRet      As Long
+    Dim lngRow      As Long
+    Dim lngErrRow   As Long
+    Dim lngErrCol   As Long
+    Dim strErrMsg   As String
+
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+
+    fncUpdate = 0
+'
+'------------<桁数拡張対応 20090109 SRA水谷 START> -----------------------
+    '更新前チェック
+    lngRet = fncChkEijiName()
+    If lngRet <> 0 Then
+        fncUpdate = lngRet
+        Exit Function
+    End If
+'------------<桁数拡張対応 20090109 SRA水谷 END> -----------------------
+    
+    '26001 更新確認
+    If MsgBox(fncKsCmnMessageDisp(MSGLVL_QUESTION, 26001, "", "", False), vbQuestion + vbYesNo, "確認") = vbNo Then
+        Exit Function
+    End If
+
+    '更新実行
+    lngRet = fncExecUpdate()
+    If lngRet <> 0 Then
+        fncUpdate = lngRet
+        Exit Function
+    End If
+
+    '26000 正常終了メッセージ
+    fncKsCmnMessageDisp MSGLVL_INFO, 26000, "", , True
+
+    '外部委託支払計算情報を再表示させる
+    Call fncSearch
+
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+
+    Exit Function
+
+ErrorHandler:
+    fncUpdate = Err.Number
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+
+'*************************************************************************
+'
+'関数名    : 更新前チェック処理
+'
+'引数      : なし
+'
+'戻り値    : Long  エラー番号
+'
+'機能説明  : 英語名称が半角80文字以内かどうかをチェックする
+'
+'更新履歴  : 2009/01/09 SRA水谷  新規作成(口座英語名称桁数拡張)
+'
+'*************************************************************************
+Function fncChkEijiName() As Long
+    
+    Const PROCEDURE_NAME As String = "fncChkEijiName"
+
+On Error GoTo ErrHandler
+
+    Dim lngRow As Long
+    Dim strEijiName As String
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    fncChkEijiName = 0
+    
+    '口座英語名称データの先頭行取得
+    lngRow = LIST_DATA_TOP_ROW
+    
+    Do While Sheets(SHEET_MAIN).Cells(lngRow, COLN_PRTCD).Value <> vbNullString
+    
+        strEijiName = Sheets(SHEET_MAIN).Cells(lngRow, COLN_EIJI_NAME).Value
+        
+        If Len(strEijiName) > 80 Or LenB(StrConv(strEijiName, vbFromUnicode)) <> Len(strEijiName) Then
+            fncKsCmnMessageDisp MSGLVL_WARNNING, 26007, MSG1_ICHIRAN_DISP, _
+                "口座番号：" & Sheets(SHEET_MAIN).Cells(lngRow, COLN_PRTCD).Value, True
+            
+            fncChkEijiName = 26007
+            Exit Function
+        
+        End If
+        lngRow = lngRow + 1
+    Loop
+    
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    Exit Function
+    
+ErrHandler:
+    fncChkEijiName = Err.Number
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Discription)
+
+End Function
+
+'*************************************************************************
+'
+'関数名　　：更新処理
+'
+'引　数　　：nothing
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：口座英語名称を新規追加 or 更新する
+'
+'更新履歴　：2008/07/04 NRI堀江   新規作成
+'更新履歴　：2008/07/30 SRA Y.Azuma    修正     連結障害対応(No.4、No.5、No.8)
+'
+'*************************************************************************
+Public Function fncExecUpdate() As Long
+
+    Const PROCEDURE_NAME As String = "fncExecUpdate"
+
+On Error GoTo ErrHandler
+
+    Dim strSql      As String
+    Dim recSel      As ADODB.Recordset
+    Dim lngRow      As Long
+
+    Dim vntRec()    As Variant
+    Dim lngCol      As Long
+    Dim lngRecCnt   As Long
+    Dim strErrCd    As String
+    Dim blnRet      As Boolean
+
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+
+    fncExecUpdate = 0
+
+    'トランザクション開始
+    fncKsCmnBeginTrans
+
+    '支払情報データの先頭行取得
+    lngRow = LIST_DATA_TOP_ROW
+
+    Do While Sheets(SHEET_MAIN).Cells(lngRow, COLN_PRTCD) <> vbNullString
+
+        '更新し、口座英語名称テーブルにもデータがある場合
+        If Sheets(SHEET_MAIN).Cells(lngRow, COLN_HENKOU_FLG) = 1 And Sheets(SHEET_MAIN).Cells(lngRow, COLN_KOHZA_NO) <> vbNullString Then
+        
+            'ODBCエラーのコードをセット
+            '[Oracle][ODBC][Ora]ORA-00054: リソース・ビジー、NOWAITが指定されていました。
+            strErrCd = ODBC_ERRCD_RESOURCE_BUSY
+       
+            strSql = ""
+            strSql = strSql & "SELECT" & vbCrLf
+            strSql = strSql & "    *" & vbCrLf
+            strSql = strSql & "FROM" & vbCrLf
+            strSql = strSql & "    KYK_GI_KOHZA_EIJI" & vbCrLf
+            strSql = strSql & "WHERE" & vbCrLf
+'------------<連結障害対応20080730 20080416 SRA東 START> -----------------------
+            strSql = strSql & "KOHZA_NO = '" & func_ChkQuoteshon(Sheets(SHEET_MAIN).Cells(lngRow, COLN_PRTCD), "'") & "'" & vbCrLf
+'            strSql = strSql & "KOHZA_NO = '" & Sheets(SHEET_MAIN).Cells(lngRow, COLN_PRTCD) & "'" & vbCrLf
+'------------<連結障害対応20080730 20080416 SRA東 END  > -----------------------
+            strSql = strSql & "AND SAKUJO_FLG = '0'" & vbCrLf
+            strSql = strSql & "FOR UPDATE NOWAIT" & vbCrLf
+            
+           'SQL文送信
+            blnRet = fncKsCmnDoExequteSql(MainMenu.gcSELECT, strSql, vntRec, lngCol, lngRecCnt, strErrCd)
+           
+            'リソース・ビジーエラーの場合
+            If blnRet = False Then
+                If strErrCd = ODBC_ERRCD_RESOURCE_BUSY Then
+                    'リソース・ビジー
+                    '26010 他のユーザーにより更新されています。
+                    fncKsCmnMessageDisp MSGLVL_WARNNING, 26010, MSG1_ICHIRAN_DISP, "", True
+                    fncExecUpdate = 26010
+                Else
+                    fncExecUpdate = strErrCd
+                End If
+                
+                'ロールバック
+               GoTo RollBackExit
+            End If
+            
+            '該当データが存在しない場合
+            If lngRecCnt = 0 Then
+                '26011 他ユーザにより削除されています。
+                fncKsCmnMessageDisp MSGLVL_WARNNING, 26011, MSG1_ICHIRAN_DISP, "", True
+                fncExecUpdate = 26011
+                
+                'ロールバック
+                GoTo RollBackExit
+            
+            Else
+                
+                strSql = "" & vbCrLf
+                strSql = strSql & "UPDATE KYK_GI_KOHZA_EIJI" & vbCrLf
+                strSql = strSql & "SET" & vbCrLf
+                strSql = strSql & "      KOHSHIN_YMD         = TO_CHAR(SYSDATE,'YYYY/MM/DD')," & vbCrLf
+                strSql = strSql & "      KOHSHIN_PGM_ID       = '口座英語名称登録'," & vbCrLf
+                strSql = strSql & "      KOHSHIN_TANTOHSHA   = 'APL001'," & vbCrLf
+'------------<連結障害対応20080730 20080416 SRA東 START> -----------------------
+                strSql = strSql & "      EIJI_NAME           = '" & func_ChkQuoteshon(Sheets(SHEET_MAIN).Cells(lngRow, COLN_EIJI_NAME).Value, "'") & "'" & vbCrLf
+'                strSql = strSql & "      EIJI_NAME           = '" & Sheets(SHEET_MAIN).Cells(lngRow, COLN_EIJI_NAME).Value & "'" & vbCrLf
+'------------<連結障害対応20080730 20080416 SRA東 END  > -----------------------
+                strSql = strSql & "WHERE" & vbCrLf
+'------------<連結障害対応20080730 20080416 SRA東 START> -----------------------
+                strSql = strSql & "      KOHZA_NO            = '" & func_ChkQuoteshon(Sheets(SHEET_MAIN).Cells(lngRow, COLN_PRTCD).Value, "'") & "'" & vbCrLf
+'                strSql = strSql & "      KOHZA_NO            = '" & Sheets(SHEET_MAIN).Cells(lngRow, COLN_PRTCD).Value & "'" & vbCrLf
+'------------<連結障害対応20080730 20080416 SRA東 END  > -----------------------
+
+               'SQL文送信
+                blnRet = fncKsCmnDoExequteSql(MainMenu.gcUPDATE, strSql, vntRec, lngCol, lngRecCnt, strErrCd)
+
+                If blnRet = False Then
+                    fncExecUpdate = strErrCd
+                    'ロールバック
+                    GoTo RollBackExit
+                End If
+            End If
+                
+        Else
+        
+            '更新したが、英語名称テーブルにないとき
+            If Sheets(SHEET_MAIN).Cells(lngRow, COLN_HENKOU_FLG) = 1 And Sheets(SHEET_MAIN).Cells(lngRow, COLN_KOHZA_NO) = vbNullString Then
+                
+'------------<連結障害対応20080730 20080416 SRA東 START> -----------------------
+                 'ODBCエラーのコードをセット
+                 '[Oracle][ODBC][Ora]ORA-00054: リソース・ビジー、NOWAITが指定されていました。
+                 strErrCd = ODBC_ERRCD_RESOURCE_BUSY
+            
+                 strSql = ""
+                 strSql = strSql & "SELECT" & vbCrLf
+                 strSql = strSql & "    *" & vbCrLf
+                 strSql = strSql & "FROM" & vbCrLf
+                 strSql = strSql & "    KYK_GI_KOHZA_EIJI" & vbCrLf
+                 strSql = strSql & "WHERE" & vbCrLf
+                 strSql = strSql & "KOHZA_NO = '" & func_ChkQuoteshon(Sheets(SHEET_MAIN).Cells(lngRow, COLN_PRTCD), "'") & "'" & vbCrLf
+                 strSql = strSql & "FOR UPDATE NOWAIT" & vbCrLf
+                 
+                'SQL文送信
+                 blnRet = fncKsCmnDoExequteSql(MainMenu.gcSELECT, strSql, vntRec, lngCol, lngRecCnt, strErrCd)
+                
+                 'リソース・ビジーエラーの場合
+                 If blnRet = False Then
+                     If strErrCd = ODBC_ERRCD_RESOURCE_BUSY Then
+                         'リソース・ビジー
+                         '26010 他のユーザーにより更新されています。
+                         fncKsCmnMessageDisp MSGLVL_WARNNING, 26010, MSG1_ICHIRAN_DISP, "", True
+                         fncExecUpdate = 26010
+                     Else
+                         fncExecUpdate = strErrCd
+                     End If
+                     
+                     'ロールバック
+                    GoTo RollBackExit
+                 End If
+                 
+                 
+                 If lngRecCnt = 0 Then
+                 '該当データが存在しない場合(Insert)
+                 
+                    strSql = "" & vbCrLf
+                    strSql = strSql & "INSERT INTO KYK_GI_KOHZA_EIJI" & vbCrLf
+                    strSql = strSql & "VALUES('" & func_ChkQuoteshon(Sheets(SHEET_MAIN).Cells(lngRow, COLN_PRTCD).Value, "'") & "'," & vbCrLf
+                    strSql = strSql & "       '" & func_ChkQuoteshon(Sheets(SHEET_MAIN).Cells(lngRow, COLN_EIJI_NAME).Value, "'") & "'," & vbCrLf
+                    strSql = strSql & "TO_CHAR(SYSDATE,'YYYY/MM/DD')," & vbCrLf
+                    strSql = strSql & "NULL," & vbCrLf
+                    strSql = strSql & "'口座英語名称登録'," & vbCrLf
+                    strSql = strSql & "'APL001'," & vbCrLf
+                    strSql = strSql & "'0')" & vbCrLf
+                 Else
+                 '該当データが存在する場合(Update)
+                
+                    strSql = "" & vbCrLf
+                    strSql = strSql & "UPDATE KYK_GI_KOHZA_EIJI" & vbCrLf
+                    strSql = strSql & "SET" & vbCrLf
+                    strSql = strSql & "      KOHSHIN_YMD         = TO_CHAR(SYSDATE,'YYYY/MM/DD')," & vbCrLf
+                    strSql = strSql & "      KOHSHIN_PGM_ID       = '口座英語名称登録'," & vbCrLf
+                    strSql = strSql & "      KOHSHIN_TANTOHSHA   = 'APL001'," & vbCrLf
+                    strSql = strSql & "      SAKUJO_FLG          = '0'," & vbCrLf
+                    strSql = strSql & "      EIJI_NAME           = '" & func_ChkQuoteshon(Sheets(SHEET_MAIN).Cells(lngRow, COLN_EIJI_NAME).Value, "'") & "'" & vbCrLf
+                    strSql = strSql & "WHERE" & vbCrLf
+                    strSql = strSql & "      KOHZA_NO            = '" & func_ChkQuoteshon(Sheets(SHEET_MAIN).Cells(lngRow, COLN_PRTCD).Value, "'") & "'" & vbCrLf
+                 End If
+
+                
+'                strSql = ""
+'                strSql = strSql & "INSERT INTO KYK_GI_KOHZA_EIJI" & vbCrLf
+'                strSql = strSql & "VALUES('" & Sheets(SHEET_MAIN).Cells(lngRow, COLN_PRTCD).Value & "'," & vbCrLf
+'                strSql = strSql & "       '" & Sheets(SHEET_MAIN).Cells(lngRow, COLN_EIJI_NAME).Value & "'," & vbCrLf
+'                strSql = strSql & "TO_CHAR(SYSDATE,'YYYY/MM/DD')," & vbCrLf
+'                strSql = strSql & "NULL," & vbCrLf
+'                strSql = strSql & "'口座英語登録名称'," & vbCrLf
+'                strSql = strSql & "'APL001'," & vbCrLf
+'                strSql = strSql & "'0')" & vbCrLf
+'------------<連結障害対応20080730 20080416 SRA東 END  > -----------------------
+               
+               'SQL文送信
+               blnRet = fncKsCmnDoExequteSql(MainMenu.gcINSERT, strSql, vntRec, lngCol, lngRecCnt, strErrCd)
+                
+                If blnRet = False Then
+                    fncExecUpdate = strErrCd
+
+                    'ロールバック
+                    GoTo RollBackExit
+                End If
+            Else
+            
+                '更新自体を行っていないとき、何もしない。
+                
+            End If
+        End If
+        lngRow = lngRow + 1
+    Loop
+               
+   'コミット
+    fncKsCmnCommitTrans
+        
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+    
+ErrHandler:
+    fncExecUpdate = Err.Number
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+RollBackExit:
+   'ロールバック
+    fncKsCmnRollbackTrans
+End Function
+

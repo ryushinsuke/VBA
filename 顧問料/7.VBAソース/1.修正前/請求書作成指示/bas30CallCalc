@@ -1,0 +1,440 @@
+Attribute VB_Name = "bas30CallCalc"
+Option Explicit
+
+Const MODULE_NAME = "bas30CallCalc"
+
+'*************************************************************************
+'関数名　　：計算処理バッチ起動
+'
+'引　　数　：
+'           strKbn         I       本仮区分(1:仮計算,0:本計算)
+'           strKohzaNo     I       口座番号
+'           strKikan       I       契約日
+'           strSintaku     I       信託銀行
+'
+'戻り値　　：Boolean
+'
+'機能説明　：
+'
+'更新履歴　：2006/07/27 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Function func_CallCalcProcess(ByVal strKbn As String _
+                                   , ByVal strKohzaNo As String _
+                                   , ByVal strKikan As String _
+                                   , ByVal strSintaku As String _
+                                   ) As Boolean
+
+On Error GoTo ErrHandler
+
+
+    Const PROCEDURE_NAME As String = "func_CallCalcProcess"
+    
+    
+    Dim strBuff                 As String * 1024
+    
+    Dim lngSpErrStatus          As Long
+    Dim strSpErrMessage         As String
+    Dim strTransactionID        As String
+    
+    
+    Dim cmdCalcSeikyusho As ADODB.Command
+   
+    Set cmdCalcSeikyusho = New ADODB.Command
+   
+    
+    func_CallCalcProcess = False
+
+'*******************************************************
+'* 関数開始　                                        　*
+'*******************************************************
+    Call subBeginProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+
+    'アクティブコネクションの設定
+    Set cmdCalcSeikyusho.ActiveConnection = cnAdo
+    
+    'タイムアウトの設定 (無限大)
+    cmdCalcSeikyusho.CommandTimeout = 0
+    
+    'コマンドオブジェクトのタイプ設定
+    cmdCalcSeikyusho.CommandType = adCmdStoredProc
+    
+    'ストアドプロシージャ名設定
+    cmdCalcSeikyusho.CommandText = "SP_BATCHMAIN_SEIKYUSHO"
+    
+    'パラメータ設定
+    
+    '本仮計算区分    (IN  VARCHAR2)
+    cmdCalcSeikyusho.Parameters.Append cmdCalcSeikyusho.CreateParameter("ps_honkari" _
+                                                                        , adLongVarWChar _
+                                                                        , adParamInput _
+                                                                        , LenB(strKbn) _
+                                                                        , strKbn)
+                                                                        
+    '口座番号        (IN  VARCHAR2)
+    If Trim(strKohzaNo) = "" Then
+        cmdCalcSeikyusho.Parameters.Append cmdCalcSeikyusho.CreateParameter("ps_kohza" _
+                                                                            , adLongVarWChar _
+                                                                            , adParamInput _
+                                                                            , vbNull _
+                                                                            , vbNullString)
+    Else
+        cmdCalcSeikyusho.Parameters.Append cmdCalcSeikyusho.CreateParameter("ps_kohza" _
+                                                                            , adLongVarWChar _
+                                                                            , adParamInput _
+                                                                            , LenB(strKohzaNo) _
+                                                                            , strKohzaNo)
+    End If
+                                                                        
+    '請求日          (IN  NUMBER)
+    cmdCalcSeikyusho.Parameters.Append cmdCalcSeikyusho.CreateParameter("pn_seikyubi" _
+                                                                        , adInteger _
+                                                                        , adParamInput _
+                                                                        , _
+                                                                        , strKikan)
+                                                                        
+    '信託銀行コード  (IN  VARCHAR2)
+    If Trim(strSintaku) = "" Then
+        cmdCalcSeikyusho.Parameters.Append cmdCalcSeikyusho.CreateParameter("ps_sintakuBNKcd" _
+                                                                            , adLongVarWChar _
+                                                                            , adParamInput _
+                                                                            , vbNull _
+                                                                            , vbNullString)
+    Else
+        cmdCalcSeikyusho.Parameters.Append cmdCalcSeikyusho.CreateParameter("ps_sintakuBNKcd" _
+                                                                            , adLongVarWChar _
+                                                                            , adParamInput _
+                                                                            , LenB(strSintaku) _
+                                                                            , strSintaku)
+    End If
+                                                                        
+    'TransactionID   (OUT VARCHAR2)
+    cmdCalcSeikyusho.Parameters.Append cmdCalcSeikyusho.CreateParameter("ps_tranId" _
+                                                                        , adLongVarWChar _
+                                                                        , adParamOutput _
+                                                                        , 1024 _
+                                                                        , strBuff)
+    'エラーステータス(OUT NUMBER)
+    cmdCalcSeikyusho.Parameters.Append cmdCalcSeikyusho.CreateParameter("pn_err_status" _
+                                                                        , adInteger _
+                                                                        , adParamOutput _
+                                                                        , _
+                                                                        , lngSpErrStatus)
+                                        
+    'エラーメッセージ(OUT VARCHAR2)
+    cmdCalcSeikyusho.Parameters.Append cmdCalcSeikyusho.CreateParameter("ps_err_message" _
+                                                                        , adLongVarWChar _
+                                                                        , adParamOutput _
+                                                                        , 2000 _
+                                                                        , strSpErrMessage)
+                                        
+                                        
+                                        
+    '実行
+'    If MsgBox("JAVA計算処理を呼びますか？", vbYesNo + vbQuestion) = vbYes Then
+        cmdCalcSeikyusho.Execute
+'    End If
+    
+    'ステータスの取得(0:正常、　-1:ワーニング、　-2:エラー)
+    lngSpErrStatus = cmdCalcSeikyusho.Parameters.Item("pn_err_status").Value
+    
+    '結果の取得
+    If lngSpErrStatus = 0 Then
+        '処理無し　次の処理へ
+    Else
+        If Not IsNull(cmdCalcSeikyusho.Parameters.Item("ps_err_message").Value) Then
+            strSpErrMessage = Trim(cmdCalcSeikyusho.Parameters.Item("ps_err_message").Value)
+        End If
+        Call gfunc_ErrorMsg(3, 6301, "請求書計算処理", strSpErrMessage & "(" & lngSpErrStatus & ")")
+        
+        
+        'トランザクションIDの取得
+        strTransactionID = cmdCalcSeikyusho.Parameters.Item("ps_tranId").Value
+        
+'------------<Modify Start azuma 2006/10/26 連No.25> -----------------------
+'        Call sub_Sleep(0.5)
+'------------<Modify End   azuma 2006/10/26 連No.25> -----------------------
+        
+        Call gCom01_BookProtect(ThisWorkbook, False)
+        'ログ出力
+        Call fncMakeErrorSheet(strTransactionID, MAIN_SHEETNAME, ERROR_SHEETNAME_J)
+        Call gCom01_BookProtect(ThisWorkbook, True)
+        
+        Set cmdCalcSeikyusho = Nothing
+        Call subEndProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+        Exit Function
+    End If
+
+    Set cmdCalcSeikyusho = Nothing
+
+
+    Call subEndProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+
+    func_CallCalcProcess = True
+    
+    Exit Function
+
+ErrHandler:
+
+    func_CallCalcProcess = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_CallCalcProcess", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Set cmdCalcSeikyusho = Nothing
+    Call subEndProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+
+End Function
+
+
+
+'*************************************************************************
+'関数名　　：配列の階層変更
+'
+'引　　数　：ARG1   I   vntSrcAry   Variant 修正元配列
+'　　　　　：ARG2   O   vntDstAry   Variant 修正後配列
+'
+'戻り値　　：エラー番号
+'
+'機能説明　：Array(X,Y) -> Array(Y,X)に変更する
+'
+'更新履歴　：2006/07/05 SRA H.Anpo      新規作成
+'
+'*************************************************************************
+Private Function fncKsCmnArrayIdxChange( _
+            ByVal vntSrcAry As Variant, _
+            ByRef vntDstAry As Variant)
+
+    Const PROCEDURE_NAME As String = "fncKsCmnArrayIdxChange"
+    
+On Error GoTo ErrorHandler
+
+    Dim lngCnt1      As Long
+    Dim lngCnt2      As Long
+
+    fncKsCmnArrayIdxChange = 0
+
+    ReDim vntDstAry(UBound(vntSrcAry, 2), UBound(vntSrcAry, 1))
+    For lngCnt1 = 0 To UBound(vntSrcAry, 1)
+        For lngCnt2 = 0 To UBound(vntSrcAry, 2)
+            vntDstAry(lngCnt2, lngCnt1) = vntSrcAry(lngCnt1, lngCnt2)
+        Next
+    Next
+    
+    Exit Function
+
+ErrorHandler:
+    fncKsCmnArrayIdxChange = Err.Number
+'    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+
+End Function
+
+
+
+
+'*************************************************************************
+'関数名　　：エラーログ情報取得
+'
+'引　　数　：ARG1   I   lngTranId   long    トランザクションＩＤ
+'　　　　　：ARG2   O   vntRec      Variant データ配列
+'　　　　　：ARG3   O   lngRow      long    取得行数
+'　　　　　：ARG4   O   lngCol      long    取得列数
+'
+'戻り値　　：エラー番号
+'
+'機能説明　：エラーログ情報を取得する
+'
+'更新履歴　：2006/07/05 SRA H.Anpo      新規作成
+'
+'*************************************************************************
+Private Function fncReadErrorLog( _
+            ByVal lngTranId As Long, _
+            ByRef vntRec() As Variant, _
+            ByRef lngRow As Long, _
+            ByRef lngCol As Long _
+            ) As Long
+
+    Const PROCEDURE_NAME As String = "fncReadErrorLog"
+
+    On Error GoTo ErrHandler
+    
+    Dim RS As New ADODB.Recordset       'レコードセット
+    
+    Dim strSql      As String
+    Dim lngRet      As Long
+    Dim vntRecWk()  As Variant
+    
+    Call subBeginProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    fncReadErrorLog = 0
+    
+    strSql = ""
+    strSql = strSql & " SELECT"
+'    strSql = strSql & "     *"
+    strSql = strSql & "  TRANSACTION_ID   "
+    strSql = strSql & " ,LOG_KBN          "
+    strSql = strSql & " ,to_char(LOG)     "
+    strSql = strSql & " ,TOHROKU_YMD      "
+    strSql = strSql & " ,KOHSHIN_YMD      "
+    strSql = strSql & " ,KOHSHIN_PGM_ID   "
+    strSql = strSql & " ,KOHSHIN_TANTOHSHA"
+    strSql = strSql & " ,SAKUJO_FLG"
+    strSql = strSql & " FROM"
+    strSql = strSql & "     KYK_LOG"   'ログテーブル
+    strSql = strSql & " WHERE"
+    strSql = strSql & "     TRANSACTION_ID  = " & lngTranId
+    strSql = strSql & " AND LOG_KBN         = '1'"
+    strSql = strSql & " AND SAKUJO_FLG      = '0'"
+    
+    RS.Open strSql, MainMenu.cnAdo, adOpenKeyset, adLockOptimistic, adCmdText
+    vntRecWk = RS.GetRows
+    
+    lngCol = RS.Fields.Count
+    lngRow = RS.RecordCount
+    RS.Close
+    Set RS = Nothing
+    
+    If lngRow > 0 Then
+        lngRet = fncKsCmnArrayIdxChange(vntRecWk, vntRec)
+        If lngRet <> 0 Then
+            Err.Raise lngRet
+        End If
+    End If
+    
+    Call subEndProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    Set RS = Nothing
+    Erase vntRecWk
+    
+    Exit Function
+ErrHandler:
+    Set RS = Nothing
+    Erase vntRecWk
+    fncReadErrorLog = Err.Number
+
+End Function
+
+
+
+
+'*************************************************************************
+'関数名　　：エラーシート作成(ストアドJAVAのエラーログ情報)
+'
+'引　　数　：ARG1   I   TranId      String  トランザクションＩＤ
+'　　　　　：ARG2   I   MainSheetNm String  MAINシート名称
+'　　　　　：ARG3   I   ErrSheetNm  String  ERRORシート名称
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：ストアドJAVAのエラーログ情報のエラーシートを作成する
+'           MAINシートの後ろにERRORシートを追加する
+'
+'更新履歴　：2006/09/26 SRA H.Anpo    新規作成
+'更新履歴　：2006/10/26 SRA Y.Azuma   変更     JAVAエラーログの出力不正対応(連No.25)
+'
+'*************************************************************************
+Private Function fncMakeErrorSheet( _
+            ByVal TranId As String, _
+            ByVal MainSheetNm As String, _
+            ByVal ErrSheetNm As String _
+            ) As Long
+       
+    Const PROCEDURE_NAME As String = "fncMakeErrorSheet"
+
+On Error GoTo ErrorHandler
+
+    Dim lngRet      As Long
+    Dim vntRec()    As Variant
+    Dim lngRow      As Long
+    Dim lngCol      As Long
+
+    Dim lngRowCnt   As Long '<------------ Modify azuma 2006/10/26 連No.25
+    Dim lngColCnt   As Long '<------------ Modify azuma 2006/10/26 連No.25
+    
+
+'    Call subBeginProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+
+    fncMakeErrorSheet = 0
+
+    'エラーシート追加
+On Error Resume Next
+    With ThisWorkbook
+        .Sheets(ErrSheetNm).Activate
+        If Err.Number <> 0 Then
+            .Sheets.Add After:=Sheets(MainSheetNm)
+'------------<Modify Start azuma 2006/12/14 総No.35> -----------------------
+            ThisWorkbook.Application.ActiveSheet.Name = ErrSheetNm
+'Debug.Print "30JAVA計算エラー"
+'            ActiveSheet.Name = ErrSheetNm
+'------------<Modify End   azuma 2006/12/14 総No.35> -----------------------
+        Else
+            .Sheets(ErrSheetNm).Clear
+        End If
+    End With
+On Error GoTo ErrorHandler
+
+    'エラーデータ取得
+    lngRet = fncReadErrorLog(TranId, vntRec, lngRow, lngCol)
+    If lngRet <> 0 Then
+        Err.Raise lngRet
+    End If
+    
+    
+
+    'エラーシートに貼り付け
+    'シートにデータをセット
+    With ThisWorkbook.Sheets(ErrSheetNm)
+'------------<Modify Start azuma 2006/10/26 連No.25> -----------------------
+'        .Range(Cells(1, 1), Cells(lngRow, lngCol)) = vntRec
+
+        For lngRowCnt = 0 To lngRow - 1
+            For lngColCnt = 0 To lngCol - 1
+                .Cells(lngRowCnt + 1, lngColCnt + 1).Value = vntRec(lngRowCnt, lngColCnt)
+            Next lngColCnt
+        Next lngRowCnt
+'------------<Modify End   azuma 2006/10/26 連No.25> -----------------------
+    
+    End With
+
+'    Call subEndProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    Erase vntRec
+    
+    Exit Function
+
+ErrorHandler:
+    Erase vntRec
+    fncMakeErrorSheet = Err.Number
+End Function
+
+
+'*************************************************************************
+'関数名　　：スリープ
+'
+'引　　数　：ARG1   I   sglSettingTime      Single  スリープ時間(秒)
+'
+'戻り値　　：
+'
+'機能説明　：設定時間スリープする。
+'
+'更新履歴　：2006/10/26 SRA Y.Azuma    新規作成
+'更新履歴　：2006/10/26 SRA Y.Azuma    変更     JAVAエラー表示されない対策(連No.25)
+'
+'*************************************************************************
+Private Sub sub_Sleep(ByVal sglSettingTime As Single)
+    Dim sglStartTime    As Single
+    Dim sglNow          As Single
+    
+    sglStartTime = Timer
+    Do
+        sglNow = Timer
+        If (sglNow - sglStartTime) >= sglSettingTime Then
+            Exit Do
+        End If
+    Loop
+
+End Sub
+

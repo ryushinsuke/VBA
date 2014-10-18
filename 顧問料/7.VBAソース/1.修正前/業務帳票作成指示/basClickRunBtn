@@ -1,0 +1,1317 @@
+Attribute VB_Name = "basClickRunBtn"
+Option Explicit
+
+'*************************************************************************
+'プロジェクト名：新契約管理システム・業務帳票作成指示
+'オブジェクト名：basClickRunBtn
+'機能概要　：メイン画面
+'更新履歴　：2006/08/22 SRA 金          新規作成
+'
+'*************************************************************************
+
+Const MODULE_NAME = "basClickRunBtn"
+
+
+'*************************************************************************
+'関数名　　：実行処理メイン処理
+'引　　数　：
+'           objTarget        I           対象のシート
+'戻り値　　：
+'機能説明　：
+'更新履歴　：2006/08/22 SRA             新規作成
+'            2006/11/28 SRA T.Sato      顧問料率一覧表出力追加
+'        　   SRA 金          信託時価一覧表出力追加
+'        　：2007/10/11 SRA Y.Azuma     変更     (PH3)時価未登録一覧表追加
+'　　　　　：2008/10/10 SRA Y.Azuma     変更   　単月未収顧問料チェック表追加
+'　　　　　：2010/12/15 SRA t.mizutani  変更   　外部委託ライセンスフィー基礎データの帳票化
+'
+'*************************************************************************
+Public Sub subExecuteMain(ByRef objTarget As Object)
+    
+    Const PROCEDURE_NAME As String = "subExecuteMain"
+
+On Error GoTo ErrSection
+
+    Dim blnRet          As Boolean
+    Dim strTyoHyoName   As String   '帳票名
+  
+    With objTarget
+    
+        '入力チェック処理
+        If fncCheckInput(objTarget) = False Then
+            Exit Sub
+        End If
+        
+        '入金一覧表の入力チェック処理
+        If .opt1100.Value = True Then
+            strTyoHyoName = gc帳票名1 ' 入金一覧表
+            blnRet = fncClickRunBtn1100(objTarget)
+    
+        '自己設定投信委託者報酬額明細の入力チェック処理
+        ElseIf .opt1200.Value = True Then
+           strTyoHyoName = gc帳票名2 ' 自己設定投信委託者報酬額明細
+           blnRet = fncClickRunBtn1200(objTarget)
+        
+        '契約未更改一覧表の入力チェック処理
+        ElseIf .opt1300.Value = True Then
+            strTyoHyoName = gc帳票名3 ' 契約未更改一覧表
+            blnRet = fncClickRunBtn1300(objTarget)
+        
+'***** UPDATE T.Sato 2006/11/28 *****
+'        '投資顧問料率案内書の入力チェック処理
+'        Else
+'            strTyoHyoName = gc帳票名4 ' 投資顧問料率案内書
+'            blnRet = fncClickRunBtn1400(objTarget)
+'        End If
+        
+        '投資顧問料率案内書の入力チェック処理
+        ElseIf .opt1400.Value = True Then
+            strTyoHyoName = gc帳票名4 ' 投資顧問料率案内書
+            blnRet = fncClickRunBtn1400(objTarget)
+        
+        '顧問料率一覧表の入力チェック処理
+        ElseIf .opt1500.Value = True Then
+            strTyoHyoName = gc帳票名5 ' 顧問料率一覧表
+            blnRet = fncClickRunBtn1500(objTarget)
+        
+'***** INSERT 金  *****
+        '信託時価一覧表の入力チェック処理
+        ElseIf .opt1600.Value = True Then
+            strTyoHyoName = gc帳票名6 ' 信託時価一覧表
+            blnRet = fncClickRunBtn1600(objTarget)
+'***** INSERT End *****
+        
+'***** INSERT 市川 2007/05/11 *****
+        '掛け目一覧表の作成処理
+        ElseIf .opt1700.Value = True Then
+            strTyoHyoName = gc帳票名7 ' 掛け目一覧表
+            blnRet = fncClickRunBtn1700(objTarget)
+'***** INSERT End *****
+        
+'------------<Modify Start azuma 2007/10/11 (PH3)> -----------------------
+        '時価未登録一覧表の作成処理呼出
+        ElseIf .opt1800.Value = True Then
+            strTyoHyoName = gc帳票名8 ' 時価未登録一覧表
+            blnRet = fncClickRunBtn1800(objTarget)
+'------------<Modify End   azuma 2007/10/11 (PH3)> -----------------------
+        
+'------------<Added 資産登録20080218 2008/02/18 SRA市川 Start > ----------------------------------------
+        '資産一覧表の作成処理呼出
+        ElseIf .opt5100.Value = True Then
+            strTyoHyoName = gc帳票名9 ' 資産一覧表
+            blnRet = fncClickRunBtn5100(objTarget)
+'------------<Added 資産登録20080218 2008/02/18 SRA市川 End   > ----------------------------------------
+
+'------------<Added 顧問料支払い口座一覧の対応 2008/04/22 SRA市川 Start > ----------------------------------------
+        '顧問料支払い口座一覧（予定）の作成処理呼出
+        ElseIf .opt5200.Value = True Then
+            strTyoHyoName = gc帳票名10 ' 顧問料支払い口座一覧（予定）
+            blnRet = fncClickRunBtn5200(objTarget)
+        '信託報酬支払い口座一覧の作成処理呼出
+        ElseIf .opt5300.Value = True Then
+            strTyoHyoName = gc帳票名11 ' 信託報酬支払い口座一覧
+            blnRet = fncClickRunBtn5300(objTarget)
+'------------<Added 顧問料支払い口座一覧の対応 2008/04/22 SRA市川 End   > ----------------------------------------
+
+'------------<Added 顧問料支払い口座一覧の対応 2008/05/22 SRA市川 Start > ----------------------------------------
+        '顧問料支払い口座一覧（実績）の作成処理呼出
+        ElseIf .opt5400.Value = True Then
+            strTyoHyoName = gc帳票名12 ' 顧問料支払い口座一覧（実績）
+            blnRet = fncClickRunBtn5400(objTarget)
+'------------<Added 顧問料支払い口座一覧の対応 2008/05/22 SRA市川 End   > ----------------------------------------
+
+'------------<Modify Start azuma 2008/10/10 > 単月未収顧問料チェック表-----------------------
+        ElseIf .opt5500.Value = True Then
+            strTyoHyoName = gc帳票名55 ' 単月未収顧問料チェック表
+            blnRet = fncClickRunBtn5500(objTarget)
+'------------<Modify End   azuma 2008/10/10 > 単月未収顧問料チェック表-----------------------
+
+'------------<Add Start t.mizutani 2010/12/15 > -----------------------
+        ElseIf .opt5600.Value = True Then
+            strTyoHyoName = gc帳票名56 ' RAFI基礎データ
+            blnRet = fncClickRunBtn5600(objTarget)
+'------------<Add End t.mizutani 2010/12/15 > -----------------------
+
+'=== 2007/10/24 Modified by H.Anpo Start ===
+'        End If
+''***** UPDATE End *****
+
+        ElseIf .opt4000.Value = True Then
+            strTyoHyoName = gc帳票名40 ' 顧問料算定基準一覧
+            blnRet = fncClickRunBtn4000(objTarget)
+        ElseIf .opt4100.Value = True Then
+            strTyoHyoName = gc帳票名41 ' 海外新基準
+            blnRet = fncClickRunBtn4100(objTarget)
+        ElseIf .opt4200.Value = True Then
+            strTyoHyoName = gc帳票名42 ' 分析新基準
+            blnRet = fncClickRunBtn4200(objTarget)
+        ElseIf .opt4300.Value = True Then
+            strTyoHyoName = gc帳票名43 ' 協会新基準
+            blnRet = fncClickRunBtn4300(objTarget)
+        ElseIf .opt4400.Value = True Then
+            strTyoHyoName = gc帳票名44 ' 国内新基準
+            blnRet = fncClickRunBtn4400(objTarget)
+        ElseIf .opt4500.Value = True Then
+            strTyoHyoName = gc帳票名45 ' 専務会報告
+            blnRet = fncClickRunBtn4500(objTarget)
+        ElseIf .opt4600.Value = True Then
+            strTyoHyoName = gc帳票名46 ' 部店別契約残高一覧
+            blnRet = fncClickRunBtn4600(objTarget)
+        ElseIf .opt4700.Value = True Then
+            strTyoHyoName = gc帳票名47 ' 海外口座一覧
+            blnRet = fncClickRunBtn4700(objTarget)
+        End If
+'=== 2007/10/24 Modified by H.Anpo Start ===
+
+'=== 2007/12/05 Added By H.Anpo Start
+    ' 印刷確認ダイアログボックスの部分が更新されない為追加する。
+    Application.ScreenUpdating = True    '！！！ 削除しない事。
+    Application.ScreenUpdating = False   '！！！ 削除しない事。
+    ' 印刷確認ダイアログボックスの部分が更新されない為追加する。
+'=== 2007/12/05 Added By H.Anpo End
+
+
+        If blnRet = True Then
+            If .chkPrint.Value = False Then
+                ' 帳票を作成しました。
+                Call gfunc_ErrorMsg(gcMsgKbn_1, gcMsgId1001, strTyoHyoName, "")
+            ElseIf .chkMake.Value = False Then
+                ' 帳票を印刷しました。
+                Call gfunc_ErrorMsg(gcMsgKbn_1, gcMsgId1002, strTyoHyoName, "")
+            Else
+                ' 帳票を作成・印刷しました。
+                Call gfunc_ErrorMsg(gcMsgKbn_1, gcMsgId1003, strTyoHyoName, "")
+            End If
+
+        End If
+
+    End With
+
+    Exit Sub
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Sub
+
+
+'*************************************************************************
+'関数名　　：実行時入力チェック処理
+'引　　数　：
+'           objTarget        I           対象のシート
+'戻り値　　：処理結果
+'機能説明　：
+'更新履歴　：2006/08/22 SRA             新規作成
+'            2006/11/28 SRA T.Sato      顧問料率一覧表出力追加
+'        　   SRA 金          信託時価一覧表出力追加
+'        　：2007/10/11 SRA Y.Azuma     変更     (PH3)時価未登録一覧表追加
+'　　　　　：2008/10/10 SRA Y.Azuma     変更　   単月未収顧問料チェック表追加
+'　　　　　：2010/12/15 SRA t.mizutani  変更　   外部委託ライセンスフィー基礎データの帳票化
+'
+'*************************************************************************
+Private Function fncCheckInput(ByRef objTarget As Object) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncCheckInput"
+
+On Error GoTo ErrSection
+
+    Dim blnRet          As Boolean
+
+    Call subBeginProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    fncCheckInput = False
+
+    With objTarget
+    
+        'チェックボックスの選択チェック
+        If .chkMake.Value = False And .chkPrint.Value = False Then
+            Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3002, "作成・印刷チェックボックス", "")
+            Exit Function
+        End If
+        
+        ' 作成が選択されている時のみ入力をチェックする
+        If .chkMake.Value = True Then
+      
+            '入金一覧表の入力チェック処理
+            If .opt1100.Value = True Then
+                blnRet = fncCheckOpt1100(objTarget)
+        
+            '自己設定投信委託者報酬額明細の入力チェック処理
+            ElseIf .opt1200.Value = True Then
+                blnRet = fncCheckOpt1200(objTarget)
+            
+            '契約未更改一覧表の入力チェック処理
+            ElseIf .opt1300.Value = True Then
+                blnRet = fncCheckOpt1300(objTarget)
+            
+'***** UPDATE T.Sato 2006/11/28 *****
+'            '投資顧問料率案内書の入力チェック処理
+'            Else
+'                blnRet = fncCheckOpt1400(objTarget)
+'            End If
+            
+            '投資顧問料率案内書の入力チェック処理
+            ElseIf .opt1400.Value = True Then
+                blnRet = fncCheckOpt1400(objTarget)
+            
+            '顧問料率一覧表の入力チェック処理
+            ElseIf .opt1500.Value = True Then
+                blnRet = fncCheckOpt1500(objTarget)
+                
+'***** INSERT 金  *****
+            '信託時価一覧表の入力チェック処理
+            ElseIf .opt1600.Value = True Then
+                blnRet = fncCheckOpt1600(objTarget)
+'***** INSERT End *****
+            
+'***** INSERT 市川 2007/05/11 *****
+            '掛け目一覧表の入力チェック処理
+            ElseIf .opt1700.Value = True Then
+                '検索条件がないため、チェック処理なし
+                blnRet = True
+'***** INSERT End *****
+            
+'------------<Modify Start azuma 2007/10/11 (PH3)> -----------------------
+            '時価未登録一覧表の入力チェック処理
+            ElseIf .opt1800.Value = True Then
+                blnRet = fncCheckOpt1800(objTarget)
+'------------<Modify End   azuma 2007/10/11 (PH3)> -----------------------
+            
+'------------<Added 資産登録20080218 2008/02/18 SRA市川 Start > ----------------------------------------
+            '資産一覧表の入力チェック処理
+            ElseIf .opt5100.Value = True Then
+                '検索条件がないため、チェック処理なし
+                blnRet = True
+'------------<Added 資産登録20080218 2008/02/18 SRA市川 End   > ----------------------------------------
+
+'------------<Added 顧問料支払い口座一覧の対応 2008/04/22 SRA市川 Start > ----------------------------------------
+            '顧問料支払い口座一覧（予定）と信託報酬支払い口座一覧の入力チェック処理
+            ElseIf .opt5200.Value = True Or _
+                   .opt5300.Value = True Then
+                '検索条件がないため、チェック処理なし
+                blnRet = True
+'------------<Added 顧問料支払い口座一覧の対応 2008/04/22 SRA市川 End   > ----------------------------------------
+
+'------------<Added 顧問料支払い口座一覧の対応 2008/05/22 SRA市川 Start > ----------------------------------------
+            '顧問料支払い口座一覧（実績）の入力チェック処理
+            ElseIf .opt5400.Value = True Then
+                '基準年月の入力チェック
+                blnRet = fncCheckOpt5400(objTarget)
+'------------<Added 顧問料支払い口座一覧の対応 2008/05/22 SRA市川 End   > ----------------------------------------
+
+'------------<Modify Start azuma 2008/10/10 > 単月未収顧問料チェック表-----------------------
+            '単月未収顧問料チェック表の入力チェック処理
+            ElseIf .opt5500.Value = True Then
+                '基準年月の入力チェック
+                blnRet = fncCheckOpt5500(objTarget)
+'------------<Modify End   azuma 2008/10/10 > 単月未収顧問料チェック表-----------------------
+
+'------------<Add Start t.mizutani 2010/12/15 > -----------------------
+            'RAFI基礎データの入力チェック処理
+            ElseIf .opt5600.Value = True Then
+                '基準年月の入力チェック
+                blnRet = fncCheckOpt5600(objTarget)
+'------------<Add End t.mizutani 2010/12/15 > -----------------------
+
+'=== 2007/10/24 Added by H.Anpo Start ===
+            '顧問料算定基準一覧の入力チェック処理
+            ElseIf .opt4000.Value = True Or _
+                   .opt4100.Value = True Or _
+                   .opt4200.Value = True Or _
+                   .opt4300.Value = True Or _
+                   .opt4400.Value = True Or _
+                   .opt4500.Value = True Or _
+                   .opt4600.Value = True Or _
+                   .opt4700.Value = True _
+            Then
+                blnRet = fncCheckOpt4999(objTarget)
+'=== 2007/10/24 Added by H.Anpo End ===
+            
+            
+            End If
+'***** UPDATE T.Sato 2006/11/28 *****
+            
+            If blnRet = False Then
+                Exit Function
+            End If
+            
+        End If
+    
+        '保存フォルダー(必須)
+        '　必須チェック
+        If Trim(.Range("保存フォルダ").Value) = "" Then
+            Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3003, "保存フォルダ", "")
+            Exit Function
+        End If
+        
+        '　存在チェック
+        If Dir(CStr(.Range("保存フォルダ").Value), vbDirectory) = "" Then
+            Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3004, "保存フォルダ", "")
+            Exit Function
+        End If
+ 
+    End With
+
+    fncCheckInput = True
+    
+    Call subEndProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncCheckInput = False
+    
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+'*************************************************************************
+'関数名　　：入金一覧表の入力チェック処理
+'引　　数　：
+'           objTarget        I           対象のシート
+'戻り値　　：処理結果
+'機能説明　：
+'更新履歴　：2006/08/22 SRA             新規作成
+'
+'*************************************************************************
+Private Function fncCheckOpt1100(ByRef objTarget As Object) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncCheckOpt1100"
+
+On Error GoTo ErrSection
+    
+    Dim strKouza     As String
+    Dim strFrom      As String
+    Dim strTo        As String
+
+    fncCheckOpt1100 = False
+
+    With objTarget
+        
+        ' 日付チェック
+        strFrom = Trim(.Range("入金予定日from").Value)
+        If fncCheckDate("入金予定日From", strFrom) = False Then
+            Exit Function
+        End If
+        
+        strTo = Trim(.Range("入金予定日to").Value)
+        If fncCheckDate("入金予定日To", strTo) = False Then
+            Exit Function
+        End If
+    
+        '　期間の大小チェック
+        If strFrom > strTo Then
+            Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3007, "入金予定日From/To", "入金予定日From≦入金予定日Toの条件で入力して下さい。")
+            Exit Function
+        End If
+
+    End With
+
+    fncCheckOpt1100 = True
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncCheckOpt1100 = False
+    
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+End Function
+
+
+'*************************************************************************
+'関数名　　：自己設定投信委託者報酬額明細の入力チェック処理
+'引　　数　：
+'           objTarget        I           対象のシート
+'戻り値　　：処理結果
+'機能説明　：
+'更新履歴　：2006/08/22 SRA             新規作成
+'
+'*************************************************************************
+Private Function fncCheckOpt1200(ByRef objTarget As Object) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncCheckOpt1200"
+
+On Error GoTo ErrSection
+
+    Dim strKouza     As String
+    Dim strDate      As String
+
+    fncCheckOpt1200 = False
+
+    With objTarget
+    
+        ' 口座番号チェック
+        strKouza = Trim(.Range("口座番号").Value)
+        If fncCheckKouzaNo("口座番号", strKouza) = False Then
+            Exit Function
+        End If
+
+        ' 日付チェック
+        strDate = Trim(.Range("請求日").Value)
+        If fncCheckDate("請求日", strDate) = False Then
+            Exit Function
+        End If
+    
+    End With
+
+    fncCheckOpt1200 = True
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncCheckOpt1200 = False
+    
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+End Function
+
+
+'*************************************************************************
+'関数名　　：契約未更改一覧表の入力チェック処理
+'引　　数　：
+'           objTarget        I           対象のシート
+'戻り値　　：処理結果
+'機能説明　：
+'更新履歴　：2006/08/22 SRA             新規作成
+'
+'*************************************************************************
+Private Function fncCheckOpt1300(ByRef objTarget As Object) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncCheckOpt1300"
+
+On Error GoTo ErrSection
+
+    Dim strDate      As String
+    
+    fncCheckOpt1300 = False
+
+    With objTarget
+        
+        ' 日付チェック
+        strDate = Trim(.Range("基準日").Value)
+        If fncCheckDate("基準日", strDate) = False Then
+            Exit Function
+        End If
+    
+    End With
+
+    fncCheckOpt1300 = True
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncCheckOpt1300 = False
+    
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+End Function
+
+
+'*************************************************************************
+'関数名　　：投資顧問料率案内書の入力チェック処理
+'引　　数　：
+'           objTarget        I           対象のシート
+'戻り値　　：処理結果
+'機能説明　：
+'更新履歴　：2006/08/22 SRA             新規作成
+'
+'*************************************************************************
+Private Function fncCheckOpt1400(ByRef objTarget As Object) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncCheckOpt1400"
+
+On Error GoTo ErrSection
+
+    Dim strKouza     As String
+    Dim strDate      As String
+
+    fncCheckOpt1400 = False
+
+    With objTarget
+ 
+        ' 口座番号チェック
+        strKouza = Trim(.Range("口座番号2").Value)
+        If fncCheckKouzaNo("口座番号", strKouza) = False Then
+            Exit Function
+        End If
+
+        ' 日付チェック
+        strDate = Trim(.Range("適用開始日").Value)
+        If fncCheckDate("適用開始日", strDate) = False Then
+            Exit Function
+        End If
+    
+    End With
+
+    fncCheckOpt1400 = True
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncCheckOpt1400 = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+End Function
+
+'*************************************************************************
+'関数名　　：顧問料率一覧表の入力チェック処理
+'引　　数　：
+'           objTarget        I           対象のシート
+'戻り値　　：処理結果
+'機能説明　：
+'更新履歴　：2006/11/28 SRA T.Sato       顧問料率一覧表出力追加
+'
+'*************************************************************************
+Private Function fncCheckOpt1500(ByRef objTarget As Object) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncCheckOpt1500"
+
+On Error GoTo ErrSection
+    
+    Dim strKouza     As String
+    Dim strFrom      As String
+    Dim strTo        As String
+
+    fncCheckOpt1500 = False
+
+    With objTarget
+        
+        ' 日付チェック
+        strFrom = Trim(.Range("料率適用期間from").Value)
+        If fncCheckDate("料率適用期間From", strFrom) = False Then
+            Exit Function
+        End If
+        
+        strTo = Trim(.Range("料率適用期間to").Value)
+        If fncCheckDate("料率適用期間To", strTo) = False Then
+            Exit Function
+        End If
+    
+        '　期間の大小チェック
+        If strFrom > strTo Then
+            Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3007, "料率適用期間From/To", "料率適用期間From≦料率適用期間Toの条件で入力して下さい。")
+            Exit Function
+        End If
+
+    End With
+
+    fncCheckOpt1500 = True
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncCheckOpt1500 = False
+    
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+End Function
+
+
+'*************************************************************************
+'関数名　　：信託時価一覧表の入力チェック処理
+'引　　数　：
+'           objTarget        I           対象のシート
+'戻り値　　：処理結果
+'機能説明　：
+'更新履歴　： SRA             信託時価一覧表出力追加
+'
+'*************************************************************************
+Private Function fncCheckOpt1600(ByRef objTarget As Object) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncCheckOpt1600"
+
+On Error GoTo ErrSection
+
+    Dim strDate      As String
+    
+    fncCheckOpt1600 = False
+
+    With objTarget
+        
+        ' 日付チェック
+        strDate = Trim(.Range("基準日2").Value)
+        If fncCheckDate("基準日", strDate) = False Then
+            Exit Function
+        End If
+    
+    End With
+
+    fncCheckOpt1600 = True
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncCheckOpt1600 = False
+    
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+End Function
+
+'*************************************************************************
+'関数名　　：時価未登録一覧表の入力チェック処理
+'引　　数　：
+'           objTarget        I           対象のシート
+'戻り値　　：処理結果
+'機能説明　：
+'更新履歴　：2007/10/11 SRA Y.Azuma    新規     (PH3)時価未登録一覧表追加
+'
+'*************************************************************************
+Private Function fncCheckOpt1800(ByRef objTarget As Object) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncCheckOpt1800"
+
+On Error GoTo ErrSection
+
+    Dim strDate      As String
+    
+    fncCheckOpt1800 = False
+
+    With objTarget
+        
+    ' 日付チェック
+    
+    '必須チェック
+    strDate = Trim(.Range("基準年月").Value)
+    If strDate = "" Then
+        Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3005, "基準年月", "")
+        Exit Function
+    End If
+    
+    '桁数チェック
+    strDate = strDate & "01"
+    If Len(strDate) <> 8 Then
+        '8桁以外
+        Call gfunc_ErrorMsg(gcMsgKbn_3, "3", "基準年月", "YYYYMM形式で入力して下さい。")
+        Exit Function
+    End If
+    
+    '　妥当チェック
+    If gfunc_CheckDate(strDate) = False Then
+        Call gfunc_ErrorMsg(gcMsgKbn_3, "3", "基準年月", "日付として認識できません。")
+        Exit Function
+    End If
+    
+    End With
+
+    fncCheckOpt1800 = True
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncCheckOpt1800 = False
+    
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+End Function
+
+
+'*************************************************************************
+'関数名　　：顧問料支払い口座一覧(実績)の入力チェック処理
+'引　　数　：
+'           objTarget        I           対象のシート
+'戻り値　　：処理結果
+'機能説明　：
+'更新履歴　：2008/05/22 SRA市川    新規     顧問料支払い口座一覧の対応
+'
+'*************************************************************************
+Private Function fncCheckOpt5400(ByRef objTarget As Object) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncCheckOpt5400"
+
+On Error GoTo ErrSection
+
+    Dim strDate      As String
+    
+    fncCheckOpt5400 = False
+
+    With objTarget
+        
+    ' 日付チェック
+    
+    '必須チェック
+    strDate = Trim(.Range("基準年月5400").Value)
+    If strDate = "" Then
+        Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3005, "基準年月", "")
+        Exit Function
+    End If
+    
+    '桁数チェック
+    strDate = strDate & "01"
+    If Len(strDate) <> 8 Then
+        '8桁以外
+        Call gfunc_ErrorMsg(gcMsgKbn_3, "3", "基準年月", "YYYYMM形式で入力して下さい。")
+        Exit Function
+    End If
+    
+    '　妥当チェック
+    If gfunc_CheckDate(strDate) = False Then
+        Call gfunc_ErrorMsg(gcMsgKbn_3, "3", "基準年月", "日付として認識できません。")
+        Exit Function
+    End If
+    
+    End With
+
+    fncCheckOpt5400 = True
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncCheckOpt5400 = False
+    
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+End Function
+
+
+'*************************************************************************
+'関数名　　：単月未収顧問料チェック表の入力チェック処理
+'引　　数　：
+'           objTarget        I           対象のシート
+'戻り値　　：処理結果
+'機能説明　：
+'更新履歴　：2008/10/10 SRA Y.Azuma    新規   単月未収顧問料チェック表
+'
+'*************************************************************************
+Private Function fncCheckOpt5500(ByRef objTarget As Object) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncCheckOpt5500"
+
+On Error GoTo ErrSection
+
+    Dim strDate      As String
+    
+    fncCheckOpt5500 = False
+
+    With objTarget
+        
+    ' 日付チェック
+    
+    '必須チェック
+    strDate = Trim(.Range("基準年月5500").Value)
+    If strDate = "" Then
+        Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3005, "基準年月", "")
+        Exit Function
+    End If
+    
+    '桁数チェック
+    strDate = strDate & "01"
+    If Len(strDate) <> 8 Then
+        '8桁以外
+        Call gfunc_ErrorMsg(gcMsgKbn_3, "3", "基準年月", "YYYYMM形式で入力して下さい。")
+        Exit Function
+    End If
+    
+    '　妥当チェック
+    If gfunc_CheckDate(strDate) = False Then
+        Call gfunc_ErrorMsg(gcMsgKbn_3, "3", "基準年月", "日付として認識できません。")
+        Exit Function
+    End If
+    
+    End With
+
+    fncCheckOpt5500 = True
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncCheckOpt5500 = False
+    
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+End Function
+
+'*************************************************************************
+'関数名　　：RAFI基礎データの入力チェック処理
+'引　　数　：
+'           objTarget        I           対象のシート
+'戻り値　　：処理結果
+'機能説明　：
+'更新履歴　：2010/12/15 SRA t.mizutani  新規   外部委託ライセンスフィー基礎データの帳票化
+'
+'*************************************************************************
+Private Function fncCheckOpt5600(ByRef objTarget As Object) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncCheckOpt5600"
+
+On Error GoTo ErrSection
+    
+    Dim strFrom     As String
+    Dim strTo       As String
+    Dim strSql      As String
+    Dim vData()     As Variant
+    Dim lngCol      As Long
+    Dim lngRow      As Long
+    Dim lngTsukisuu As Long
+    Dim blnRtn      As Boolean
+
+    fncCheckOpt5600 = False
+    blnRtn = False
+
+    With objTarget
+        
+        ' 日付チェック
+        '基準年月From
+        '必須チェック
+        strFrom = Trim(.Range("基準年月5600From").Value)
+        If strFrom = "" Then
+            Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3005, "基準年月From", "")
+            Exit Function
+        End If
+        
+        '桁数チェック
+        strFrom = strFrom & "01"
+        If Len(strFrom) <> 8 Then
+            '8桁以外
+            Call gfunc_ErrorMsg(gcMsgKbn_3, "3", "基準年月From", "YYYYMM形式で入力して下さい。")
+            Exit Function
+        End If
+        
+        '　妥当チェック
+        If gfunc_CheckDate(strFrom) = False Then
+            Call gfunc_ErrorMsg(gcMsgKbn_3, "3", "基準年月From", "日付として認識できません。")
+            Exit Function
+        End If
+     
+        '基準年月To
+        '必須チェック
+        strTo = Trim(.Range("基準年月5600To").Value)
+        If strTo = "" Then
+            Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3005, "基準年月To", "")
+            Exit Function
+        End If
+        
+        '桁数チェック
+        strTo = strTo & "01"
+        If Len(strTo) <> 8 Then
+            '8桁以外
+            Call gfunc_ErrorMsg(gcMsgKbn_3, "3", "基準年月To", "YYYYMM形式で入力して下さい。")
+            Exit Function
+        End If
+        
+        '妥当チェック
+        If gfunc_CheckDate(strTo) = False Then
+            Call gfunc_ErrorMsg(gcMsgKbn_3, "3", "基準年月To", "日付として認識できません。")
+            Exit Function
+        End If
+        
+        '基準年月From/To
+        '　期間の大小チェック
+        If strFrom > strTo Then
+            Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3007, "基準年月From/To", "基準年月From ≦ 基準年月Toで入力して下さい。")
+            Exit Function
+        End If
+    
+        '期間内の月数チェック
+        strSql = ""
+        strSql = strSql & "SELECT MONTHS_BETWEEN(ADD_MONTHS(TO_DATE(" & strTo & "), 1), TO_DATE(" & strFrom & "))" & vbCrLf
+        strSql = strSql & " FROM DUAL" & vbCrLf
+        
+        'データ取得
+        blnRtn = gclsDB.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow)
+        
+        If blnRtn = False Then
+            Erase vData
+            Exit Function
+        End If
+        
+        If lngRow > 0 Then
+            lngTsukisuu = CStr(vData(0, 0))
+        End If
+        
+        If lngTsukisuu > 3 Then
+            Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3007, "基準年月From/To", "期間は３ヶ月以内で指定して下さい。")
+            Erase vData
+            Exit Function
+        End If
+    
+    End With
+    
+    Erase vData
+        
+    fncCheckOpt5600 = True
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncCheckOpt5600 = False
+    
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+End Function
+
+'*************************************************************************
+'関数名　　：統計帳票の入力チェック処理
+'引　　数　：
+'           objTarget        I           対象のシート
+'戻り値　　：処理結果
+'機能説明　：
+'更新履歴　：2007/10/24 SRA H.Anpo    新規 PH4対応
+'
+'*************************************************************************
+Private Function fncCheckOpt4999(ByRef objTarget As Object) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncCheckOpt4999"
+
+On Error GoTo ErrSection
+
+    Dim strDate      As String
+    Dim lngCnt       As Long
+    
+    fncCheckOpt4999 = False
+
+    With objTarget
+        
+    ' 日付チェック
+    
+    For lngCnt = 0 To 7
+        If (lngCnt = 0 And .opt4000.Value) _
+        Or (lngCnt = 1 And .opt4100.Value) _
+        Or (lngCnt = 2 And .opt4200.Value) _
+        Or (lngCnt = 3 And .opt4300.Value) _
+        Or (lngCnt = 4 And .opt4400.Value) _
+        Or (lngCnt = 5 And .opt4500.Value) _
+        Or (lngCnt = 6 And .opt4600.Value) _
+        Or (lngCnt = 7 And .opt4700.Value) _
+        Then
+            '必須チェック
+            strDate = Trim(.Range("基準年月4" & lngCnt & "00").Value)
+            If strDate = "" Then
+                Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3005, "基準年月", "")
+                Exit Function
+            End If
+            
+            '桁数チェック
+            strDate = strDate & "01"
+            If Len(strDate) <> 8 Then
+                '8桁以外
+                Call gfunc_ErrorMsg(gcMsgKbn_3, "3", "基準年月", "YYYYMM形式で入力して下さい。")
+                Exit Function
+            End If
+            
+            '　妥当チェック
+            If gfunc_CheckDate(strDate) = False Then
+                Call gfunc_ErrorMsg(gcMsgKbn_3, "3", "基準年月", "日付として認識できません。")
+                Exit Function
+            End If
+            
+'=== 2007/10/29 Added by T.Ichikawa Start ===
+            '専務会報告
+            If .opt4500.Value = True Then
+                Select Case Mid(strDate, 5, 2)
+                    Case "03", "06", "09", "12"
+                    
+                    Case Else
+                        Call gfunc_ErrorMsg(gcMsgKbn_3, "3", "基準年月", "四半期月を入力して下さい。")
+                        Exit Function
+                End Select
+            End If
+            
+            '海外口座一覧
+            If .opt4700.Value = True Then
+                If .chk4700hon.Value = False And .chk4700kari.Value = False Then
+                    Call gfunc_ErrorMsg(gcMsgKbn_3, "3", "海外口座一覧", "本口座または仮口座を選択して下さい。")
+                    Exit Function
+                End If
+            End If
+'=== 2007/10/29 Added by T.Ichikawa End   ===
+
+            Exit For
+        End If
+    
+    Next lngCnt
+    
+    End With
+
+    fncCheckOpt4999 = True
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncCheckOpt4999 = False
+    
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+End Function
+
+
+'*************************************************************************
+'関数名　　：帳票ファイル印刷
+'引　　数　：
+'           strPreFName　　I       帳票名
+'           strDir  　　 　I       フォルダ名
+'戻り値　　：処理結果
+'機能説明　：該当帳票ファイルを印刷する。
+'更新履歴　：2006/08/22 SRA             新規作成
+'
+'*************************************************************************
+Public Function fncPrintBook(ByVal strPreFName As String, ByVal strDir As String) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncPrintBook"
+
+On Error GoTo ErrSection
+
+    Dim strOutFName     As String
+    Dim objFS           As Object         ' オブジェクト型で宣言します。
+
+'=== 2007/11/28 Added By H.Anpo Start
+    Dim wkPrintBook As Workbook
+'=== 2007/11/28 Added By H.Anpo End
+
+'=== 2007/11/21 Added By H.Anpo Start
+    Dim lngSheetCnt As Long
+    Dim lngSheetMax As String
+    Dim lngCnt  As Long
+    Dim arySheetName
+'=== 2007/11/21 Added By H.Anpo End
+
+    Call subBeginProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+
+    fncPrintBook = False
+    strOutFName = ""
+
+    ' 該当フォルダから最新のファイル名称を取得する。
+    Set objFS = Application.FileSearch
+    With objFS
+'       .NewSearch
+        .LookIn = strDir
+'       .SearchSubFolders = True
+'       .MatchTextExactly = True
+'------------<Modify Start azuma 2006/12/25 > -----------------------
+        .FileType = msoFileTypeAllFiles
+'------------<Modify End   azuma 2006/12/25 > -----------------------
+        .Filename = strPreFName & "_*.xls"
+        If .Execute(SortBy:=msoSortByFileName, SortOrder:=msoSortOrderDescending) > 0 Then
+            strOutFName = .FoundFiles(1)
+        Else
+            fncPrintBook = False
+            
+            ' 該当ファイルが存在しません。
+            Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3010, strPreFName, "")
+            Exit Function
+       End If
+    End With
+    
+    ' ファイル印刷
+'=== 2007/11/28 Modified By H.Anpo Start
+'    Workbooks.Open Filename:=strOutFName, ReadOnly:=True
+    Set wkPrintBook = Workbooks.Open(Filename:=strOutFName, ReadOnly:=True)
+'=== 2007/11/28 Modified By H.Anpo End
+    
+'=== 2007/11/21 Modified By H.Anpo Start
+'    With Workbooks(Workbooks.Count).Worksheets
+'
+'       .PrintOut   ' 全てのワークシートを印刷する。
+'
+'    End With
+
+'=== 2007/11/28 Modified By H.Anpo Start
+'    lngSheetMax = Workbooks(Workbooks.Count).Sheets.Count
+'    ReDim arySheetName(0)
+'    lngCnt = 0
+'    For lngSheetCnt = 1 To lngSheetMax
+'        If lngCnt > 0 Then
+'            ReDim Preserve arySheetName(lngCnt)
+'        End If
+'        arySheetName(lngCnt) = Workbooks(Workbooks.Count).Worksheets(lngSheetCnt).Name
+'        lngCnt = lngCnt + 1
+'    Next lngSheetCnt
+  
+'    Workbooks(Workbooks.Count).Sheets(arySheetName).Select
+'    DoEvents
+'    Workbooks(Workbooks.Count).Application.ActiveWindow.SelectedSheets.PrintOut
+'    DoEvents
+'    Set wkPrintBook = wkWorkBooxs(Workbooks.Count)
+    lngSheetMax = wkPrintBook.Sheets.Count
+    ReDim arySheetName(0)
+    lngCnt = 0
+    For lngSheetCnt = 1 To lngSheetMax
+        If lngCnt > 0 Then
+            ReDim Preserve arySheetName(lngCnt)
+        End If
+        arySheetName(lngCnt) = wkPrintBook.Worksheets(lngSheetCnt).Name
+        lngCnt = lngCnt + 1
+    Next lngSheetCnt
+    
+    wkPrintBook.Sheets(arySheetName).Select
+    DoEvents
+    wkPrintBook.Application.ActiveWindow.SelectedSheets.PrintOut
+'    Selection.PrintOut
+    DoEvents
+'=== 2007/11/28 Modified By H.Anpo End
+
+    Erase arySheetName
+'=== 2007/11/21 Modified By H.Anpo End
+    
+'=== 2007/11/28 Modified By H.Anpo Start
+'    Workbooks(Workbooks.Count).Close SaveChanges:=False
+    wkPrintBook.Close SaveChanges:=False
+    Set wkPrintBook = Nothing
+'=== 2007/11/28 Modified By H.Anpo End
+    fncPrintBook = True
+    
+    ' 印刷確認ダイアログボックスの部分が更新されない為追加する。
+    Application.ScreenUpdating = True    '！！！ 削除しない事。
+    Application.ScreenUpdating = False   '！！！ 削除しない事。
+    ' 印刷確認ダイアログボックスの部分が更新されない為追加する。
+    
+'------------<Modify Start azuma 2006/12/25 > -----------------------
+    Set objFS = Nothing
+'------------<Modify End   azuma 2006/12/25 > -----------------------
+    
+    Call subEndProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+'------------<Modify Start azuma 2006/12/25 > -----------------------
+    Set objFS = Nothing
+'------------<Modify End   azuma 2006/12/25 > -----------------------
+    Workbooks(Workbooks.Count).Close SaveChanges:=False
+    fncPrintBook = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+End Function
+
+

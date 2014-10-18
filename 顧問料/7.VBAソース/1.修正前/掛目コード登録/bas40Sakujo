@@ -1,0 +1,323 @@
+Attribute VB_Name = "bas40Sakujo"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：国内顧問料・掛目コード登録
+'
+'オブジェクト名：bas10Initialize
+'
+'機能概要　：削除処理
+'
+'更新履歴　：2006/11/30 SRA 東       新規作成
+'
+'*************************************************************************
+
+Const MODULE_NAME = "bas40Sakujo"
+
+
+'*************************************************************************
+'関数名　　：削除ボタン押下処理関数
+'
+'引　　数　：
+'           objTarget        I           対象のシート
+'
+'戻り値　　：なし
+'
+'機能説明　：削除ボタン押下時の処理
+'
+'更新履歴　：2006/11/30 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Sub gsub_SakujoMain(ByRef objTarget As Object)
+
+On Error GoTo ErrorSection
+
+    Dim blnRet          As Boolean
+    Dim strKakemeCd     As String       '掛目コード
+    Dim strKakemeName   As String       '掛目名称
+    Dim strMsg          As String       'メッセージ
+    Dim lngRet          As Long
+    
+    blnRet = False
+    strMsg = ""
+    
+    With objTarget
+    
+        
+        '入力チェック処理(掛目コード)
+        blnRet = gfuncKakemCodeInputCheck(Worksheets(MAIN_SHEETNAME))
+        
+        If blnRet = False Then
+            Exit Sub
+        End If
+        
+        blnRet = False
+        
+        strKakemeCd = Trim(objTarget.Range("掛目コード"))
+        '検索済みチェック処理(掛目名称)
+        strKakemeName = Trim(objTarget.Range("掛目名称"))
+
+
+        If Trim(strKakemeName) = "" Then
+          '"検索ボタンからやり直して下さい。"
+              Call gfunc_ErrorMsg(3, 11400, "", "")
+         
+          Exit Sub
+        End If
+        
+        
+        '確認メッセージ
+        strMsg = gfunc_ErrorMsg(2, 11401, "", "", False)
+        lngRet = MsgBox(strMsg, vbQuestion + vbOKCancel, Application.ActiveWorkbook.Name)
+        If lngRet = vbCancel Then
+            Exit Sub
+        End If
+        
+        
+        '削除処理
+        blnRet = gfuncKakeme_DoDelete(strKakemeCd)
+        
+        If blnRet = False Then
+            
+            '削除失敗
+            Call gfunc_ErrorMsg(1, 11402, "", "")
+            
+            Exit Sub
+        End If
+        
+        'メッセージ
+        Call gfunc_ErrorMsg(1, 11403, "", "", True)
+        
+    End With
+    
+    Exit Sub
+    
+ErrorSection:
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(MODULE_NAME, "gsub_KensakuMain", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Sub
+
+
+'*************************************************************************
+'関数名　　：掛目名入力チェック処理
+'
+'引　　数　：
+'           strCode        I           掛目コード
+'
+'戻り値　　：
+'
+'機能説明　：引数の掛目コードのデータを削除する。
+'
+'更新履歴　：2006/11/30 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Private Function gfuncKakeme_DoDelete(ByVal strCode As String) As Boolean
+
+On Error GoTo ErrorSection
+    
+    Dim blnRet              As Boolean
+    Dim vData()             As Variant
+    Dim lngDataCnt          As Long
+    Dim dtKoushinYmdFirst   As Date     '検索データの更新日
+    Dim lngStatus           As Long     '更新済みチェックのステータス
+    Dim lngRow              As Long
+    Dim lngMsgId            As Long
+    
+    gfuncKakeme_DoDelete = False
+    
+    'トランザクション開始
+    cnAdo.BeginTrans
+    
+    '排他更新チェック
+    blnRet = func_GetKakemeInfo(strCode, vData, lngDataCnt, True)
+                                   
+    If blnRet = False Then
+        'システムエラー
+        Call gfunc_ErrorMsg(4, 11404, "", "")
+        GoTo RollbackSection
+    End If
+    
+    
+    dtKoushinYmdFirst = ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range("検索時更新日").Value
+    
+    '更新済みチェックと排他処理
+    If func_UpdateCheck(Worksheets(MAIN_SHEETNAME), dtKoushinYmdFirst, lngStatus, lngRow) = False Then
+
+        If lngStatus = 1 Or lngStatus = 2 Then
+            '0:正常,1:ロック,2:削除済,-1:その他
+            Select Case lngStatus
+                Case 1
+                '他セッションからのロック
+                    lngMsgId = 11405
+                Case 2
+                '削除済み
+                    lngMsgId = 11406
+            End Select
+
+            'エラーメッセージ出力
+            Call gfunc_ErrorMsg(3, lngMsgId, "", "")
+        End If
+
+        GoTo RollbackSection
+    End If
+    
+    
+    If lngRow <= 0 Then
+'        MsgBox "削除対象がありません。"
+        Call gfunc_ErrorMsg(3, 11407, "", "")
+        GoTo RollbackSection
+    End If
+    
+    
+    '削除処理
+    blnRet = func_DoDeleteSql(strCode)
+    If blnRet = False Then
+        '削除失敗
+        Call gfunc_ErrorMsg(4, 11408, "", "")
+        GoTo RollbackSection
+    End If
+    
+    
+    'コミット
+    cnAdo.CommitTrans
+
+
+    '画面の初期化
+    Call g_subKakemeIniScreenH(Worksheets(MAIN_SHEETNAME))   'ヘッダー部
+    Call g_subKakemeIniScreenD(Worksheets(MAIN_SHEETNAME))   '明細部
+    
+
+    gfuncKakeme_DoDelete = True
+
+
+    Exit Function
+    
+RollbackSection:
+
+    'ロールバック
+    cnAdo.RollbackTrans
+    
+    gfuncKakeme_DoDelete = False
+    Exit Function
+    
+ErrorSection:
+
+    gfuncKakeme_DoDelete = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(MODULE_NAME, "gfuncKakeme_DoDelete", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+On Error Resume Next
+    'ロールバック
+    cnAdo.RollbackTrans
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：掛目削除処理
+'
+'引　　数　：
+'           strCode        I           掛目コード
+'
+'戻り値　　：
+'
+'機能説明　：引数の掛目コードのデータを削除する。
+'
+'更新履歴　：2006/11/30 SRA Y.Azuma    新規作成
+'更新履歴　：2008/01/21 SRA Y.Azuma    変更     (PH4)特殊文字バグ対応
+'
+'*************************************************************************
+Private Function func_DoDeleteSql(ByVal strCode As String) As Boolean
+On Error GoTo ErrorSection
+
+    Dim vData()                 As Variant
+    Dim strSql                  As String
+    Dim lngCol                  As Long
+    Dim lngRow                  As Long
+    Dim lngCnt                  As Long
+    Dim strErrCode              As String
+    Dim blnRet                  As Boolean
+
+    func_DoDeleteSql = False
+    
+    '掛目名の削除
+    strSql = ""
+    strSql = strSql & " DELETE KYK_KAKEME_NAME "
+    strSql = strSql & " WHERE "
+'------------<Modify Start azuma 2008/01/21 (PH4)> ★★★☆-----------------------
+    strSql = strSql & " KAKEME_CD   = '" & func_ChkQuoteshon(strCode, "'") & "'"
+'    strSql = strSql & " KAKEME_CD   = '" & strCode & "'"
+'------------<Modify End   azuma 2008/01/21 (PH4)> ★★★☆-----------------------
+'    strSql = strSql & " UPDATE KYK_KAKEME_NAME "
+'    strSql = strSql & " SET "
+'    strSql = strSql & " KOHSHIN_YMD       = SYSDATE "
+'    strSql = strSql & ",KOHSHIN_PGM_ID    = '" & UPDATE_PGM_ID & "'"
+'    strSql = strSql & ",KOHSHIN_TANTOHSHA = '" & UPDATE_USER & "'"
+'    strSql = strSql & ",SAKUJO_FLG        = '1'"
+'    strSql = strSql & " WHERE "
+'    strSql = strSql & " KAKEME_CD   = '" & strCode & "'"
+    
+    '実行
+    blnRet = gclsdb.DoExequteSql(gcUPDATE, strSql, vData, lngCol, lngRow, strErrCode)
+    
+    
+    If blnRet = False Then
+        Exit Function
+    End If
+    
+    
+    '掛目の削除
+    strSql = ""
+    strSql = strSql & " DELETE KYK_KAKEME "
+    strSql = strSql & " WHERE "
+'------------<Modify Start azuma 2008/01/21 (PH4)> ★★★☆-----------------------
+    strSql = strSql & " KAKEME_CD   = '" & func_ChkQuoteshon(strCode, "'") & "'"
+'    strSql = strSql & " KAKEME_CD   = '" & strCode & "'"
+'------------<Modify End   azuma 2008/01/21 (PH4)> ★★★☆-----------------------
+'    strSql = strSql & " UPDATE KYK_KAKEME "
+'    strSql = strSql & " SET "
+'    strSql = strSql & " KOHSHIN_YMD       = SYSDATE "
+'    strSql = strSql & ",KOHSHIN_PGM_ID    = '" & UPDATE_PGM_ID & "'"
+'    strSql = strSql & ",KOHSHIN_TANTOHSHA = '" & UPDATE_USER & "'"
+'    strSql = strSql & ",SAKUJO_FLG        = '1'"
+'    strSql = strSql & " WHERE "
+'    strSql = strSql & " KAKEME_CD   = '" & strCode & "'"
+    
+    '実行
+    blnRet = gclsdb.DoExequteSql(gcUPDATE, strSql, vData, lngCol, lngRow, strErrCode)
+    
+    
+    If blnRet = False Then
+        Exit Function
+    End If
+    
+    Erase vData
+    func_DoDeleteSql = True
+
+    Exit Function
+
+ErrorSection:
+
+    func_DoDeleteSql = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(MODULE_NAME, "func_DoDeleteSql", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Erase vData
+
+End Function

@@ -1,0 +1,68 @@
+Attribute VB_Name = "basConst"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：外部委託ライセンスフィー算出システム・支払額修正
+'
+'オブジェクト名：basConst
+'
+'機能概要　：グローバル定数の宣言
+'
+'更新履歴　：2008/07/03 NRI堀江   更新
+'          ：2009/01/09 SRA水谷   口座英語名称桁数拡張
+'
+'*************************************************************************
+
+'---- シート名 -----------------------------------------------------------
+'起動時に存在するシート
+Public Const SHEET_MAIN                     As String = "メイン画面"
+Public Const SHEET_TEMP                     As String = "Template"
+Public Const SHEET_DATA                     As String = "Data"
+
+'更新プログラムID
+Public Const PROGRAM_ID                     As String = "口座英語名称登録"
+'更新ユーザーID
+Public Const USER_ID                        As String = "APL001"
+
+Public Const LIST_DATA_TOP_ROW              As Long = 13
+
+Public Const SELECT_EIJI_NAME               As String = "G13"
+
+'一覧表示欄
+Public Const COLN_PRTCD                     As Long = 4
+Public Const COLN_EIJI_NAME                 As Long = 7
+'------------<桁数拡張対応 20090109 SRA水谷 START> -----------------------
+'Public Const COLN_NAME_J                    As Long = 19
+Public Const COLN_NAME_J                    As Long = 24
+'------------<桁数拡張対応 20090109 SRA水谷 END> -----------------------
+Public Const COLN_KOHZA_NO                  As Long = 43
+
+'口座英語名称変更前のコピー
+Public Const COLN_EIJI_NAME_REF             As Long = 40
+
+'口座英語名称変更フラグ
+Public Const COLN_HENKOU_FLG                As Long = 42
+
+'メッセージ区分
+Public Const MSGLVL_INFO                    As String = "1"     '情報
+Public Const MSGLVL_QUESTION                As String = "2"     '質問
+Public Const MSGLVL_WARNNING                As String = "3"     '警告
+Public Const MSGLVL_FATAL                   As String = "4"     'エラー
+
+'付加メッセージ1(項目名)
+Public Const MSG1_GI_SAKI                   As String = "外部委託先"
+Public Const MSG1_KIJUNBI                   As String = "基準日"
+Public Const MSG1_PRTCD                     As String = "口座番号"
+Public Const MSG1_ICHIRAN_DISP              As String = "一覧表示欄"
+Public Const MSG1_SHIHARAI_SHUSEI_GAKU      As String = "課税後外部委託支払計算修正額 (一覧表示欄)"
+
+'付加メッセージ2
+Public Const MSG2_ASK_FILECLOSE             As String = "更新ボタンが有効になっています。アプリケーションを閉じますか？"
+
+'---- 入力コントロール桁数 -----------------------------------------------
+Public Const LEN_DATE                       As Long = 8
+
+'ODBCエラーコード
+'[Oracle][ODBC][Ora]ORA-00054: リソース・ビジー、NOWAITが指定されていました。
+Public Const ODBC_ERRCD_RESOURCE_BUSY       As String = "ORA-00054"

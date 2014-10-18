@@ -1,0 +1,904 @@
+Attribute VB_Name = "bas80Jikkou"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：国内顧問料・海外資産額登録
+'
+'オブジェクト名：bas80Jikkou
+'
+'機能概要　：ファイルアップロード処理
+'
+'更新履歴　：2012/07/30 SRA t.mizutani  新規作成(海外資産額アップロード機能追加)
+'
+'*************************************************************************
+
+Const MODULE_NAME = "bas80Jikkou"
+
+'*************************************************************************
+'関数名　　：アップロード処理メイン
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：実行ボタンを押下した場合の処理
+'
+'更新履歴　：2012/07/30 SRA t.mizutani  新規作成(海外資産額アップロード機能追加)
+'
+'*************************************************************************
+Public Sub gsub_UpldMain(ByRef objTarget As Object)
+
+On Error GoTo ErrorSection
+
+    Dim blnRet          As Boolean
+    Dim record()        As typUpldRec  'ファイルデータ格納場所
+    Dim strDate         As String      '基準月末日
+    Dim strMsg          As String
+    Dim lngRet          As Long
+    Dim strError        As String
+    
+    blnRet = False
+    
+    Application.ScreenUpdating = False
+    
+    'logシート初期化
+    Call g_subClearLogSheet(ThisWorkbook.Worksheets(LOG_SHEETNAME))
+    
+    '入力チェック処理(基準年月, ファイル)
+    blnRet = func_UpldInputCheck(objTarget)
+    
+    If blnRet = False Then
+        Application.ScreenUpdating = True
+        Exit Sub
+    End If
+    
+    '実行確認
+    strMsg = gfunc_ErrorMsg(2, 16019, "", "", False)
+    lngRet = MsgBox(strMsg, vbQuestion + vbOKCancel, Application.ActiveWorkbook.Name)
+    
+    If lngRet = vbCancel Then
+        Application.ScreenUpdating = True
+        Exit Sub
+    End If
+    
+    'トランザクション開始
+    cnAdo.BeginTrans
+    
+    'データチェック処理
+    blnRet = func_UpldDataCheck(objTarget, record, strDate)
+    
+    If blnRet = False Then
+        Application.ScreenUpdating = True
+        GoTo RollbackSection
+    End If
+    
+    'UPLD実行
+    blnRet = func_DoUpload(strDate, record, strError)
+    
+    '処理ログの表示
+    Call sub_WriteProcLog(record)
+    
+    If blnRet = False Then
+    '更新エラー
+        If Trim(strError) <> "" Then
+            Application.ScreenUpdating = True
+            Call gfunc_ErrorMsg(3, 2025, "", strError, True)
+        End If
+        
+        GoTo RollbackSection
+        Exit Sub
+    Else
+    '更新成功
+        'コミット
+        cnAdo.CommitTrans
+        Erase record
+        Application.ScreenUpdating = True
+        'メッセージ
+        Call gfunc_ErrorMsg(1, 2, "", "", True)
+    End If
+    
+    Exit Sub
+    
+RollbackSection:
+    'ロールバック
+    cnAdo.RollbackTrans
+    Erase record
+    Application.ScreenUpdating = True
+    Exit Sub
+
+ErrorSection:
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gsub_UpldMain", Err.Number, Err.Description)
+    On Error GoTo 0
+'---- Error Log End   ----------------------------------------------------
+    
+    'ロールバック
+    cnAdo.RollbackTrans
+    Erase record
+    Application.ScreenUpdating = True
+    
+End Sub
+
+'*************************************************************************
+'関数名　　：入力チェック処理(実行時)-1
+'
+'引　　数　：
+'           TargetSheets        I           チェック対象のシート
+'
+'戻り値　　：Boolean
+'
+'機能説明　：アップロードシートの入力チェックを行う
+'
+'更新履歴　：2012/07/30 SRA t.mizutani  新規作成(海外資産額アップロード機能追加)
+'
+'*************************************************************************
+Private Function func_UpldInputCheck(ByRef TargetSheets As Object) As Boolean
+On Error GoTo ErrorSection
+
+    Dim blnRet          As Boolean
+    
+    func_UpldInputCheck = False
+
+    '基準月のチェック(未入力)
+    If Trim(TargetSheets.Range("基準年月").Text) = vbNullString Then
+        Call gfunc_ErrorMsg(3, 16001, "基準年月", "")
+        TargetSheets.Range("基準年月").Select
+        Exit Function
+    End If
+    
+    '基準月のチェック(桁数)
+    If Len(Trim(TargetSheets.Range("基準年月").Text)) <> 6 Then
+        Call gfunc_ErrorMsg(3, 16002, "基準年月", "YYYYMM形式の6桁で入力して下さい。")
+        TargetSheets.Range("基準年月").Select
+        Exit Function
+    End If
+    
+    '基準月のチェック(妥当性)
+    If gfunc_CheckDate(Trim(TargetSheets.Range("基準年月").Text) & "01") = False Then
+        Call gfunc_ErrorMsg(3, 16003, "基準年月", "")
+        TargetSheets.Range("基準年月").Select
+        Exit Function
+    End If
+    
+    'ファイルのチェック(未入力)
+    If Trim(TargetSheets.Range("ファイル").Text) = vbNullString Then
+        Call gfunc_ErrorMsg(3, 16001, "アップロードファイル", "")
+        TargetSheets.Range("ファイル").Select
+        Exit Function
+    End If
+    
+    'ファイルのチェック(存在)
+    If Dir(TargetSheets.Range("ファイル").Text) = vbNullString Then
+        Call gfunc_ErrorMsg(3, 32, "アップロードファイル", "")
+        TargetSheets.Range("ファイル").Select
+        Exit Function
+    End If
+    
+    'ファイルのチェック(形式)
+    If StrConv(Right$(TargetSheets.Range("ファイル").Text, 4), vbUpperCase) <> ".XLS" Then
+        Call gfunc_ErrorMsg(3, 2001, "アップロードファイル", "エクセルファイル(.xls)を指定して下さい。")
+        TargetSheets.Range("ファイル").Select
+        Exit Function
+    End If
+    
+    func_UpldInputCheck = True
+
+    Exit Function
+
+ErrorSection:
+
+    func_UpldInputCheck = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_UpldInputCheck", Err.Number, Err.Description)
+    On Error GoTo 0
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+'*************************************************************************
+'関数名　　：入力チェック処理(実行時)-2
+'
+'引　　数　：
+'           TargetSheets        I           チェック対象のシート
+'           record              O           ファイルレコード格納用
+'           strDate             O           基準月末日
+'
+'戻り値　　：Boolean
+'
+'機能説明　：事前チェックとファイルレコードのチェックを行う
+'
+'更新履歴　：2012/07/30 SRA t.mizutani  新規作成(海外資産額アップロード機能追加)
+'
+'*************************************************************************
+Private Function func_UpldDataCheck(ByRef TargetSheets As Object, _
+                                    ByRef record() As typUpldRec, _
+                                    ByRef strDate As String) As Boolean
+On Error GoTo ErrorSection
+
+    Dim lngRow          As Long
+    Dim blnRet          As Boolean
+    
+    func_UpldDataCheck = False
+    blnRet = False
+    
+    '基準月末日の取得
+    strDate = Trim(TargetSheets.Range("基準年月").Value)
+    strDate = func_GetLastDay(strDate)
+    
+    '海外資産額TBL当月データ存在チェック
+    blnRet = func_TougetsuRecCheck(strDate, lngRow)
+    
+    If blnRet = False Then
+        Exit Function
+    End If
+    
+    'レコード件数チェック
+    If lngRow = 0 Then
+        Call gfunc_ErrorMsg(3, 10, "海外資産額", "当月の資産額登録がありません。")
+        Exit Function
+    End If
+    
+    'ファイルのデータチェック
+    blnRet = func_FileRecCheck(strDate, record)
+    
+    If blnRet = False Then
+        Exit Function
+    End If
+    
+    func_UpldDataCheck = True
+    
+    Exit Function
+    
+ErrorSection:
+
+    func_UpldDataCheck = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_UpldDataCheck", Err.Number, Err.Description)
+    On Error GoTo 0
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+'*************************************************************************
+'関数名　　：海外資産額テーブル情報取得処理
+'
+'引　　数　：
+'           strDate         I       基準月末日
+'           lngRow          O       取得件数
+'
+'戻り値　　：Boolean
+'
+'機能説明　：当月の海外資産額レコード件数を検索
+'
+'更新履歴　：2012/07/30 SRA t.mizutani  新規作成(海外資産額アップロード機能追加)
+'
+'*************************************************************************
+Private Function func_TougetsuRecCheck(ByVal strDate As String _
+                                     , ByRef lngRecCnt As Long) As Boolean
+On Error GoTo ErrorSection
+
+    Dim strSql      As String
+    Dim lngRow      As Long
+    Dim lngCol      As Long
+    Dim strErrCode  As String
+    Dim vData()     As Variant
+    
+    func_TougetsuRecCheck = False
+
+    strSql = ""
+    strSql = strSql & " SELECT count(*)"
+    strSql = strSql & " FROM " & TBL_KAIGAI_SHISAN_GAKU
+    strSql = strSql & " WHERE kijyun_ymd = " & strDate
+    strSql = strSql & "   AND sakujo_flg = '0'"
+    
+    'データ取得
+    Call gclsDB.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow, strErrCode)
+    
+    If Trim(strErrCode) <> "" Then
+        Call gfunc_ErrorMsg(4, 16005, "", strErrCode)
+        Exit Function
+    End If
+    
+    '件数をセット
+    lngRecCnt = vData(0, 0)
+    func_TougetsuRecCheck = True
+    Exit Function
+    
+ErrorSection:
+    func_TougetsuRecCheck = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_tougetsuRecCheck", Err.Number, Err.Description)
+    On Error GoTo 0
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+'*************************************************************************
+'関数名　　：ファイルチェック処理
+'
+'引　　数　：
+'           strDate       I           基準月末日
+'           record        O           レコードデータ格納用
+'
+'戻り値　　：Boolean
+'
+'機能説明　：ファイルのレコードチェックを行う
+'
+'更新履歴　：2012/07/30 SRA t.mizutani  新規作成(海外資産額アップロード機能追加)
+'
+'*************************************************************************
+Private Function func_FileRecCheck(ByVal strDate As String, _
+                                   ByRef record() As typUpldRec) As Boolean
+On Error GoTo ErrorSection
+
+    Dim lngRow          As Long
+    Dim lngCnt          As Long
+    Dim strFileNm       As String
+    Dim strbuf          As String
+    Dim blnRet          As Boolean
+
+    func_FileRecCheck = False
+    blnRet = False
+    
+    'ファイルをOpen
+    Workbooks.Open FileName:=Trim(Sheets(UPLD_SHEETNAME).Range("ファイル").Text)
+    
+    With ThisWorkbook
+        strFileNm = ActiveWorkbook.Name
+        Workbooks(strFileNm).Sheets(1).Activate
+    End With
+    
+    lngRow = 2
+    lngCnt = 0
+    
+    'レコードの最後まで読み込んで値をセット
+    Do While ((Sheets(1).Cells(lngRow, 1).Value <> "") Or (Sheets(1).Cells(lngRow, 2).Value <> ""))
+        lngCnt = lngCnt + 1
+        ReDim Preserve record(lngCnt)
+        
+        record(lngCnt).lngRow = lngCnt
+        record(lngCnt).strKohzaNo = Sheets(1).Cells(lngRow, 1).Value
+        record(lngCnt).strShisanGaku = Sheets(1).Cells(lngRow, 2).Value
+        
+        lngRow = lngRow + 1
+    Loop
+    
+    'ファイルをClose
+    strbuf = Trim(ThisWorkbook.Worksheets(UPLD_SHEETNAME).Range("ファイル").Text)
+    strbuf = Mid(strbuf, InStrRev(strbuf, "\") + 1)
+    Windows(strbuf).Close
+    
+    'レコード件数チェック
+    If lngCnt = 0 Then
+        Call gfunc_ErrorMsg(3, 2025, "ファイル", "アップロードファイルにデータがありません。")
+        Exit Function
+    End If
+    
+    'レコードチェック
+    blnRet = func_RecDataCheck(strDate, record)
+    
+    If blnRet = False Then
+        '処理ログの表示
+        Call sub_WriteProcLog(record)
+        
+        Call gfunc_ErrorMsg(3, 2025, "ファイル", "ログシートを確認して下さい。")
+        Exit Function
+    End If
+    
+    func_FileRecCheck = True
+
+    Exit Function
+
+ErrorSection:
+
+    func_FileRecCheck = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_FileRecCheck", Err.Number, Err.Description)
+    On Error GoTo 0
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+'*************************************************************************
+'関数名　　：レコードデータチェック処理
+'
+'引　　数　：
+'           strDate       I           基準月末日
+'           record        I           レコードデータ格納用
+'
+'戻り値　　：Boolean
+'
+'機能説明　：レコードのデータチェックを行う
+'
+'更新履歴　：2012/07/30 SRA t.mizutani  新規作成(海外資産額アップロード機能追加)
+'
+'*************************************************************************
+Private Function func_RecDataCheck(ByVal strDate As String, _
+                                   ByRef record() As typUpldRec) As Boolean
+On Error GoTo ErrorSection
+
+    Dim lngCnt          As Long
+    Dim lngCnt_k        As Long
+    Dim lngCnt_v        As Long
+    Dim lngErrCnt       As Long
+    Dim strHeisa        As String
+    Dim blnRet          As Boolean
+    Dim colKohza        As New Collection
+    Dim kohza           As Variant
+    
+    func_RecDataCheck = False
+    
+    lngCnt_k = 0
+    lngCnt_v = 0
+    lngErrCnt = 0
+    blnRet = False
+    
+    For lngCnt = 1 To UBound(record)
+        
+        '口座Noの重複チェック
+        If colKohza.Count <> 0 Then
+            For Each kohza In colKohza
+                '一致すれば既にあるものとしてエラー
+                If kohza = record(lngCnt).strKohzaNo Then
+                    record(lngCnt).strReason = "口座番号が重複しています。(" & record(lngCnt).lngRow + 1 & "行目)"
+                    lngErrCnt = lngErrCnt + 1
+                    GoTo ContinueSection
+                End If
+            Next
+            
+        End If
+        
+        '口座Noをコレクションにセット
+        colKohza.Add Item:=record(lngCnt).strKohzaNo
+        
+        '口座No,資産額のデータチェック
+        blnRet = func_KohzaShisanCheck(record(lngCnt))
+        
+        If blnRet = False Then
+            lngErrCnt = lngErrCnt + 1
+            GoTo ContinueSection
+        End If
+        
+        '口座の存在・閉鎖チェック(VW_DT001D)
+        blnRet = func_Vw_dt001d_Check(record(lngCnt).strKohzaNo, lngCnt_v, strHeisa)
+        
+        If blnRet = False Then
+            Exit Function
+        End If
+        
+        If lngCnt_v = 0 Then
+            record(lngCnt).strReason = "口座が口座属性に存在しません。(" & record(lngCnt).lngRow + 1 & "行目)"
+            lngErrCnt = lngErrCnt + 1
+            GoTo ContinueSection
+        End If
+        
+        If (Trim(strHeisa) <> 0) And (Trim(strHeisa) < strDate) Then
+            record(lngCnt).strReason = "口座が閉鎖されています。(" & record(lngCnt).lngRow + 1 & "行目)"
+            lngErrCnt = lngErrCnt + 1
+            GoTo ContinueSection
+        End If
+        
+        '口座の存在チェック(顧問料DB)
+        blnRet = func_KomonCheck(record(lngCnt).strKohzaNo, lngCnt_k)
+        
+        If blnRet = False Then
+            Exit Function
+        End If
+        
+        If lngCnt_k = 0 Then
+            record(lngCnt).strReason = "口座が顧問料の口座属性に存在しません。(" & record(lngCnt).lngRow + 1 & "行目)"
+            lngErrCnt = lngErrCnt + 1
+            GoTo ContinueSection
+        End If
+        
+ContinueSection:
+        '次のレコードに進む
+    Next lngCnt
+    
+    If lngErrCnt = 0 Then
+        func_RecDataCheck = True
+    Else
+        func_RecDataCheck = False
+    End If
+    
+    Exit Function
+
+ErrorSection:
+
+    func_RecDataCheck = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_RecDataCheck", Err.Number, Err.Description)
+    On Error GoTo 0
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+'*************************************************************************
+'関数名　　：データチェック処理
+'
+'引　　数　：
+'           record        I           レコードデータ格納用
+'
+'戻り値　　：Boolean
+'
+'機能説明　：口座No、資産額のデータチェックを行う
+'
+'更新履歴　：2012/07/30 SRA t.mizutani  新規作成(海外資産額アップロード機能追加)
+'
+'*************************************************************************
+Private Function func_KohzaShisanCheck(ByRef record As typUpldRec) As Boolean
+
+On Error GoTo ErrorSection
+    
+    Dim lngIntLen        As Long     '整数部長さ
+    Dim lngDecLen        As Long     '小数部長さ
+    
+    func_KohzaShisanCheck = False
+    
+'【口座No】
+    '必須チェック
+    If record.strKohzaNo = "" Then
+        record.strReason = "口座番号：未入力です。(" & record.lngRow + 1 & "行目)"
+        Exit Function
+    End If
+
+    '桁数チェック
+    If Len(record.strKohzaNo) <> 7 Then
+        record.strReason = "口座番号：桁数が7桁ではありません。(" & record.lngRow + 1 & "行目)"
+        Exit Function
+    End If
+        
+'【資産額】
+    '必須チェック
+    If record.strShisanGaku = "" Then
+        record.strReason = "資産額：未入力です。(" & record.lngRow + 1 & "行目)"
+        Exit Function
+    End If
+    
+    '桁数チェック
+    Call sub_CheckIntDec(record.strShisanGaku, lngIntLen, lngDecLen)
+    
+    If (lngIntLen > 15) Or (lngDecLen > 2) Then
+        record.strReason = "資産額：桁数が定義範囲外です。(" & record.lngRow + 1 & "行目)"
+        Exit Function
+    End If
+    
+    '文字チェック
+    If gkyk_IsNumeric(record.strShisanGaku) = False Then
+        record.strReason = "資産額：半角数字以外の入力があります。(" & record.lngRow + 1 & "行目)"
+        Exit Function
+    End If
+    
+    func_KohzaShisanCheck = True
+    
+    Exit Function
+    
+ErrorSection:
+
+    func_KohzaShisanCheck = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_KohzaShisanCheck", Err.Number, Err.Description)
+    On Error GoTo 0
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+'*************************************************************************
+'関数名　　：顧問料口座属性テーブル情報取得処理
+'
+'引　　数　：
+'           strKohza        I       口座No
+'           lngRow          O       取得件数
+'
+'戻り値　　：Boolean
+'
+'機能説明　：口座の登録有無を検索
+'
+'更新履歴　：2012/07/30 SRA t.mizutani  新規作成(海外資産額アップロード機能追加)
+'
+'*************************************************************************
+Private Function func_KomonCheck(ByVal strKohza As String _
+                               , ByRef lngRecCnt As Long) As Boolean
+On Error GoTo ErrorSection
+
+    Dim strSql      As String
+    Dim lngRow      As Long
+    Dim lngCol      As Long
+    Dim strErrCode  As String
+    Dim vData()     As Variant
+    
+    func_KomonCheck = False
+    
+    strSql = ""
+    strSql = strSql & " SELECT count(*)"
+    strSql = strSql & " FROM kyk_kohza_zokusei"
+    strSql = strSql & " WHERE kohza_no = '" & strKohza & "'"
+    strSql = strSql & "   AND sakujo_flg = '0'"
+
+    'データ取得
+    Call gclsDB.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow, strErrCode)
+    
+    If Trim(strErrCode) <> "" Then
+        Call gfunc_ErrorMsg(4, 16005, "", strErrCode)
+        Exit Function
+    End If
+    
+    '件数をセット
+    lngRecCnt = vData(0, 0)
+    Erase vData
+    func_KomonCheck = True
+    Exit Function
+    
+ErrorSection:
+    func_KomonCheck = False
+    Erase vData
+    
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_KomonCheck", Err.Number, Err.Description)
+    On Error GoTo 0
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+'*************************************************************************
+'関数名　　：顧問ODW(口座属性)情報取得処理
+'
+'引　　数　：
+'           strKohza        I       口座No
+'           lngRow          O       取得件数
+'           strHeisaYmd     O       閉鎖日
+'
+'戻り値　　：Boolean
+'
+'機能説明　：口座の登録有無、閉鎖状況を検索
+'
+'更新履歴　：2012/07/30 SRA t.mizutani  新規作成(海外資産額アップロード機能追加)
+'
+'*************************************************************************
+Private Function func_Vw_dt001d_Check(ByVal strKohza As String _
+                                    , ByRef lngCnt As Long _
+                                    , ByRef strHeisaYmd As String) As Boolean
+On Error GoTo ErrorSection
+
+    Dim strSql      As String
+    Dim lngRow      As Long
+    Dim lngCol      As Long
+    Dim strErrCode  As String
+    Dim vData()     As Variant
+    
+    func_Vw_dt001d_Check = False
+    
+    '件数を取得
+    strSql = ""
+    strSql = strSql & " SELECT count(*)"
+    strSql = strSql & " FROM vw_dt001d"
+    strSql = strSql & " WHERE prtcd = '" & strKohza & "'"
+    strSql = strSql & "   AND delt_flg = '0'"
+
+    Call gclsDB.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow, strErrCode)
+    
+    If Trim(strErrCode) <> "" Then
+        Call gfunc_ErrorMsg(4, 16005, "", strErrCode)
+        Exit Function
+    End If
+    
+    '件数をセット
+    lngCnt = vData(0, 0)
+    
+    If lngCnt = 0 Then
+        func_Vw_dt001d_Check = True
+        Exit Function
+    End If
+    
+    '閉鎖日を取得
+    strSql = ""
+    strSql = strSql & " SELECT calloff_date"
+    strSql = strSql & " FROM vw_dt001d"
+    strSql = strSql & " WHERE prtcd = '" & strKohza & "'"
+    strSql = strSql & "   AND delt_flg = '0'"
+
+    Call gclsDB.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow, strErrCode)
+    
+    If Trim(strErrCode) <> "" Then
+        Call gfunc_ErrorMsg(4, 16005, "", strErrCode)
+        func_Vw_dt001d_Check = False
+        Exit Function
+    End If
+    
+    '閉鎖日をセット
+    strHeisaYmd = vData(0, 0)
+    Erase vData
+    func_Vw_dt001d_Check = True
+    Exit Function
+    
+ErrorSection:
+    func_Vw_dt001d_Check = False
+    Erase vData
+    
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_Vw_dt001d_Check", Err.Number, Err.Description)
+    On Error GoTo 0
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+'*************************************************************************
+'関数名　　：海外資産額テーブル登録処理
+'
+'引　　数　：
+'           strDate             I       基準年月日
+'           record()      　　　I       更新対象データ
+'           strError            O       エラーコード
+'
+'
+'戻り値　　：Boolean
+'
+'機能説明　：海外資産額テーブルへ更新、なければ新規登録を行う
+'
+'更新履歴　：2012/07/30 SRA t.mizutani  新規作成(海外資産額アップロード機能追加)
+'
+'*************************************************************************
+Private Function func_DoUpload(ByVal strDate As String _
+                             , ByRef record() As typUpldRec _
+                             , ByRef strError As String) As Boolean
+On Error GoTo ErrorSection
+
+    Dim vData()                 As Variant
+    Dim strSql                  As String
+    Dim lngCol                  As Long
+    Dim lngRow                  As Long
+    Dim blnRet                  As Boolean
+    Dim strErrCode              As String
+    Dim lngCnt                  As Long
+    Dim strKohzaNo              As String
+    
+    func_DoUpload = False
+
+    '更新
+    For lngCnt = 1 To UBound(record)
+        strError = ""
+        
+        strSql = ""
+        strSql = strSql & " UPDATE  " & TBL_KAIGAI_SHISAN_GAKU
+        strSql = strSql & "   SET   "
+        strSql = strSql & "         shisan_gaku       = " & record(lngCnt).strShisanGaku
+        strSql = strSql & "        ,kakutei_flg       = '1'"
+        strSql = strSql & "        ,kohshin_ymd       = sysdate"
+        strSql = strSql & "        ,kohshin_pgm_id    = '" & UPDATE_PGM_ID_UPLD & "'"
+        strSql = strSql & "        ,kohshin_tantohsha = '" & UPDATE_USER & "'"
+        strSql = strSql & "        ,sakujo_flg        = '0'"
+        strSql = strSql & " WHERE   kohza_no          ='" & func_ChkQuoteshon(record(lngCnt).strKohzaNo, "'") & "'"
+        strSql = strSql & "   AND   kijyun_ymd        ='" & strDate & "'"
+        
+        '実行
+        blnRet = gclsDB.DoExequteSql(gcUPDATE, strSql, vData, lngCol, lngRow, strErrCode)
+        
+        If blnRet = False Then
+            If Trim(strErrCode) <> "" Then
+                strError = strErrCode
+            End If
+            
+            Exit Function
+        End If
+        
+        '処理ログのセット
+        record(lngCnt).strReason = "口座：" & record(lngCnt).strKohzaNo & "を更新しました。"
+        
+        'DBになければ新規登録する
+        If lngRow = 0 Then
+            strSql = ""
+            strSql = strSql & " INSERT INTO " & TBL_KAIGAI_SHISAN_GAKU
+            strSql = strSql & " VALUES"
+            strSql = strSql & "  ("
+            strSql = strSql & "'" & func_ChkQuoteshon(record(lngCnt).strKohzaNo, "'") & "'"
+            strSql = strSql & "," & strDate
+            strSql = strSql & "," & record(lngCnt).strShisanGaku
+            strSql = strSql & ",'0'"
+            strSql = strSql & ",sysdate"
+            strSql = strSql & ",sysdate"
+            strSql = strSql & ",'" & UPDATE_PGM_ID_UPLD & "'"
+            strSql = strSql & ",'" & UPDATE_USER & "'"
+            strSql = strSql & ",'0'"
+            strSql = strSql & " )"
+    
+            '実行
+            blnRet = gclsDB.DoExequteSql(gcINSERT, strSql, vData, lngCol, lngRow, strErrCode)
+        
+            If blnRet = False Then
+                If Trim(strErrCode) <> "" Then
+                    strError = strErrCode
+                End If
+            
+                Exit Function
+            End If
+            
+            '処理ログのセット
+            record(lngCnt).strReason = "口座：" & record(lngCnt).strKohzaNo & "を登録しました。"
+            
+        End If
+    Next lngCnt
+    
+    Erase vData
+    func_DoUpload = True
+    
+    Exit Function
+
+ErrorSection:
+
+    func_DoUpload = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_DoUpload", Err.Number, Err.Description)
+    On Error GoTo 0
+'---- Error Log End   ----------------------------------------------------
+    strError = "Error(func_DoUpload)"
+    Erase vData
+
+Resume
+End Function
+
+'*************************************************************************
+'関数名　　：処理ログシートへの出力処理
+'
+'引　　数　：
+'           rec()      　　　I       処理対象データ
+'
+'戻り値　　：なし
+'
+'機能説明　：処理ログをlogシートに出力する
+'
+'更新履歴　：2012/07/30 SRA t.mizutani  新規作成(海外資産額アップロード機能追加)
+'
+'*************************************************************************
+Private Sub sub_WriteProcLog(ByRef rec() As typUpldRec)
+On Error GoTo ErrorSection
+
+    Dim lngRow As Long
+    Dim lngCnt As Long
+    
+    lngCnt = 1
+    
+    For lngRow = 1 To UBound(rec)
+        'レコードにログ内容があればシートに書く
+        If rec(lngRow).strReason <> "" Then
+            Worksheets(LOG_SHEETNAME).Cells(lngCnt, 1).Value = rec(lngRow).strReason
+            lngCnt = lngCnt + 1
+        End If
+    Next lngRow
+    
+    Sheets(LOG_SHEETNAME).Visible = True
+    
+Exit Sub
+
+ErrorSection:
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "sub_WriteProcLog", Err.Number, Err.Description)
+    On Error GoTo 0
+'---- Error Log End   ----------------------------------------------------
+
+End Sub
+

@@ -1,0 +1,1786 @@
+VERSION 5.00
+Begin {C62A69F0-16DC-11CE-9E98-00AA00574A4F} frm_adminKnr 
+   Caption         =   "ユーザ登録／変更"
+   ClientHeight    =   5850
+   ClientLeft      =   45
+   ClientTop       =   435
+   ClientWidth     =   7785
+   OleObjectBlob   =   "frm_adminKnr.frx":0000
+   StartUpPosition =   1  'オーナー フォームの中央
+End
+Attribute VB_Name = "frm_adminKnr"
+Attribute VB_GlobalNameSpace = False
+Attribute VB_Creatable = False
+Attribute VB_PredeclaredId = True
+Attribute VB_Exposed = False
+'=========================================================================
+'プロジェクト　　　：国内顧問料ユーザアカウント管理
+'プログラム名　　　：ユーザ登録／変更画面
+'プログラムＩＤ　　：frm_adminKnr
+'機能概要　　　　　：新規ユーザ登録及び既存ユーザ変更
+'
+'日付　　　　　　　作成者　　　　　　　　　　修正内容
+'-------------------------------------------------------------------------
+'2008/07/11       K.Furuya<SRA>　　　　　　新規作成
+'
+'=========================================================================
+Option Explicit
+
+'色
+Const CON_BKCOLOR_ROOK = &H8000000F         '非アクティブ時のバックカラー
+Const CON_BKCOLOR_DEFAULT = &H80000005      'アクティブ時のバックカラー
+
+'更新前ユーザ属性項目格納変数
+Dim strUserID_OLD               As String    'ユーザID_更新前
+Dim strKengenkbn_OLD            As String    '権限区分_更新前
+Dim strSaishuLoginYMD_OLD       As String    '最終ログイン日_更新前
+Dim strSei_OLD                  As String    '姓_更新前
+Dim strMei_OLD                  As String    '名_更新前
+Dim strLockKbn_OLD              As String    'ロック区分_更新前
+Dim strSaishuPswdUpdateYMD_OLD  As String    '最終パスワード更新日_更新前
+Dim strPswdKigen_OLD            As String    'パスワード有効期限_更新前
+Dim intPswdMissCnt_OLD          As Integer   'パスワード間違い回数_更新前
+Dim strPassWord_OLD             As String    '初期化パスワード_更新前
+Dim strKigen_Flg                As String    '期限の有無フラグ
+'更新後ユーザ属性項目格納変数
+Dim strUserID_NEW               As String    'ユーザID_更新後
+Dim strKengenkbn_NEW            As String    '権限区分_更新後
+Dim strSaishuLoginYMD_NEW       As String    '最終ログイン日_更新後
+Dim strSei_NEW                  As String    '姓_更新後
+Dim strMei_NEW                  As String    '名_更新後
+Dim strLockKbn_NEW              As String    'ロック区分_更新後
+Dim strSaishuPswdUpdateYMD_NEW  As String    '最終パスワード更新日_更新後
+Dim strPswdKigen_NEW            As String    'パスワード有効期限_更新後
+Dim intPswdMissCnt_NEW          As Integer   'パスワード間違い回数_更新後
+Dim strPassWord_NEW             As String    '初期化パスワード_更新後
+
+Dim glngMaxSedaiNo              As Long      'パスワードの最新世代番号
+
+Const gcstrDBNotfund            As String = "ORA-06510"             'パスワードなし
+Const gstrDbErr                 As Long = -2147467259
+Const CON_PGM_ID                As String = "国内顧問料計算システム　アカウント管理者画面"    'プログラムID
+Const CON_TANTO_ID              As String = "管理者ユーザ"   'テーブル登録担当者名
+
+'ユーザログ出力メッセージ
+Const CON_LOGMSG_01             As String = "新規ユーザ登録："
+Const CON_LOGMSG_02             As String = "既存ユーザ変更登録："
+Const CON_LOGMSG_03             As String = "権限変更(管理者→一般)："
+Const CON_LOGMSG_04             As String = "権限変更(一般→管理者)："
+Const CON_LOGMSG_05             As String = "ロックアウト解除："
+Const CON_LOGMSG_06             As String = "ID無効化："
+Const CON_LOGMSG_07             As String = "ユーザロックアウト："
+Const CON_LOGMSG_08             As String = "パスワード初期化："
+Const CON_LOGMSG_00             As String = "、"
+
+'DB接続用変数
+Dim Conn           As New ADODB.Connection        '# Connection
+Dim RS             As New ADODB.Recordset         '# Recordset
+Dim strDBConnect   As String
+
+'=====================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   fncChekPswdRireki
+'機能            :   同一パスワードがチェック履歴対象内に存在するかチェック
+'
+'引数            :   strUsrID:ユーザID
+'　　            :   lngSedaiNo:最新世代番号
+'　　            :   strPassWord:初期化パスワード
+'　　            :   lngRireki:パスワード履歴
+'
+'戻り値          :   fncChekUsrZokusei = -1(True):正常終了
+'　　　          :   fncChekUsrZokusei =  0(False):異常終了
+'
+'日付         担当               内容
+'------------ ----------------- --------------------------------------
+'2008/07/11   K.Furuya<SRA>     新規作成
+'=====================================================================
+Private Function fncChekPswdRireki(ByVal strUsrID As String, _
+                                   ByVal lngSedaiNo As Long, _
+                                   ByVal strPassWord As String, _
+                                   ByVal lngRireki As Long) As Integer
+    Dim sSql            As String
+    Dim lngIdx          As Long
+    Dim lngCnt          As Long
+    Dim lngSedaiCnt     As Long
+    Dim ErrCode         As String
+    Dim Ret             As Integer
+    
+    fncChekPswdRireki = False
+    
+    'DB接続文字列作成---------------------------------------------------------------------------------------------
+    Ret = DBAccessString(strDBConnect)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+        Exit Function
+    End If
+    '-------------------------------------------------------------------------------------------------------------
+    
+    'DB接続-------------------------------------------------------------------------------------------------------
+    Ret = DBOpen(strDBConnect, Conn)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+        Exit Function
+    End If
+
+    'パスワードの最新世代番号をカウンターにセット
+    lngCnt = lngSedaiNo
+    'パスワードの世代カウンタを初期化
+    lngSedaiCnt = 0
+    
+    'パスワード履歴分遡りチェックする。但し、履歴がゼロに成ったら終了する。
+    For lngIdx = 1 To lngRireki
+        'パスワード属性を取得する
+        sSql = gstrGetPassWord_ForSelect(strUsrID, strPassWord, lngCnt)
+        
+        '世代をカウントする
+        lngSedaiCnt = lngSedaiCnt + 1
+        
+        If Not gblnDbExecPwd(sSql, Conn, RS, ErrCode) Then
+            If gstrDbErr <> ErrCode Then
+                'パスワード不一致のエラーではないのでＮＧ
+                Call subErrProcess(ThisWorkbook.Name & "." & "fncChekPswdRireki", " ", Err.Number, _
+                                   "パスワード履歴取得に失敗しました。" & vbCrLf & Err.Description)
+                GoTo ErrorExit
+            End If
+        Else
+            '同一パスワードが存在するのでＮＧ
+            MsgBox gfncGetMsgText(318) & CStr(lngSedaiCnt) & _
+            gfncGetMsgText(319), gfncGetMsgParam(1, 1), gfncGetMsgTitle(12)
+            GoTo ErrorExit
+        End If
+        
+        '１マイナスする
+        lngCnt = lngCnt - 1
+        'カウンターがゼロより小さくなったらループ終了
+        If lngCnt < 0 Then
+            Exit For
+        End If
+    Next lngIdx
+    
+    'DBクローズ処理
+    Ret = DBClose(Conn, RS)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+    End If
+    
+    fncChekPswdRireki = True
+    
+    Exit Function
+ErrorExit:
+    'DBクローズ処理
+    Ret = DBClose(Conn, RS)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+    End If
+                                   
+                                   
+                                   
+End Function
+
+Private Sub chk_admin_AfterUpdate()
+    '管理者がチェックされたらロックチェックボックスを無効化する
+    If chk_admin.Value = True Then
+        frame_2.Visible = False
+    Else
+        frame_2.Visible = True
+    End If
+End Sub
+
+Private Sub chk_IDannul_AfterUpdate()
+    'ID無効化ロックがチェックされたらパスワード間違いロックのチェックを外す
+    If chk_PasswordMiss.Value = True And chk_IDannul.Value = True Then
+        chk_PasswordMiss.Value = False
+    End If
+
+End Sub
+
+Private Sub chk_PasswordMiss_AfterUpdate()
+    'パスワード間違いロックがチェックされたらID無効化ロックのチェックを外す
+    If chk_IDannul.Value = True And chk_PasswordMiss.Value = True Then
+        chk_IDannul.Value = False
+    End If
+
+End Sub
+
+Private Sub cmd_Cancel_Click()
+    Unload Me
+    
+End Sub
+
+Private Sub cmd_Regist_Click()
+    Dim Ret         As Variant
+    
+     'マウスカーソルを砂時計にする
+    MousePointer = fmMousePointerHourGlass
+    '自ボタンを非アクティブにする
+    cmd_Regist.Enabled = False
+    
+    '変数を初期化
+    strUserID_NEW = ""
+    strKengenkbn_NEW = ""
+    strSei_NEW = ""
+    strMei_NEW = ""
+    strLockKbn_NEW = ""
+    intPswdMissCnt_NEW = 0
+    strPassWord_NEW = ""
+    glngMaxSedaiNo = 0
+    
+    '項目値を変数に格納する
+    'ユーザIDをセットする
+    strUserID_NEW = Trim(txt_UsrID.Text)
+    
+    '管理者のチェックを判断する
+    If chk_admin.Value = True Then
+        strKengenkbn_NEW = "A"
+    Else
+        strKengenkbn_NEW = "U"
+    End If
+    
+    '姓をセットする
+    strSei_NEW = RTrim(txt_FirstNm.Text)
+    
+    '名をセットする
+    strMei_NEW = RTrim(txt_SecondNm.Text)
+    
+    'IDロックの状態を判断する
+    If chk_admin.Value = True Then     '権限区分が管理者の場合はロックしない
+        strLockKbn_NEW = "0"
+    Else                               '権限区分が一般の場合はロックチェックの状態で判断する
+        If chk_PasswordMiss.Value = False And chk_IDannul.Value = False Then
+            strLockKbn_NEW = "0"
+        Else
+            If chk_PasswordMiss.Value = True Then
+                strLockKbn_NEW = "1"
+            Else
+                strLockKbn_NEW = "2"
+            End If
+        End If
+    End If
+    
+    'ロック区分に変更がなければダミー値("3")をセットする
+    If strLockKbn_NEW = strLockKbn_OLD Then
+        strLockKbn_NEW = "3"
+    End If
+    
+    '初期化パスワードをセットする
+    strPassWord_NEW = Trim(txt_InitialPwd)
+    
+    '項目チェックを行う
+    If opt_UsrAdd.Value = True Then    '既存ユーザの更新の場合
+        If fncChekUsrZokusei("2", strUserID_NEW, strSei_NEW, strMei_NEW, strPassWord_NEW, glngMaxSedaiNo) = False Then
+            GoTo ErrorExit
+        End If
+    Else                               '新規ユーザ登録の場合
+        If fncChekUsrZokusei("1", strUserID_NEW, strSei_NEW, strMei_NEW, strPassWord_NEW) = False Then
+            GoTo ErrorExit
+        End If
+    End If
+    
+    'ユーザ登録実行メッセージ表示
+    Ret = MsgBox(gfncGetMsgText(313), gfncGetMsgParam(2, 2, 2), gfncGetMsgTitle(12))
+    'キャンセルが押下されたら登録を中止する
+    If Ret = vbCancel Then
+        GoTo ErrorExit
+    End If
+    
+    'ユーザの登録処理
+    If opt_UsrAdd.Value = True Then    '既存ユーザの更新の場合
+        '初期化パスワードが入力ありの場合
+        If Trim(strPassWord_NEW) <> "" Then
+            If fncUserTorokuAdd("1", strUserID_NEW, strKengenkbn_NEW, strSei_NEW, strMei_NEW, _
+                                strPassWord_NEW, CON_PGM_ID, CON_TANTO_ID, strLockKbn_NEW, glngMaxSedaiNo) = False Then
+                '登録失敗メッセージ表示
+                MsgBox gfncGetMsgText(320), gfncGetMsgParam(1, 1), gfncGetMsgTitle(12)
+                '==== 各項目のクリアー =====
+                'ユーザIDをクリアする
+                txt_UsrID.Text = ""
+                '管理者のチェックを外す
+                chk_admin.Value = False
+                '最終ログイン日をクリアする
+                txt_Login.Text = ""
+                '姓をクリアする
+                txt_FirstNm.Text = ""
+                '名をクリアする
+                txt_SecondNm.Text = ""
+                'パスワード間違いロックのチェックを外す
+                chk_PasswordMiss.Value = False
+                'ID無効化ロックのチェックを外す
+                chk_IDannul.Value = False
+                '最終パスワード更新日をクリアする
+                txt_UpdateDay.Text = ""
+                'パスワード有効期限をクリアする
+                txt_Valid.Text = ""
+                'パスワード間違い回数をクリアする
+                txt_Kaisu.Text = ""
+                '初期化パスワードをクリアする
+                txt_InitialPwd.Text = ""
+                '==== 各項目のクリアー =====
+                '既存ユーザ変更の場合
+                If opt_UsrAdd.Value = True Then
+                    'ユーザIDコンボボックスを更新する
+                    If fncGetUserID() = False Then
+                        GoTo ErrorExit
+                    End If
+                End If
+                GoTo ErrorExit
+            End If
+        Else
+        '初期化パスワードが入力なしの場合
+            If fncUserTorokuAdd("2", strUserID_NEW, strKengenkbn_NEW, strSei_NEW, strMei_NEW, _
+                                strPassWord_NEW, CON_PGM_ID, CON_TANTO_ID, strLockKbn_NEW) = False Then
+                '登録失敗メッセージ表示
+                MsgBox gfncGetMsgText(320), gfncGetMsgParam(1, 1), gfncGetMsgTitle(12)
+                '==== 各項目のクリアー =====
+                'ユーザIDをクリアする
+                txt_UsrID.Text = ""
+                '管理者のチェックを外す
+                chk_admin.Value = False
+                '最終ログイン日をクリアする
+                txt_Login.Text = ""
+                '姓をクリアする
+                txt_FirstNm.Text = ""
+                '名をクリアする
+                txt_SecondNm.Text = ""
+                'パスワード間違いロックのチェックを外す
+                chk_PasswordMiss.Value = False
+                'ID無効化ロックのチェックを外す
+                chk_IDannul.Value = False
+                '最終パスワード更新日をクリアする
+                txt_UpdateDay.Text = ""
+                'パスワード有効期限をクリアする
+                txt_Valid.Text = ""
+                'パスワード間違い回数をクリアする
+                txt_Kaisu.Text = ""
+                '初期化パスワードをクリアする
+                txt_InitialPwd.Text = ""
+                '==== 各項目のクリアー =====
+                '既存ユーザ変更の場合
+                If opt_UsrAdd.Value = True Then
+                    'ユーザIDコンボボックスを更新する
+                    If fncGetUserID() = False Then
+                        GoTo ErrorExit
+                    End If
+                End If
+                GoTo ErrorExit
+            End If
+        End If
+        '変更登録終了メッセージ表示
+        MsgBox gfncGetMsgText(317), gfncGetMsgParam(1, 4), gfncGetMsgTitle(12)
+    Else                               '新規ユーザ登録の場合
+        If fncUserTorokuNew(strUserID_NEW, strKengenkbn_NEW, strSei_NEW, _
+                            strMei_NEW, strPassWord_NEW, CON_PGM_ID, CON_TANTO_ID) = False Then
+                '登録失敗メッセージ表示
+                MsgBox gfncGetMsgText(320), gfncGetMsgParam(1, 1), gfncGetMsgTitle(12)
+            GoTo ErrorExit
+        End If
+        '新規登録終了メッセージ表示
+        MsgBox gfncGetMsgText(314), gfncGetMsgParam(1, 4), gfncGetMsgTitle(12)
+    End If
+    
+    '既存ユーザ変更の場合
+    If opt_UsrAdd.Value = True Then
+        'ユーザIDコンボボックスを更新する
+        If fncGetUserID() = False Then
+            GoTo ErrorExit
+        End If
+    End If
+    
+    '==== 各項目のクリアー =====
+    'ユーザIDをクリアする
+    txt_UsrID.Text = ""
+    '管理者のチェックを外す
+    chk_admin.Value = False
+    '最終ログイン日をクリアする
+    txt_Login.Text = ""
+    '姓をクリアする
+    txt_FirstNm.Text = ""
+    '名をクリアする
+    txt_SecondNm.Text = ""
+    'パスワード間違いロックのチェックを外す
+    chk_PasswordMiss.Value = False
+    'ID無効化ロックのチェックを外す
+    chk_IDannul.Value = False
+    '最終パスワード更新日をクリアする
+    txt_UpdateDay.Text = ""
+    'パスワード有効期限をクリアする
+    txt_Valid.Text = ""
+    'パスワード間違い回数をクリアする
+    txt_Kaisu.Text = ""
+    '初期化パスワードをクリアする
+    txt_InitialPwd.Text = ""
+    '==== 各項目のクリアー =====
+        
+    'ユーザ管理ログの出力
+    If fncKnriLogOut() = False Then
+        MsgBox gfncGetMsgText(105), gfncGetMsgParam(1, 1), gfncGetMsgTitle(12)
+        GoTo ErrorExit
+    End If
+    
+    '自ボタンをアクティブにする
+    cmd_Regist.Enabled = True
+    'マウスカーソルを通常にする
+    MousePointer = fmMousePointerDefault
+    
+    Exit Sub
+
+ErrorExit:
+
+    '自ボタンをアクティブにする
+    cmd_Regist.Enabled = True
+    'マウスカーソルを通常にする
+    MousePointer = fmMousePointerDefault
+
+End Sub
+
+Private Sub cmd_UsrIDDisp_Click()
+    '既存ユーザ設定変更の場合表示を行う
+    If opt_UsrAdd.Value = True Then
+        'ユーザ属性を取得する
+        If fncGetUserZokusei(cmb_UsrID.Value) = False Then
+            Exit Sub
+        End If
+        
+        'ユーザIDを非アクティブにする
+        frame_8.Enabled = False
+        txt_UsrID.BackColor = CON_BKCOLOR_ROOK
+        '取得したユーザ属性を各項目にセットする
+        'ユーザIDをクリアする
+        txt_UsrID.Text = ""
+        'ユーザIDをセットする
+        txt_UsrID.Text = strUserID_OLD
+        
+        '管理者のチェックを判断する
+        If strKengenkbn_OLD = "A" Then
+            '管理者をチェックする
+            chk_admin.Value = True
+            'パスワード間違いとID無効化のロックを外し設定を無効にする
+            If frame_2.Visible = True Then
+                chk_PasswordMiss.Value = False
+                chk_IDannul.Value = False
+                frame_2.Visible = False
+            End If
+        Else
+            '管理者のチェックを外す
+            chk_admin.Value = False
+            'パスワード間違いとID無効化の設定を有効にする
+            If frame_2.Visible = False Then
+                frame_2.Visible = True
+            End If
+        End If
+        
+        '最終ログイン日をクリアする
+        txt_Login.Text = ""
+        '最終ログイン日をセットする
+        txt_Login.Text = strSaishuLoginYMD_OLD
+        
+        '姓をクリアする
+        txt_FirstNm.Text = ""
+        '姓をセットする
+        txt_FirstNm.Text = strSei_OLD
+        
+        '名をクリアする
+        txt_SecondNm.Text = ""
+        '名をセットする
+        txt_SecondNm.Text = strMei_OLD
+        
+        'IDロックの状態を判断する
+        If strLockKbn_OLD = "0" Then
+            'パスワード間違いロックのチェックを外す
+            chk_PasswordMiss.Value = False
+            'ID無効化ロックのチェックを外す
+            chk_IDannul.Value = False
+        ElseIf strLockKbn_OLD = "1" Then
+            'パスワード間違いロックをチェックする
+            chk_PasswordMiss.Value = True
+            'ID無効化ロックをチェックする
+            chk_IDannul.Value = False
+        ElseIf strLockKbn_OLD = "2" Then
+            'ID無効化ロックをチェックする
+            chk_IDannul.Value = True
+            'パスワード間違いロックをチェックする
+            chk_PasswordMiss.Value = False
+        End If
+        
+        '最終パスワード更新日をクリアする
+        txt_UpdateDay.Text = ""
+        '最終パスワード更新日をセットする
+        txt_UpdateDay.Text = strSaishuPswdUpdateYMD_OLD
+        
+        'パスワード有効期限をクリアする
+        txt_Valid.Text = ""
+                
+        'パスワード有効期限の有無がなしの場合は期限をセットしない
+        If strKigen_Flg = "1" Then
+            'パスワード有効期限をセットする
+            txt_Valid.Text = strPswdKigen_OLD
+        End If
+        'パスワード間違い回数をクリアする
+        txt_Kaisu.Text = ""
+        'パスワード間違い回数をセットする
+        txt_Kaisu.Text = intPswdMissCnt_OLD
+        '初期化パスワードをクリアする
+        txt_InitialPwd.Text = ""
+    End If
+End Sub
+Private Sub opt_UsrAdd_Click()
+    'ユーザIDをクリアする
+    txt_UsrID.Text = ""
+    '管理者のチェックを外す
+    chk_admin.Value = False
+    '最終ログイン日をクリアする
+    txt_Login.Text = ""
+    '姓をクリアする
+    txt_FirstNm.Text = ""
+    '名をクリアする
+    txt_SecondNm.Text = ""
+    'パスワード間違いロックのチェックを外す
+    chk_PasswordMiss.Value = False
+    'ID無効化ロックのチェックを外す
+    chk_IDannul.Value = False
+    '最終パスワード更新日をクリアする
+    txt_UpdateDay.Text = ""
+    'パスワード有効期限をクリアする
+    txt_Valid.Text = ""
+    'パスワード間違い回数をクリアする
+    txt_Kaisu.Text = ""
+    '初期化パスワードをクリアする
+    txt_InitialPwd.Text = ""
+    
+    'ユーザIDを取得する
+    If fncGetUserID() = False Then
+        Exit Sub
+    End If
+    'ユーザIDの背景色を非アクティブにする
+    txt_UsrID.BackColor = CON_BKCOLOR_ROOK
+    'ユーザIDのコンテナを非アクティブにしユーザIDを入力不可にする
+    frame_8.Enabled = False
+    
+    
+    
+End Sub
+
+Private Sub opt_UsrNew_Click()
+    '新規ユーザ登録がＯＮの場合
+    If opt_UsrNew.Value = True Then
+        'ユーザIDコンボボックスのリストをクリアする
+        cmb_UsrID.Clear
+        'ユーザIDコンボボックスを非アクティブにする
+        cmb_UsrID.Enabled = False
+        'ユーザIDの背景色を非アクティブにする
+        cmb_UsrID.BackColor = CON_BKCOLOR_ROOK
+        'ユーザIDの背景色をアクティブにする
+        txt_UsrID.BackColor = CON_BKCOLOR_DEFAULT
+        'ユーザIDをクリアする
+        txt_UsrID.Text = ""
+        'ユーザIDテキストボックスのコンテナをアクティブにし入力可にする
+        frame_8.Enabled = True
+        '管理者のチェックを外す
+        chk_admin.Value = False
+        '最終ログイン日をクリアする
+        txt_Login.Text = ""
+        '姓をクリアする
+        txt_FirstNm.Text = ""
+        '名をクリアする
+        txt_SecondNm.Text = ""
+        'パスワード間違いロックのチェックを外す
+        chk_PasswordMiss.Value = False
+        'ID無効化ロックのチェックを外す
+        chk_IDannul.Value = False
+        '最終パスワード更新日をクリアする
+        txt_UpdateDay.Text = ""
+        'パスワード有効期限をクリアする
+        txt_Valid.Text = ""
+        'パスワード間違い回数をクリアする
+        txt_Kaisu.Text = ""
+        '初期化パスワードをクリアする
+        txt_InitialPwd.Text = ""
+        
+    End If
+End Sub
+
+'=====================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   fncGetUserZokusei
+'機能            :   選択されたユーザ属性を取得する
+'
+'引数            :   ユーザID
+'
+'戻り値          :   fncGetUserZokusei = -1(True):正常終了
+'　　　          :   fncGetUserZokusei =  0(False):異常終了
+'
+'日付         担当               内容
+'------------ ----------------- --------------------------------------
+'2008/07/11   K.Furuya<SRA>     新規作成
+'=====================================================================
+Private Function fncGetUserZokusei(strUserID As String) As Integer
+    Dim sSql            As String
+    Dim Ret             As Integer
+    Dim strPara         As String
+    Dim lngPara         As Long
+    
+    fncGetUserZokusei = False
+    
+    '変数初期化
+    strUserID_OLD = ""                 'ユーザID_更新前
+    strKengenkbn_OLD = ""              '権限区分_更新前
+    strSaishuLoginYMD_OLD = ""         '最終ログイン日_更新前
+    strSei_OLD = ""                    '姓_更新前
+    strMei_OLD = ""                    '名_更新前
+    strLockKbn_OLD = ""                'ロック区分_更新前
+    strSaishuPswdUpdateYMD_OLD = ""    '最終パスワード更新日_更新前
+    strPswdKigen_OLD = ""              'パスワード有効期限_更新前
+    intPswdMissCnt_OLD = 0             'パスワード間違い回数_更新前
+    strPassWord_OLD = ""               '初期化パスワード
+    
+    
+    'DB接続文字列作成---------------------------------------------------------------------------------------------
+    Ret = DBAccessString(strDBConnect)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+        Exit Function
+    End If
+    '-------------------------------------------------------------------------------------------------------------
+    
+    'DB接続-------------------------------------------------------------------------------------------------------
+    Ret = DBOpen(strDBConnect, Conn)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+        Exit Function
+    End If
+
+    'パラメータ取得(010)
+    sSql = gstrGetParam_ForSelect(CON_PARA_CODE_NO010)
+    'レコードセットの作成
+    If (gfncDyCreate(sSql, Conn, RS) = False) Then
+        GoTo ErrorExit
+    End If
+    
+    'レコード件数取得してゼロ件の場合は処理終了
+    If RS.EOF = True Then
+        MsgBox gfncGetMsgText(401), gfncGetMsgParam(1, 1), gfncGetMsgTitle(12)
+        GoTo ErrorExit
+    End If
+    
+    'パラメータの"010"をセットする
+    lngPara = RS.Fields("NUM_PARAM")
+    
+    'レコードセットを閉じる
+    RS.Close
+    
+    'パラメータ取得(020)
+    sSql = gstrGetParam_ForSelect(CON_PARA_CODE_NO020)
+    'レコードセットの作成
+    If (gfncDyCreate(sSql, Conn, RS) = False) Then
+        GoTo ErrorExit
+    End If
+    
+    'レコード件数取得してゼロ件の場合は処理終了
+    If RS.EOF = True Then
+        MsgBox gfncGetMsgText(401), gfncGetMsgParam(1, 1), gfncGetMsgTitle(12)
+        GoTo ErrorExit
+    End If
+    
+    'パラメータの"020"をセットする
+    strPara = RS.Fields("STR_PARAM")
+    
+    'レコードセットを閉じる
+    RS.Close
+    
+    'ユーザ属性を取得する
+    sSql = gstrUserZokusei_ForSelect(strUserID, lngPara)
+    
+    'レコードセットの作成
+    If (gfncDyCreate(sSql, Conn, RS) = False) Then
+        GoTo ErrorExit
+    End If
+    
+    'レコード件数取得してゼロ件の場合は処理終了
+    If RS.EOF = True Then
+        If Trim(strUserID) = "" Then
+            MsgBox gfncGetMsgText(315), gfncGetMsgParam(1, 1), gfncGetMsgTitle(12)
+        Else
+            MsgBox gfncGetMsgText(316), gfncGetMsgParam(1, 1), gfncGetMsgTitle(12)
+        End If
+        GoTo ErrorExit
+    End If
+    
+    'EOF判定処理
+    Do Until RS.EOF
+        '抽出データセット
+        strUserID_OLD = RS.Fields("USER_ID")
+        strKengenkbn_OLD = RS.Fields("KENGEN_KBN")
+        strKigen_Flg = strPara
+        If Trim(RS.Fields("SAISHU_LOGIN_YMD")) <> "" Then strSaishuLoginYMD_OLD = RS.Fields("SAISHU_LOGIN_YMD")
+        If Trim(RS.Fields("LAST_NAME")) <> "" Then strSei_OLD = RS.Fields("LAST_NAME")
+        If Trim(RS.Fields("FIRST_NAME")) <> "" Then strMei_OLD = RS.Fields("FIRST_NAME")
+        strLockKbn_OLD = RS.Fields("LOCK_KBN")
+        If Trim(RS.Fields("SAISHU_PSWD_KOHSHIN_YMD")) <> "" Then strSaishuPswdUpdateYMD_OLD = RS.Fields("SAISHU_PSWD_KOHSHIN_YMD")
+        If Trim(RS.Fields("PSWD_KIGEN")) <> "" Then strPswdKigen_OLD = RS.Fields("PSWD_KIGEN")
+        intPswdMissCnt_OLD = RS.Fields("PSWD_MACHIGAI_CNT")
+        'ﾀﾞｲﾅｾｯﾄ次ﾚｺｰﾄﾞへ
+        RS.MoveNext
+    Loop
+    
+    'レコードセットクローズ
+    RS.Close
+    
+    'DBクローズ処理
+    Ret = DBClose(Conn, RS)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+    End If
+    
+    fncGetUserZokusei = True
+    
+    Exit Function
+ErrorExit:
+    'DBクローズ処理
+    Ret = DBClose(Conn, RS)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+    End If
+
+
+End Function
+
+'=====================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   fncGetUserID
+'機能            :   ユーザID一覧を取得する
+'
+'引数            :
+'
+'戻り値          :   fncGetUserID = -1(True):正常終了
+'　　　          :   fncGetUserID =  0(False):異常終了
+'
+'日付         担当               内容
+'------------ ----------------- --------------------------------------
+'2008/07/11   K.Furuya<SRA>     新規作成
+'=====================================================================
+Private Function fncGetUserID() As Integer
+    Dim sSql        As String
+    Dim Ret         As Integer
+    
+    fncGetUserID = False
+    
+    
+    'DB接続文字列作成---------------------------------------------------------------------------------------------
+    Ret = DBAccessString(strDBConnect)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+        Exit Function
+    End If
+    '-------------------------------------------------------------------------------------------------------------
+    
+    'DB接続-------------------------------------------------------------------------------------------------------
+    Ret = DBOpen(strDBConnect, Conn)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+        Exit Function
+    End If
+    
+
+    
+    
+    'ユーザIDを取得する
+    sSql = gstrUserID_ForSelect()
+    
+    'レコードセットの作成
+    If (gfncDyCreate(sSql, Conn, RS) = False) Then
+        GoTo ErrorExit
+    End If
+    
+    'レコード件数取得してゼロ件の場合は処理終了
+    If RS.EOF = True Then
+        MsgBox gfncGetMsgText(206) & gfncGetMsgText(101), gfncGetMsgParam(1, 1), gfncGetMsgTitle(12)
+        GoTo ErrorExit
+    End If
+    
+    '既存ユーザ設定変更がチェックされた場合ユーザIDコンボボックスをアクティブにする
+    If opt_UsrAdd.Value = True Then
+       cmb_UsrID.Enabled = True
+       cmb_UsrID.BackColor = CON_BKCOLOR_DEFAULT
+    End If
+
+    'ユーザIDコンボボックスをクリアする
+    cmb_UsrID.Clear
+    
+    'EOF判定処理
+    Do Until RS.EOF
+        '抽出データセット
+        'コンボボックスにユーザID一覧をロード
+        cmb_UsrID.AddItem RS.Fields("USER_ID")
+            
+        'ﾀﾞｲﾅｾｯﾄ次ﾚｺｰﾄﾞへ
+        RS.MoveNext
+    Loop
+    
+    'レコードセットクローズ
+    RS.Close
+    
+    'DBクローズ処理
+    Ret = DBClose(Conn, RS)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+    End If
+    
+    fncGetUserID = True
+    
+    Exit Function
+ErrorExit:
+    'DBクローズ処理
+    Ret = DBClose(Conn, RS)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+    End If
+
+End Function
+
+'=====================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   fncChekUsrZokusei
+'機能            :   ユーザ属性をチェックする
+'
+'引数            :   strSinki_Flg: "1" = 新規、"2" = 更新
+'　　            :   strUsrID:ユーザID
+'　　            :   strSei:姓
+'　　            :   strMei:名
+'　　            :   strPassWord:初期化パスワード
+'
+'戻り値          :   fncChekUsrZokusei = -1(True):正常終了
+'　　　          :   fncChekUsrZokusei =  0(False):異常終了
+'
+'日付         担当               内容
+'------------ ----------------- --------------------------------------
+'2008/07/11   K.Furuya<SRA>     新規作成
+'2008/10/10   T.Mizutani<SRA>   ユーザIDを8文字以上→3文字以上とする
+'=====================================================================
+Private Function fncChekUsrZokusei(ByVal strSinki_Flg As String, _
+                                   ByVal strUsrID As String, _
+                                   ByVal strSei As String, _
+                                   ByVal strMei As String, _
+                                   Optional ByVal strPassWord As String = " ", _
+                                   Optional ByRef lngMaxSedaiNo As Long = 0 _
+                                   ) As Integer
+    Dim Ret             As Integer
+    Dim ColIdx          As Integer
+    Dim GetTxt          As String
+    Dim Suuji           As Boolean '数字フラグ
+    Dim EijiDai         As Boolean '英大文字フラグ
+    Dim EijiSyo         As Boolean '英小文字フラグ
+    Dim WkUserID        As String
+    Dim WkPassWord      As String
+    Dim Cnt             As Integer
+    Dim strPara         As String
+    Dim lngPara         As Long    '履歴番号
+    Dim lngSedaiNo      As Long
+    Dim strPswdFlg      As String
+    Dim strRegistYMD    As String
+
+    
+    fncChekUsrZokusei = False
+    
+    '新規登録の場合
+    If strSinki_Flg = "1" Then
+        'ユーザID未入力チェック
+        If Trim(strUsrID) = "" Then
+            MsgBox gfncGetMsgText(302), gfncGetMsgParam(1, 1), gfncGetMsgTitle(12)
+            Exit Function
+        End If
+        'ユーザID桁数チェック
+        Ret = LenB(StrConv(Trim(strUsrID), vbFromUnicode))  '文字のバイト数を取得
+
+'****************** < 20081010 ユーザID３文字以上対応 SRA水谷 Start > ******************
+'        If Ret < 8 Or Ret > 64 Then
+        If Ret < 3 Or Ret > 64 Then
+            MsgBox gfncGetMsgText(303), gfncGetMsgParam(1, 1), gfncGetMsgTitle(12)
+'****************** < 20081010 ユーザID３文字以上対応 SRA水谷 End > ********************
+
+            Exit Function
+        End If
+        'ユーザID使用文字チェック
+        Ret = Len(Trim(strUsrID))    '文字の文字数を取得
+        For ColIdx = 1 To Ret        '先頭から１文字づつ検査する
+            GetTxt = Mid(Trim(strUsrID), ColIdx, 1)
+            Select Case GetTxt
+                Case "A" To "Z"
+                    'ＯＫ
+                Case "a" To "z"
+                    'ＯＫ
+                Case 0 To 9
+                    'ＯＫ
+                Case "-", "_"
+                    'ＯＫ
+                Case Else
+                    'ＮＧ
+                    MsgBox gfncGetMsgText(304), gfncGetMsgParam(1, 1), gfncGetMsgTitle(12)
+                    Exit Function
+            End Select
+        Next ColIdx
+        '既存ユーザ存在チェック
+        If fncGetUserCnt(Trim(strUsrID), Cnt) = False Then
+            Exit Function
+        End If
+        If Cnt <> 0 Then
+            MsgBox gfncGetMsgText(305), gfncGetMsgParam(1, 1), gfncGetMsgTitle(12)
+            Exit Function
+        End If
+        '姓のバイト数チェック
+        If LenB(StrConv(RTrim(strSei), vbFromUnicode)) > 60 Then
+            MsgBox gfncGetMsgText(306), gfncGetMsgParam(1, 1), gfncGetMsgTitle(12)
+            Exit Function
+        End If
+        '姓の文字チェック(シングルコーテーション抑止)
+        Ret = Len(Trim(strSei))    '文字の文字数を取得
+        For ColIdx = 1 To Ret        '先頭から１文字づつ検査する
+            GetTxt = Mid(Trim(strSei), ColIdx, 1)
+            Select Case GetTxt
+                Case "'"
+                    'ＮＧ
+                    MsgBox gfncGetMsgText(321), gfncGetMsgParam(1, 1), gfncGetMsgTitle(12)
+                    Exit Function
+            End Select
+        Next ColIdx
+        '名のバイト数チェック
+        If LenB(StrConv(RTrim(strMei), vbFromUnicode)) > 60 Then
+            MsgBox gfncGetMsgText(307), gfncGetMsgParam(1, 1), gfncGetMsgTitle(12)
+            Exit Function
+        End If
+        '名の文字チェック(シングルコーテーション抑止)
+        Ret = Len(Trim(strMei))    '文字の文字数を取得
+        For ColIdx = 1 To Ret        '先頭から１文字づつ検査する
+            GetTxt = Mid(Trim(strMei), ColIdx, 1)
+            Select Case GetTxt
+                Case "'"
+                    'ＮＧ
+                    MsgBox gfncGetMsgText(322), gfncGetMsgParam(1, 1), gfncGetMsgTitle(12)
+                    Exit Function
+            End Select
+        Next ColIdx
+        '初期化パスワードの未入力チェック
+        If Trim(strPassWord) = "" Then
+            MsgBox gfncGetMsgText(308), gfncGetMsgParam(1, 1), gfncGetMsgTitle(12)
+            Exit Function
+        End If
+        '初期化パスワードの桁数チェック
+        Ret = LenB(StrConv(Trim(strPassWord), vbFromUnicode))  '文字のバイト数を取得
+        If Ret < 8 Or Ret > 64 Then
+            MsgBox gfncGetMsgText(309), gfncGetMsgParam(1, 1), gfncGetMsgTitle(12)
+            Exit Function
+        End If
+        '初期化パスワードの英字のみ、数字のみチェック
+        Suuji = False
+        EijiDai = False
+        EijiSyo = False
+        Ret = Len(Trim(strPassWord))    '文字の文字数を取得
+        For ColIdx = 1 To Ret           '先頭から１文字づつ検査する
+            GetTxt = Mid(Trim(strPassWord), ColIdx, 1)
+            Select Case GetTxt
+                Case "A" To "Z"
+                    EijiDai = True
+                Case "a" To "z"
+                    EijiSyo = True
+                Case 0 To 9
+                    Suuji = True
+            End Select
+        Next ColIdx
+        If Suuji = True And (EijiDai = True Or EijiSyo = True) Then
+            'ＯＫ
+        Else
+            MsgBox gfncGetMsgText(310), gfncGetMsgParam(1, 1), gfncGetMsgTitle(12)
+            Exit Function
+        End If
+        '初期化パスワードの英数字以外のチェック
+        Ret = Len(Trim(strPassWord))    '文字の文字数を取得
+        For ColIdx = 1 To Ret           '先頭から１文字づつ検査する
+            GetTxt = Mid(Trim(strPassWord), ColIdx, 1)
+            Select Case GetTxt
+                Case "A" To "Z"
+                    'ＯＫ
+                Case "a" To "z"
+                    'ＯＫ
+                Case 0 To 9
+                    'ＯＫ
+                Case Else
+                    MsgBox gfncGetMsgText(311), gfncGetMsgParam(1, 1), gfncGetMsgTitle(12)
+                    Exit Function
+            End Select
+        Next ColIdx
+        'ユーザID文字列の初期化パスワード文字列内存在チェック
+        WkUserID = Trim(strUsrID)
+        WkPassWord = Trim(strPassWord)
+        '戻り値がゼロならば存在しない
+        If InStr(WkPassWord, WkUserID) <> 0 Then
+            MsgBox gfncGetMsgText(312), gfncGetMsgParam(1, 1), gfncGetMsgTitle(12)
+            Exit Function
+        End If
+    Else
+    '既存登録の場合
+        'ユーザID未入力チェック
+        If Trim(strUsrID) = "" Then
+            MsgBox gfncGetMsgText(302), gfncGetMsgParam(1, 1), gfncGetMsgTitle(12)
+            Exit Function
+        End If
+        '姓のバイト数チェック
+        If LenB(StrConv(RTrim(strSei), vbFromUnicode)) > 60 Then
+            MsgBox gfncGetMsgText(306), gfncGetMsgParam(1, 1), gfncGetMsgTitle(12)
+            Exit Function
+        End If
+        '姓の文字チェック(シングルコーテーション抑止)
+        Ret = Len(Trim(strSei))    '文字の文字数を取得
+        For ColIdx = 1 To Ret        '先頭から１文字づつ検査する
+            GetTxt = Mid(Trim(strSei), ColIdx, 1)
+            Select Case GetTxt
+                Case "'"
+                    'ＮＧ
+                    MsgBox gfncGetMsgText(321), gfncGetMsgParam(1, 1), gfncGetMsgTitle(12)
+                    Exit Function
+            End Select
+        Next ColIdx
+        '名のバイト数チェック
+        If LenB(StrConv(RTrim(strMei), vbFromUnicode)) > 60 Then
+            MsgBox gfncGetMsgText(307), gfncGetMsgParam(1, 1), gfncGetMsgTitle(12)
+            Exit Function
+        End If
+        '名の文字チェック(シングルコーテーション抑止)
+        Ret = Len(Trim(strMei))    '文字の文字数を取得
+        For ColIdx = 1 To Ret        '先頭から１文字づつ検査する
+            GetTxt = Mid(Trim(strMei), ColIdx, 1)
+            Select Case GetTxt
+                Case "'"
+                    'ＮＧ
+                    MsgBox gfncGetMsgText(322), gfncGetMsgParam(1, 1), gfncGetMsgTitle(12)
+                    Exit Function
+            End Select
+        Next ColIdx
+        '初期化パスワードが入力されていたならばチェック
+        If Trim(strPassWord) <> "" Then
+            '初期化パスワードの桁数チェック
+            Ret = LenB(StrConv(Trim(strPassWord), vbFromUnicode))  '文字のバイト数を取得
+            If Ret < 8 Or Ret > 64 Then
+                MsgBox gfncGetMsgText(309), gfncGetMsgParam(1, 1), gfncGetMsgTitle(12)
+                Exit Function
+            End If
+            '初期化パスワードの英字のみ、数字のみチェック
+            Suuji = False
+            EijiDai = False
+            EijiSyo = False
+            Ret = Len(Trim(strPassWord))    '文字の文字数を取得
+            For ColIdx = 1 To Ret           '先頭から１文字づつ検査する
+                GetTxt = Mid(Trim(strPassWord), ColIdx, 1)
+                Select Case GetTxt
+                    Case "A" To "Z"
+                        EijiDai = True
+                    Case "a" To "z"
+                        EijiSyo = True
+                    Case 0 To 9
+                        Suuji = True
+                End Select
+            Next ColIdx
+            If Suuji = True And (EijiDai = True Or EijiSyo = True) Then
+                'ＯＫ
+            Else
+                MsgBox gfncGetMsgText(310), gfncGetMsgParam(1, 1), gfncGetMsgTitle(12)
+                Exit Function
+            End If
+            '初期化パスワードの英数字以外のチェック
+            Ret = Len(Trim(strPassWord))    '文字の文字数を取得
+            For ColIdx = 1 To Ret           '先頭から１文字づつ検査する
+                GetTxt = Mid(Trim(strPassWord), ColIdx, 1)
+                Select Case GetTxt
+                    Case "A" To "Z"
+                        'ＯＫ
+                    Case "a" To "z"
+                        'ＯＫ
+                    Case 0 To 9
+                        'ＯＫ
+                    Case Else
+                        MsgBox gfncGetMsgText(311), gfncGetMsgParam(1, 1), gfncGetMsgTitle(12)
+                        Exit Function
+                End Select
+            Next ColIdx
+            'ユーザID文字列の初期化パスワード文字列内存在チェック
+            WkUserID = Trim(strUsrID)
+            WkPassWord = Trim(strPassWord)
+            '戻り値がゼロならば存在しない
+            If InStr(WkPassWord, WkUserID) <> 0 Then
+                MsgBox gfncGetMsgText(312), gfncGetMsgParam(1, 1), gfncGetMsgTitle(12)
+                Exit Function
+            End If
+        End If
+    End If
+        
+    '初期化パスワードが入力されていた場合はパスワード履歴をチェックする
+    If Trim(strPassWord) <> "" Then
+        '同一パスワードチェック履歴世代数取得
+        strPara = CON_PARA_CODE_NO070
+        If fncGetParam(strPara, lngPara) = False Then
+            Exit Function
+        End If
+        'パスワードの最新世代番号を取得
+        If fncGetPswdSedaiNO(strUsrID, lngSedaiNo, strPswdFlg, strRegistYMD) = False Then
+            Exit Function
+        End If
+        '同一パスワードがチェック履歴対象内に存在するか確認する
+        If fncChekPswdRireki(strUsrID, lngSedaiNo, Trim(strPassWord), lngPara) = False Then
+            Exit Function
+        End If
+    End If
+    
+    'パスワードの最新世代番号を返す
+    lngMaxSedaiNo = lngSedaiNo + 1
+    
+    fncChekUsrZokusei = True
+        
+End Function
+
+'=====================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   fncGetUserCnt
+'機能            :   ユーザの存在をチェックする
+'
+'引数            :   strUser:ユーザID
+'
+'　　　          :   Cnt:取得件数
+'戻り値          :   fncGetUserCnt = -1(True):正常終了
+'　　　          :   fncGetUserCnt =  0(False):異常終了
+'
+'日付         担当               内容
+'------------ ----------------- --------------------------------------
+'2008/07/11   K.Furuya<SRA>     新規作成
+'=====================================================================
+Private Function fncGetUserCnt(ByVal strUserID As String, ByRef Cnt As Integer) As Integer
+    Dim sSql        As String
+    Dim Ret         As Integer
+    
+    fncGetUserCnt = False
+    
+    
+    'DB接続文字列作成---------------------------------------------------------------------------------------------
+    Ret = DBAccessString(strDBConnect)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+        Exit Function
+    End If
+    '-------------------------------------------------------------------------------------------------------------
+    
+    'DB接続-------------------------------------------------------------------------------------------------------
+    Ret = DBOpen(strDBConnect, Conn)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+        Exit Function
+    End If
+    
+    'ユーザIDを取得する
+    sSql = gstrUser_ForSelect(strUserID)
+    
+    'レコードセットの作成
+    If (gfncDyCreate(sSql, Conn, RS) = False) Then
+        GoTo ErrorExit
+    End If
+        
+    Cnt = 0
+    'レコード件数を戻り値に格納する
+    If RS.EOF = True Then
+        Cnt = 0
+    Else
+        Cnt = 1
+    End If
+    
+        
+    
+    RS.Close
+    
+    'DBクローズ処理
+    Ret = DBClose(Conn, RS)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+    End If
+    
+    fncGetUserCnt = True
+    
+    Exit Function
+ErrorExit:
+    'DBクローズ処理
+    Ret = DBClose(Conn, RS)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+    End If
+
+End Function
+
+'=====================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   fncGetParam
+'機能            :   パラメータ(パスワード履歴)を取得する
+'
+'引数            :   strParamNo:パラメータコード番号
+'
+'戻り値          :   strParamNo = 同一パスワードチェック遡り履歴数
+'戻り値          :   fncGetParam = -1(True):正常終了
+'　　　          :   fncGetParam =  0(False):異常終了
+'
+'日付         担当               内容
+'------------ ----------------- --------------------------------------
+'2008/07/11   K.Furuya<SRA>     新規作成
+'=====================================================================
+Private Function fncGetParam(ByRef strParam As String, ByRef lngParam As Long) As Integer
+    Dim sSql            As String
+    Dim Ret             As Integer
+    
+    fncGetParam = False
+    
+    
+    'DB接続文字列作成---------------------------------------------------------------------------------------------
+    Ret = DBAccessString(strDBConnect)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+        Exit Function
+    End If
+    '-------------------------------------------------------------------------------------------------------------
+    
+    'DB接続-------------------------------------------------------------------------------------------------------
+    Ret = DBOpen(strDBConnect, Conn)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+        Exit Function
+    End If
+
+    'パラメータを取得する
+    sSql = gstrGetParam_ForSelect(strParam)
+    
+    'レコードセットの作成
+    If (gfncDyCreate(sSql, Conn, RS) = False) Then
+        GoTo ErrorExit
+    End If
+    
+    'レコード件数取得してゼロ件の場合は処理終了
+    If RS.EOF = True Then
+        MsgBox gfncGetMsgText(104), gfncGetMsgParam(1, 1), gfncGetMsgTitle(12)
+        GoTo ErrorExit
+    End If
+    
+    'EOF判定処理
+    Do Until RS.EOF
+        '項目のデータ型により振分けて決定する
+        Select Case strParam
+            Case CON_PARA_CODE_NO010
+                '抽出データセット
+                lngParam = IIf(IsNull(RS.Fields("NUM_PARAM")), 0, _
+                                        RS.Fields("NUM_PARAM"))
+            Case CON_PARA_CODE_NO020
+                '抽出データセット
+                strParam = IIf(IsNull(RS.Fields("STR_PARAM")), "", _
+                                        RS.Fields("STR_PARAM"))
+            Case CON_PARA_CODE_NO030
+                '抽出データセット
+                lngParam = IIf(IsNull(RS.Fields("NUM_PARAM")), 0, _
+                                        RS.Fields("NUM_PARAM"))
+            Case CON_PARA_CODE_NO040
+                '抽出データセット
+                lngParam = IIf(IsNull(RS.Fields("NUM_PARAM")), 1, _
+                                        RS.Fields("NUM_PARAM"))
+            Case CON_PARA_CODE_NO050
+                '抽出データセット
+                strParam = IIf(IsNull(RS.Fields("STR_PARAM")), "", _
+                                        RS.Fields("STR_PARAM"))
+            Case CON_PARA_CODE_NO070
+                '抽出データセット
+                lngParam = IIf(IsNull(RS.Fields("NUM_PARAM")), 1, _
+                                        RS.Fields("NUM_PARAM"))
+        End Select
+        'ﾀﾞｲﾅｾｯﾄ次ﾚｺｰﾄﾞへ
+        RS.MoveNext
+    Loop
+    
+    'レコードセットクローズ
+    RS.Close
+    
+    'DBクローズ処理
+    Ret = DBClose(Conn, RS)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+    End If
+    
+    fncGetParam = True
+    
+    Exit Function
+ErrorExit:
+    'DBクローズ処理
+    Ret = DBClose(Conn, RS)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+    End If
+
+End Function
+
+'=====================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   fncGetPswdSedaiNO
+'機能            :   パスワードの最新履歴番号と初期化フラグと登録日を取得する
+'
+'引数            :   strUsr:ユーザID
+'
+'戻り値          :   lngSedaiNo = 最新履歴番号
+'　　　          :   strPswdFlg = 初期化フラグ
+'　　　          :   strRegistYMD = 登録日
+'戻り値          :   fncGetUserCnt = -1(True):正常終了
+'　　　          :   fncGetUserCnt =  0(False):異常終了
+'
+'日付         担当               内容
+'------------ ----------------- --------------------------------------
+'2008/07/14   K.Furuya<SRA>     新規作成
+'=====================================================================
+Private Function fncGetPswdSedaiNO(ByVal strUsrID As String, _
+                                   ByRef lngSedaiNo As Long, _
+                                   ByRef strPswdFlg As String, _
+                                   ByRef strRegistYMD As String) As Integer
+    Dim sSql            As String
+    Dim Ret             As Integer
+    
+    fncGetPswdSedaiNO = False
+    
+    'DB接続文字列作成---------------------------------------------------------------------------------------------
+    Ret = DBAccessString(strDBConnect)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+        Exit Function
+    End If
+    '-------------------------------------------------------------------------------------------------------------
+    
+    'DB接続-------------------------------------------------------------------------------------------------------
+    Ret = DBOpen(strDBConnect, Conn)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+        Exit Function
+    End If
+
+    'パスワード属性を取得する
+    sSql = gstrGetSedaiNo_ForSelect(strUsrID)
+    
+    'レコードセットの作成
+    If (gfncDyCreate(sSql, Conn, RS) = False) Then
+        GoTo ErrorExit
+    End If
+    
+    
+    'EOF判定処理
+    Do Until RS.EOF
+        '抽出データセット
+        lngSedaiNo = RS.Fields("SEDAI_NO")
+        strPswdFlg = RS.Fields("SHOKI_PSWD_FLG")
+        strRegistYMD = RS.Fields("TOHROKU_YMD")
+        
+        'ﾀﾞｲﾅｾｯﾄ次ﾚｺｰﾄﾞへ
+        RS.MoveNext
+    Loop
+    
+    'レコードセットクローズ
+    RS.Close
+    
+    'DBクローズ処理
+    Ret = DBClose(Conn, RS)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+    End If
+    
+    fncGetPswdSedaiNO = True
+    
+    Exit Function
+ErrorExit:
+    'DBクローズ処理
+    Ret = DBClose(Conn, RS)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+    End If
+    
+
+End Function
+
+
+'=====================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   fncUserTorokuNew
+'機能            :   新規ユーザ登録処理(ユーザテーブル、パスワードテーブル)
+'
+'引数            :   strUsrID:ユーザID
+'　　            :   strKnGnKbn:権限区分
+'　　            :   strSei:姓
+'　　            :   strMei:名
+'　　            :   strPassWord:初期化パスワード
+'　　            :   strPgId:更新プログラムID
+'　　            :   strTanto:更新担当者ID
+'
+'戻り値          :   fncUserTorokuNew = -1(True):正常終了
+'　　　          :   fncUserTorokuNew =  0(False):異常終了
+'
+'日付         担当               内容
+'------------ ----------------- --------------------------------------
+'2008/07/15   K.Furuya<SRA>     新規作成
+'=====================================================================
+Private Function fncUserTorokuNew(ByVal strUsrID As String, _
+                                  ByVal strKnGnKbn As String, _
+                                  ByVal strSei As String, _
+                                  ByVal strMei As String, _
+                                  ByVal strPassWord As String, _
+                                  ByVal strPgId As String, _
+                                  ByVal strTanto As String) As Integer
+    
+    Dim sSql            As String
+    Dim Ret             As Integer
+    
+    fncUserTorokuNew = False
+        
+    'DB接続文字列作成---------------------------------------------------------------------------------------------
+    Ret = DBAccessString(strDBConnect)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+        Exit Function
+    End If
+    '-------------------------------------------------------------------------------------------------------------
+    
+    'DB接続-------------------------------------------------------------------------------------------------------
+    Ret = DBOpen(strDBConnect, Conn)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+        Exit Function
+    End If
+        
+    'トランザクションを開始する
+    If Not gblnDbBeginTrans(Conn, RS) Then
+        GoTo ErrorExit
+    End If
+        
+    'ユーザ属性インサートSQLを生成する
+    sSql = gstrUserZokusei_ForInsert(strUsrID, strKnGnKbn, strSei, strMei, strPgId, strTanto)
+    
+    'ユーザテーブルに新規登録する
+    If Not gblnDbExec(sSql, Conn, RS) Then
+        '登録失敗の場合はロールバックする
+        If Not gblnDbRollback(Conn, RS) Then
+        End If
+        GoTo ErrorExit
+    End If
+        
+    'パスワード属性インサートSQLを生成する
+    sSql = gstrPwdZokusei_ForInsert(strUsrID, strPassWord, strPgId, strTanto)
+    
+    'パスワードテーブルに新規登録する
+    If Not gblnDbExec(sSql, Conn, RS) Then
+        '登録失敗の場合はロールバックする
+        If Not gblnDbRollback(Conn, RS) Then
+        End If
+        GoTo ErrorExit
+    End If
+    
+    'パスワードの暗号化SQLを生成する
+    sSql = strPassWoed_ForUpdate(strUsrID)
+    
+    'パスワードを暗号化する
+    If Not gblnDbExec(sSql, Conn, RS) Then
+        '登録失敗の場合はロールバックする
+        If Not gblnDbRollback(Conn, RS) Then
+        End If
+        GoTo ErrorExit
+    End If
+    
+    '成功の場合はコミットする
+    If Not gblnDbCommitTrans(Conn, RS) Then
+        GoTo ErrorExit
+    End If
+    
+    'DBクローズ処理
+    Ret = DBClose(Conn, RS)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+    End If
+    
+    fncUserTorokuNew = True
+    
+    Exit Function
+ErrorExit:
+    'DBクローズ処理
+    Ret = DBClose(Conn, RS)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+    End If
+
+End Function
+
+'=====================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   fncUserTorokuAdd
+'機能            :   既存ユーザ登録処理(ユーザテーブル、パスワードテーブル)
+'
+'引数            :   strSyokiFlg:パスワード初期化フラグ("1":初期化、"2":非初期化)
+'　　            :   strUsrID:ユーザID
+'　　            :   strKnGnKbn:権限区分
+'　　            :   strSei:姓
+'　　            :   strMei:名
+'　　            :   strLockKbn:ロック区分
+'　　            :   strPassWord:初期化パスワード
+'　　            :   strPgId:更新プログラムID
+'　　            :   strTanto:更新担当者ID
+'　　            :   intSedaiNo:世代番号(MAX + 1)
+'
+'戻り値          :   fncUserTorokuAdd = -1(True):正常終了
+'　　　          :   fncUserTorokuAdd =  0(False):異常終了
+'
+'日付         担当               内容
+'------------ ----------------- --------------------------------------
+'2008/07/15   K.Furuya<SRA>     新規作成
+'=====================================================================
+Private Function fncUserTorokuAdd(ByVal strSyokiFlg As String, _
+                                  ByVal strUsrID As String, _
+                                  ByVal strKnGnKbn As String, _
+                                  ByVal strSei As String, _
+                                  ByVal strMei As String, _
+                                  ByVal strPassWord As String, _
+                                  ByVal strPgId As String, _
+                                  ByVal strTanto As String, _
+                                  Optional ByVal strLockKbn As String = "3", _
+                                  Optional ByVal lngSedaiNo As Long = 0) As Integer
+    
+    Dim sSql            As String
+    Dim Ret             As Integer
+    
+    fncUserTorokuAdd = False
+        
+    'DB接続文字列作成---------------------------------------------------------------------------------------------
+    Ret = DBAccessString(strDBConnect)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+        Exit Function
+    End If
+    '-------------------------------------------------------------------------------------------------------------
+    
+    'DB接続-------------------------------------------------------------------------------------------------------
+    Ret = DBOpen(strDBConnect, Conn)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+        Exit Function
+    End If
+        
+    sSql = gstrUser_ForSelect(strUsrID)
+    
+    
+    'レコードセットの作成
+    If (gfncDyCreate(sSql, Conn, RS) = False) Then
+        GoTo ErrorExit
+    End If
+    
+    'レコード件数取得してゼロ件の場合は処理終了
+    If RS.EOF = True Then
+        GoTo ErrorExit
+    End If
+    
+    'レコードセットクローズ
+    RS.Close
+    
+    
+    'トランザクションを開始する
+    If Not gblnDbBeginTrans(Conn, RS) Then
+        GoTo ErrorExit
+    End If
+        
+    'ユーザ属性アップデートSQLを生成する
+    sSql = gstrUserZokusei_ForUpdate(strSyokiFlg, strUsrID, strKnGnKbn, strSei, _
+                                    strMei, strPgId, strTanto, strLockKbn)
+    
+    'ユーザテーブルに登録する
+    If Not gblnDbExec(sSql, Conn, RS) Then
+        '登録失敗の場合はロールバックする
+        If Not gblnDbRollback(Conn, RS) Then
+        End If
+        GoTo ErrorExit
+    End If
+        
+    'パスワード初期化の場合初期化パスワードを新規登録する
+    If strSyokiFlg = "1" Then
+        'パスワード属性インサートSQLを生成する
+        sSql = gstrPwdZokusei_ForInsert(strUsrID, strPassWord, strPgId, strTanto, lngSedaiNo)
+        
+        'パスワードテーブルに新規登録する
+        If Not gblnDbExec(sSql, Conn, RS) Then
+            '登録失敗の場合はロールバックする
+            If Not gblnDbRollback(Conn, RS) Then
+            End If
+            GoTo ErrorExit
+        End If
+        
+        'パスワードの暗号化SQLを生成する
+        sSql = strPassWoed_ForUpdate(strUsrID, lngSedaiNo)
+        
+        'パスワードを暗号化する
+        If Not gblnDbExec(sSql, Conn, RS) Then
+            '登録失敗の場合はロールバックする
+            If Not gblnDbRollback(Conn, RS) Then
+            End If
+            GoTo ErrorExit
+        End If
+    End If
+        
+    '成功の場合はコミットする
+    If Not gblnDbCommitTrans(Conn, RS) Then
+        GoTo ErrorExit
+    End If
+    
+    
+    'DBクローズ処理
+    Ret = DBClose(Conn, RS)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+    End If
+    
+    fncUserTorokuAdd = True
+    
+    Exit Function
+ErrorExit:
+    'DBクローズ処理
+    Ret = DBClose(Conn, RS)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+    End If
+
+End Function
+
+
+'=====================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   fncKnriLogOut
+'機能            :   ユーザログの出力
+'
+'引数            :   strSinki_Flg: "1" = 新規、"2" = 更新
+'　　            :   strUsrID:ユーザID
+'　　            :   strSei:姓
+'　　            :   strMei:名
+'　　            :   strPassWord:初期化パスワード
+'
+'戻り値          :   fncChekUsrZokusei = -1(True):正常終了
+'　　　          :   fncChekUsrZokusei =  0(False):異常終了
+'
+'日付         担当               内容
+'------------ ----------------- --------------------------------------
+'2008/07/11   K.Furuya<SRA>     新規作成
+'=====================================================================
+Private Function fncKnriLogOut() As Integer
+    Dim strLogMsgLen        As String '操作ログメッセージ連結文字列
+    Dim Ret                 As Integer
+    
+    fncKnriLogOut = False
+    
+    '変数初期化
+    strLogMsgLen = ""
+    
+    '新規ユーザ登録の場合
+    If opt_UsrNew.Value = True Then
+        '新規登録のメッセージのみ
+        strLogMsgLen = CON_LOGMSG_01 & strUserID_NEW
+    Else
+    '既存ユーザ変更登録の場合
+        '既存ユーザ変更登録の文言を格納
+        strLogMsgLen = CON_LOGMSG_02 & strUserID_OLD
+        
+        '権限区分が変更に成っている場合
+        If Trim(strKengenkbn_OLD) <> Trim(strKengenkbn_NEW) Then
+            '権限が管理者から一般に変わっている場合
+            If Trim(strKengenkbn_NEW) = "A" Then
+                strLogMsgLen = strLogMsgLen & CON_LOGMSG_00 & CON_LOGMSG_04 & strUserID_OLD
+            ElseIf Trim(strKengenkbn_NEW) = "U" Then
+            '権限が一般から管理者に変わっている場合
+                strLogMsgLen = strLogMsgLen & CON_LOGMSG_00 & CON_LOGMSG_03 & strUserID_OLD
+            End If
+        End If
+        
+        'ユーザロックが変更に成っている場合
+        If Trim(strLockKbn_OLD) <> Trim(strLockKbn_NEW) Then
+            'ユーザロックが解除されている場合
+            If Trim(strLockKbn_NEW) = "0" Then
+                strLogMsgLen = strLogMsgLen & CON_LOGMSG_00 & CON_LOGMSG_05 & strUserID_OLD
+            ElseIf Trim(strLockKbn_NEW) = "2" Then
+            'ID無効化の場合
+                strLogMsgLen = strLogMsgLen & CON_LOGMSG_00 & CON_LOGMSG_06 & strUserID_OLD
+            ElseIf Trim(strLockKbn_NEW) = "1" Then
+            '想定外のユーザロックがされている場合
+                strLogMsgLen = strLogMsgLen & CON_LOGMSG_00 & CON_LOGMSG_07 & strUserID_OLD
+            End If
+        End If
+        
+        '初期化パスワードが入力されている場合
+        If Trim(strPassWord_NEW) <> "" Then
+            strLogMsgLen = strLogMsgLen & CON_LOGMSG_00 & CON_LOGMSG_08 & strUserID_OLD
+        End If
+    End If
+    
+    'DB接続文字列作成---------------------------------------------------------------------------------------------
+    Ret = DBAccessString(strDBConnect)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+        Exit Function
+    End If
+    '-------------------------------------------------------------------------------------------------------------
+    
+    'DB接続-------------------------------------------------------------------------------------------------------
+    Ret = DBOpen(strDBConnect, Conn)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+        Exit Function
+    End If
+    
+    'ログ出力関数を呼びだす
+    If gfncLogOutPut(CON_TANTO_ID, strLogMsgLen, CON_PGM_ID, Conn, RS) = False Then
+        GoTo ErrorExit
+    End If
+
+    'DBクローズ処理
+    Ret = DBClose(Conn, RS)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+    End If
+
+    fncKnriLogOut = True
+    
+    Exit Function
+ErrorExit:
+    'DBクローズ処理
+    Ret = DBClose(Conn, RS)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+    End If
+
+End Function
+
+Private Sub UserForm_Initialize()
+    'テキストボックスのIMEモードを半角入力専用に設定する
+    txt_UsrID.IMEMode = fmIMEModeDisable
+    txt_InitialPwd.IMEMode = fmIMEModeDisable
+    
+End Sub
+
+

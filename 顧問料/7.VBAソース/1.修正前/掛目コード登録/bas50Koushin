@@ -1,0 +1,1099 @@
+Attribute VB_Name = "bas50Koushin"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：国内顧問料・掛目コード登録
+'
+'オブジェクト名：bas50Koushin
+'
+'機能概要　：更新処理
+'
+'更新履歴　：2006/11/30 SRA 東       新規作成
+'
+'*************************************************************************
+
+Const MODULE_NAME = "bas50Koushin"
+
+Const UPDATE_USER = "APL001"
+Const UPDATE_PGM_ID = "掛目コード登録"
+
+
+
+
+'*************************************************************************
+'関数名　　：更新処理メイン
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：更新ボタンを押下された場合の処理
+'
+'更新履歴　：2006/11/30 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Sub gsub_KoushinMain(ByRef objTarget As Object)
+
+On Error GoTo Error_Section
+
+    Dim blnRet      As Boolean
+    Dim strMsg      As String
+    Dim lngRet      As Long
+    
+    Dim dtUpdateYmd As Date
+    blnRet = False
+    
+
+    Application.ScreenUpdating = False
+    
+    
+    '入力チェック処理(更新時)
+    blnRet = gfunc_UpdInputCheck(Worksheets(MAIN_SHEETNAME))
+
+    If blnRet = False Then
+        Application.ScreenUpdating = True
+        Exit Sub
+    End If
+    
+    
+    '更新確認
+    strMsg = gfunc_ErrorMsg(2, 11500, "", "", False)
+    lngRet = MsgBox(strMsg, vbQuestion + vbOKCancel, Application.ActiveWorkbook.Name)
+    If lngRet = vbCancel Then
+        
+        Exit Sub
+    End If
+    
+    blnRet = False
+    
+    Call sub_SetFugouTable
+    
+    '更新処理
+    blnRet = gfunc_DoUpdate(Worksheets(MAIN_SHEETNAME), dtUpdateYmd)
+
+    If blnRet = False Then
+    '更新エラー
+        Call gfunc_ErrorMsg(1, 11501, "", "", True)
+
+        Application.ScreenUpdating = True
+
+        Exit Sub
+    Else
+    '更新成功
+
+        '更新日時の設定
+        Call gCom01_SheetProtect(Worksheets(MAIN_SHEETNAME), False)
+        Worksheets(MAIN_SHEETNAME).Range("検索時更新日").Value = dtUpdateYmd
+        Call gCom01_SheetProtect(Worksheets(MAIN_SHEETNAME), True)
+
+        Application.ScreenUpdating = True
+
+        'メッセージ
+        Call gfunc_ErrorMsg(1, 11502, "", "", True)
+    End If
+    
+    Application.ScreenUpdating = True
+    
+    Exit Sub
+Error_Section:
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(MODULE_NAME, "cmdUp_Click", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Application.ScreenUpdating = True
+    
+
+
+End Sub
+
+
+
+
+'*************************************************************************
+'関数名　　：入力チェック処理(更新時)
+'
+'引　　数　：
+'           TargetSheets        I           チェック対象のシート
+'           Sisan1()            O           一般資産           構造体
+'           Sisan2()            O           月末顧問料調整資産  構造体
+'           Sisan3()            O           T21調整資産        構造体
+'
+'戻り値　　：Boolean
+'
+'機能説明　：メインシートの更新時入力チェックを行い
+'
+'更新履歴　：2006/11/30 SRA Y.Azuma    新規作成
+'更新履歴　：2008/01/21 SRA Y.Azuma    変更     (PH4)特殊文字バグ対応
+'
+'*************************************************************************
+Public Function gfunc_UpdInputCheck(ByRef TargetSheets As Object) As Boolean
+On Error GoTo ErrorSection
+
+
+    Dim lngRow          As Long
+    Dim lngCol          As Long
+    Dim blnRet          As Boolean
+    Dim strBuff_Pre     As String
+    Dim strBuff_Cur     As String
+    Dim strRate         As String
+    Dim dblRate_Pre     As Double
+    Dim dblRate_Cur     As Double
+    Dim strKakeme_A     As String
+    Dim strKakeme_B     As String
+    Dim strFugou        As String
+
+
+    gfunc_UpdInputCheck = False
+    strBuff_Pre = "XXXX"
+    strBuff_Cur = ""
+    strKakeme_A = ""
+    strKakeme_B = ""
+    strFugou = ""
+    
+    dblRate_Pre = -1
+    dblRate_Cur = 0
+
+    '掛目コードの必須チェック & 掛目コードの桁数チェック
+    blnRet = gfuncKakemCodeInputCheck(TargetSheets)
+    If blnRet = False Then
+        TargetSheets.Range("掛目コード").Select
+        Exit Function
+    End If
+    
+    blnRet = False
+    
+    '掛目名の必須チェック
+    If Trim(TargetSheets.Range("掛目名称").Value) = "" Then
+'            MsgBox "掛目名が未入力です。"
+        Application.ScreenUpdating = True
+        Call gfunc_ErrorMsg(3, 11503, "掛目名称", "")
+        TargetSheets.Range("掛目名称").Select
+        Exit Function
+    End If
+    
+    '掛目名のレングスチェック
+    If LenB(StrConv(TargetSheets.Range("掛目名称").Value, vbFromUnicode)) > 36 Then
+        Application.ScreenUpdating = True
+        Call gfunc_ErrorMsg(3, 11516, "掛目名称", "全角１８文字以内又は半角３６文字以内で入力して下さい。")
+        TargetSheets.Range("掛目名称").Select
+        Exit Function
+    End If
+    
+    
+    For lngRow = TargetSheets.Range("収益率").ROW + 1 To TargetSheets.Range("収益率").ROW + 10
+        
+        strRate = ""
+        strBuff_Cur = ""
+        dblRate_Cur = 0
+        strKakeme_A = ""
+        strKakeme_B = ""
+        strFugou = ""
+
+        '収益率のチェック
+        lngCol = TargetSheets.Range("収益率").Column
+        strRate = TargetSheets.Range(Cells(lngRow, lngCol), Cells(lngRow, lngCol)).Value
+        strRate = StrConv(strRate, vbNarrow)
+        TargetSheets.Range(Cells(lngRow, lngCol), Cells(lngRow, lngCol)).Value = strRate
+        If Trim(strRate) <> "" Then
+            
+            '収益率の数値チェック
+'------------<Modify Start azuma 2008/01/21 (PH4)> ★★★☆-----------------------
+'            If IsNumeric(strRate) = False Then
+            If gkyk_IsNumeric(strRate) = False Then
+'------------<Modify End   azuma 2008/01/21 (PH4)> ★★★☆-----------------------
+                Application.ScreenUpdating = True
+                Call gfunc_ErrorMsg(3, 11504, "収益率差分範囲(%)又は基準収益率範囲(%)", lngRow - TargetSheets.Range("収益率").ROW + 0 & "行目")
+'                MsgBox "収益率が数値以外です。" & vbCrLf & lngRow - TargetSheets.Range("収益率").ROW + 1 & "行目"
+                TargetSheets.Range(Cells(lngRow, lngCol), Cells(lngRow, lngCol)).Select
+                Exit Function
+            End If
+            strBuff_Cur = strBuff_Cur & strRate
+            
+            '収益率の重複チェック
+            dblRate_Cur = CDbl(strRate)
+            If lngRow > TargetSheets.Range("収益率").ROW + 2 And dblRate_Cur <= dblRate_Pre Then
+                Application.ScreenUpdating = True
+                Call gfunc_ErrorMsg(3, 11505, "収益率差分範囲(%)又は基準収益率範囲(%)", lngRow - TargetSheets.Range("収益率").ROW + 0 & "行目")
+'                MsgBox "収益率の範囲が重複しています。" & vbCrLf & lngRow - TargetSheets.Range("収益率").ROW + 1 & "行目"
+                TargetSheets.Range(Cells(lngRow, lngCol), Cells(lngRow, lngCol)).Select
+                Exit Function
+            End If
+            dblRate_Pre = dblRate_Cur
+            
+            '収益率のレングスチェック
+            If lngRow > (TargetSheets.Range("収益率").ROW + 1) And (CDbl(strRate) < -999.9999 Or CDbl(strRate) > 999.9999) Then
+                Application.ScreenUpdating = True
+                Call gfunc_ErrorMsg(3, 11514, "収益率差分範囲(%)又は基準収益率範囲(%)", "-999,9999～999.9999の範囲で入力して下さい。" & vbCrLf & lngRow - TargetSheets.Range("収益率").ROW + 0 & "行目")
+                TargetSheets.Range(Cells(lngRow, lngCol), Cells(lngRow, lngCol)).Select
+                Exit Function
+            End If
+
+'            '収益率のレングスチェック１（7桁以下）
+'            If lngRow > (TargetSheets.Range("収益率").ROW + 1) And Len(strRate) > 7 Then
+'                Application.ScreenUpdating = True
+'                Call gfunc_ErrorMsg(3, 11514, "収益率", "7桁以下で入力して下さい。" & vbCrLf & lngRow - TargetSheets.Range("収益率").ROW + 0 & "行目")
+''                MsgBox "収益率の範囲が重複しています。" & vbCrLf & lngRow - TargetSheets.Range("収益率").ROW + 1 & "行目"
+'                TargetSheets.Range(Cells(lngRow, lngCol), Cells(lngRow, lngCol)).Select
+'                Exit Function
+'            End If
+'
+            '収益率のレングスチェック２（小数点以下4桁以下）
+            If lngRow > (TargetSheets.Range("収益率").ROW + 1) And (Len(strRate) - InStr(1, strRate, ".")) > 4 Then
+                Application.ScreenUpdating = True
+                Call gfunc_ErrorMsg(3, 11515, "収益率差分範囲(%)又は基準収益率範囲(%)", "小数点以下は4桁以下で入力して下さい。" & vbCrLf & lngRow - TargetSheets.Range("収益率").ROW + 0 & "行目")
+'                MsgBox "収益率の範囲が重複しています。" & vbCrLf & lngRow - TargetSheets.Range("収益率").ROW + 1 & "行目"
+                TargetSheets.Range(Cells(lngRow, lngCol), Cells(lngRow, lngCol)).Select
+                Exit Function
+            End If
+            
+            
+            '符号の必須チェック
+            lngCol = TargetSheets.Range("符号").Column
+            If Trim(TargetSheets.Range(Cells(lngRow, lngCol), Cells(lngRow, lngCol)).Value) = "" Then
+                Application.ScreenUpdating = True
+                Call gfunc_ErrorMsg(3, 11506, "符号", lngRow - TargetSheets.Range("収益率").ROW + 0 & "行目")
+'                MsgBox "符号が未選択です。" & vbCrLf & lngRow - TargetSheets.Range("収益率").ROW + 1 & "行目"
+                TargetSheets.Range(Cells(lngRow, lngCol), Cells(lngRow, lngCol)).Select
+                Exit Function
+            End If
+            
+        Else
+        '未入力
+            '２行目のみエラーとする。
+            If lngRow - TargetSheets.Range("収益率").ROW = 2 Then
+                Application.ScreenUpdating = True
+                Call gfunc_ErrorMsg(3, 11517, "収益率差分範囲(%)又は基準収益率範囲(%)", lngRow - TargetSheets.Range("収益率").ROW + 0 & "行目")
+                TargetSheets.Range(Cells(lngRow, lngCol), Cells(lngRow, lngCol)).Select
+                Exit Function
+            End If
+        End If
+        
+         '符号
+        lngCol = TargetSheets.Range("符号").Column
+        strFugou = TargetSheets.Range(Cells(lngRow, lngCol), Cells(lngRow, lngCol)).Value
+        '２行目のみ必須エラーとする。
+        If (lngRow - TargetSheets.Range("収益率").ROW) = 2 And Trim(strFugou) = "" Then
+            Application.ScreenUpdating = True
+            Call gfunc_ErrorMsg(3, 11518, "符号", lngRow - TargetSheets.Range("収益率").ROW + 0 & "行目")
+            TargetSheets.Range(Cells(lngRow, lngCol), Cells(lngRow, lngCol)).Select
+            Exit Function
+        End If
+        strBuff_Cur = strBuff_Cur & strFugou
+        
+        
+        '掛目Aの数値チェック
+        lngCol = TargetSheets.Range("A").Column
+        strKakeme_A = TargetSheets.Range(Cells(lngRow, lngCol), Cells(lngRow, lngCol)).Value
+        strKakeme_A = StrConv(strKakeme_A, vbNarrow)
+        TargetSheets.Range(Cells(lngRow, lngCol), Cells(lngRow, lngCol)).Value = strKakeme_A
+        If Trim(strKakeme_A) <> "" Then
+'------------<Modify Start azuma 2008/01/21 (PH4)> ★★★☆-----------------------
+'            If IsNumeric(strKakeme_A) = False Then
+            If gkyk_IsNumeric(strKakeme_A) = False Then
+'------------<Modify End   azuma 2008/01/21 (PH4)> ★★★☆-----------------------
+                Application.ScreenUpdating = True
+                Call gfunc_ErrorMsg(3, 11507, "掛目Ａ", lngRow - TargetSheets.Range("収益率").ROW + 0 & "行目")
+'                MsgBox "Aが数値以外です。" & vbCrLf & lngRow - TargetSheets.Range("収益率").ROW + 1 & "行目"
+                TargetSheets.Range(Cells(lngRow, lngCol), Cells(lngRow, lngCol)).Select
+                Exit Function
+            End If
+            strBuff_Cur = strBuff_Cur & strKakeme_A
+        
+            'レングスチェック
+'------------<Modify Start azuma 2007/01/10 > -----------------------
+            If lngRow > (TargetSheets.Range("収益率").ROW) And (CDbl(strKakeme_A) < -999.9999 Or CDbl(strKakeme_A) > 999.9999) Then
+'            If lngRow > (TargetSheets.Range("収益率").ROW + 1) And (CDbl(strKakeme_A) < -999.9999 Or CDbl(strKakeme_A) > 999.9999) Then
+'------------<Modify End   azuma 2007/01/10 > -----------------------
+                Application.ScreenUpdating = True
+                Call gfunc_ErrorMsg(3, 11525, "掛目Ａ", "-999,9999～999.9999の範囲で入力して下さい。" & vbCrLf & lngRow - TargetSheets.Range("収益率").ROW + 0 & "行目")
+                TargetSheets.Range(Cells(lngRow, lngCol), Cells(lngRow, lngCol)).Select
+                Exit Function
+            End If
+        
+            'レングスチェック２（小数点以下4桁以下）
+'------------<Modify Start azuma 2007/01/10 > -----------------------
+            If lngRow > (TargetSheets.Range("収益率").ROW) And (Len(strKakeme_A) - InStr(1, strKakeme_A, ".")) > 4 Then
+'            If lngRow > (TargetSheets.Range("収益率").ROW + 1) And (Len(strKakeme_A) - InStr(1, strKakeme_A, ".")) > 4 Then
+'------------<Modify End   azuma 2007/01/10 > -----------------------
+                Application.ScreenUpdating = True
+                Call gfunc_ErrorMsg(3, 11528, "掛目Ａ", "小数点以下は4桁以下で入力して下さい。" & vbCrLf & lngRow - TargetSheets.Range("収益率").ROW + 0 & "行目")
+                TargetSheets.Range(Cells(lngRow, lngCol), Cells(lngRow, lngCol)).Select
+                Exit Function
+            End If
+            
+        
+        End If
+        
+        
+        
+        '掛目Bの数値チェック
+        lngCol = TargetSheets.Range("B").Column
+        strKakeme_B = TargetSheets.Range(Cells(lngRow, lngCol), Cells(lngRow, lngCol)).Value
+        strKakeme_B = StrConv(strKakeme_B, vbNarrow)
+        TargetSheets.Range(Cells(lngRow, lngCol), Cells(lngRow, lngCol)).Value = strKakeme_B
+        If Trim(strKakeme_B) <> "" Then
+'------------<Modify Start azuma 2008/01/21 (PH4)> ★★★☆-----------------------
+'            If IsNumeric(strKakeme_B) = False Then
+            If gkyk_IsNumeric(strKakeme_B) = False Then
+'------------<Modify End   azuma 2008/01/21 (PH4)> ★★★☆-----------------------
+                Application.ScreenUpdating = True
+                Call gfunc_ErrorMsg(3, 11508, "掛目Ｂ", lngRow - TargetSheets.Range("収益率").ROW + 0 & "行目")
+'                MsgBox "Bが数値以外です。" & vbCrLf & lngRow - TargetSheets.Range("収益率").ROW + 1 & "行目"
+                TargetSheets.Range(Cells(lngRow, lngCol), Cells(lngRow, lngCol)).Select
+                Exit Function
+            End If
+            strBuff_Cur = strBuff_Cur & strKakeme_B
+            
+            'レングスチェック
+'------------<Modify Start azuma 2007/01/10 > -----------------------
+            If lngRow > (TargetSheets.Range("収益率").ROW) And (CDbl(strKakeme_B) < -999.9999 Or CDbl(strKakeme_B) > 999.9999) Then
+'            If lngRow > (TargetSheets.Range("収益率").ROW + 1) And (CDbl(strKakeme_B) < -999.9999 Or CDbl(strKakeme_B) > 999.9999) Then
+'------------<Modify End   azuma 2007/01/10 > -----------------------
+                Application.ScreenUpdating = True
+                Call gfunc_ErrorMsg(3, 11526, "掛目Ｂ", "-999,9999～999.9999の範囲で入力して下さい。" & vbCrLf & lngRow - TargetSheets.Range("収益率").ROW + 0 & "行目")
+                TargetSheets.Range(Cells(lngRow, lngCol), Cells(lngRow, lngCol)).Select
+                Exit Function
+            End If
+        
+            'レングスチェック２（小数点以下4桁以下）
+'------------<Modify Start azuma 2007/01/10 > -----------------------
+            If lngRow > (TargetSheets.Range("収益率").ROW) And (Len(strKakeme_B) - InStr(1, strKakeme_B, ".")) > 4 Then
+'            If lngRow > (TargetSheets.Range("収益率").ROW + 1) And (Len(strKakeme_B) - InStr(1, strKakeme_B, ".")) > 4 Then
+'------------<Modify End   azuma 2007/01/10 > -----------------------
+                Application.ScreenUpdating = True
+                Call gfunc_ErrorMsg(3, 11529, "掛目Ｂ", "小数点以下は4桁以下で入力して下さい。" & vbCrLf & lngRow - TargetSheets.Range("収益率").ROW + 0 & "行目")
+                TargetSheets.Range(Cells(lngRow, lngCol), Cells(lngRow, lngCol)).Select
+                Exit Function
+            End If
+            
+        
+        End If
+    
+'        '掛目AB未入力チェック
+'        If Trim(strBuff_Cur) <> "" And Trim(strKakeme_A) = "" And Trim(strKakeme_B) = "" Then
+'            Application.ScreenUpdating = True
+'            Call gfunc_ErrorMsg(3, 11509, "掛目Ａ、Ｂ", lngRow - TargetSheets.Range("収益率").ROW + 0 & "行目")
+''            MsgBox "掛目がA、B共に未入力です。" & vbCrLf & lngRow - TargetSheets.Range("収益率").ROW + 1 & "行目"
+'            Exit Function
+'        End If
+        
+        '収益率入力あり掛目A未入力チェック
+        If Trim(strRate) <> "" And Trim(strKakeme_A) = "" Then
+            Application.ScreenUpdating = True
+            Call gfunc_ErrorMsg(3, 11523, "掛目Ａ", lngRow - TargetSheets.Range("収益率").ROW + 0 & "行目")
+            Exit Function
+        End If
+        
+        '収益率入力あり掛目B未入力チェック
+        If Trim(strRate) <> "" And Trim(strKakeme_B) = "" Then
+            Application.ScreenUpdating = True
+            Call gfunc_ErrorMsg(3, 11524, "掛目Ｂ", lngRow - TargetSheets.Range("収益率").ROW + 0 & "行目")
+            Exit Function
+        End If
+        
+        
+        '符号入力あり掛目A未入力チェック
+        If Trim(strFugou) <> "" And Trim(strKakeme_A) = "" Then
+            Application.ScreenUpdating = True
+            Call gfunc_ErrorMsg(3, 11521, "掛目Ａ", lngRow - TargetSheets.Range("収益率").ROW + 0 & "行目")
+            Exit Function
+        End If
+        
+        '符号入力あり掛目B未入力チェック
+        If Trim(strFugou) <> "" And Trim(strKakeme_B) = "" Then
+            Application.ScreenUpdating = True
+            Call gfunc_ErrorMsg(3, 11522, "掛目Ｂ", lngRow - TargetSheets.Range("収益率").ROW + 0 & "行目")
+            Exit Function
+        End If
+        
+        
+        '掛目A未入力チェック(2行目のみ)
+        If (lngRow - TargetSheets.Range("収益率").ROW) = 2 And Trim(strKakeme_A) = "" Then
+            Application.ScreenUpdating = True
+            Call gfunc_ErrorMsg(3, 11519, "掛目Ａ", lngRow - TargetSheets.Range("収益率").ROW + 0 & "行目")
+            Exit Function
+        End If
+        
+        
+        '掛目B未入力チェック(2行目のみ)
+        If (lngRow - TargetSheets.Range("収益率").ROW) = 2 And Trim(strKakeme_B) = "" Then
+            Application.ScreenUpdating = True
+            Call gfunc_ErrorMsg(3, 11520, "掛目Ｂ", lngRow - TargetSheets.Range("収益率").ROW + 0 & "行目")
+            Exit Function
+        End If
+        
+        
+        '収益率未入力チェック
+        If Trim(strBuff_Cur) <> "" And Trim(strRate) = "" Then
+            Application.ScreenUpdating = True
+            Call gfunc_ErrorMsg(3, 11510, "収益率差分範囲(%)又は基準収益率範囲(%)", lngRow - TargetSheets.Range("収益率").ROW + 0 & "行目")
+'            MsgBox "収益率が未入力です。" & vbCrLf & lngRow - TargetSheets.Range("収益率").ROW + 1 & "行目"
+            Exit Function
+        End If
+        
+        
+        '空行チェック
+        If Trim(strBuff_Pre) = "" And Trim(strBuff_Cur) <> "" Then
+        
+            Application.ScreenUpdating = True
+            Call gfunc_ErrorMsg(3, 11511, "", lngRow - TargetSheets.Range("収益率").ROW - 1 & "行目")
+'            MsgBox "間に空行があります。" & vbCrLf & lngRow - TargetSheets.Range("収益率").ROW & "行目"
+            Exit Function
+        
+        End If
+        strBuff_Pre = strBuff_Cur
+
+    
+    Next lngRow
+    
+
+    gfunc_UpdInputCheck = True
+
+    Exit Function
+
+ErrorSection:
+
+    gfunc_UpdInputCheck = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(MODULE_NAME, "gfunc_UpdInputCheck", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+
+End Function
+
+
+
+
+'*************************************************************************
+'関数名　　：更新処理(メイン)
+'
+'引　　数　：
+'           TargetSheets        I           チェック対象のシート
+'
+'戻り値　　：Boolean
+'
+'機能説明　：更新
+'
+'更新履歴　：2006/11/30 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Function gfunc_DoUpdate(ByRef TargetSheets As Object, ByRef dtUpdateYmd As Date) As Boolean
+
+
+On Error GoTo ErrorSection
+
+    Dim dtKoushinYmdFirst   As Date         '検索時　更新日付
+    Dim strKakemeCd         As String       '掛目コード
+    Dim strError            As String
+    Dim lngStatus           As Long         '更新済みチェックのステータス
+    Dim lngMsgId            As Long         'エラーメッセージID
+    Dim strDate             As String
+    Dim strTime             As String
+    Dim blnInsFlg           As Boolean      '新規登録フラグ(True:Insert,False:Update)
+    Dim lngRow              As Long
+
+
+    gfunc_DoUpdate = False
+    
+    blnInsFlg = False
+
+    '検索時の更新日付を取得
+    dtKoushinYmdFirst = func_GetKoushinYmdFirst
+
+    '掛目コード　取得
+    strKakemeCd = Trim(TargetSheets.Range("掛目コード").Value)
+
+
+    'トランザクション開始
+    cnAdo.BeginTrans
+
+    '更新済みチェックと排他処理
+    If func_UpdateCheck(TargetSheets, dtKoushinYmdFirst, lngStatus, lngRow) = False Then
+
+        If lngStatus = 1 Or lngStatus = 2 Then
+            '0:正常,1:ロック,2:削除済,-1:その他
+            Select Case lngStatus
+                Case 1
+                '他セッションからのロック
+                    lngMsgId = 11512
+                Case 2
+                '更新済み
+                    If dtKoushinYmdFirst = 0 Then
+                    '重複登録
+                        lngMsgId = 11527
+                    Else
+                    '他端末更新
+                        lngMsgId = 11513
+                    End If
+            End Select
+
+            'エラーメッセージ出力
+            Call gfunc_ErrorMsg(3, lngMsgId, "", "")
+        End If
+
+        GoTo RollbackSection
+        Exit Function
+    End If
+
+    'サーバ日付の取得
+    Call gfunc_GetSvDateTime(strDate, strTime)
+
+    '更新日用の日付作成
+    dtUpdateYmd = CDate(gfunc_ymdFormat(strDate) & " " _
+        & Mid(strTime, 1, 2) & ":" & Mid(strTime, 3, 2) & ":" & Mid(strTime, 5, 2))
+
+    '処理方法のフラグ設定
+    If lngRow <= 0 Then
+    '新規登録
+        blnInsFlg = True
+    Else
+    '更新
+        blnInsFlg = False
+    End If
+    
+
+    '掛目名テーブルへの処理
+    If func_KAKEME_NAME(TargetSheets _
+                      , strKakemeCd _
+                      , dtUpdateYmd _
+                      , blnInsFlg _
+                      , strError) = False Then
+        GoTo RollbackSection
+        Exit Function
+    End If
+
+
+    '掛目テーブルへの処理
+    If func_KAKEME(TargetSheets _
+                 , strKakemeCd _
+                 , dtUpdateYmd _
+                 , blnInsFlg _
+                 , strError) = False Then
+        GoTo RollbackSection
+        Exit Function
+    End If
+
+
+    'コミット
+    cnAdo.CommitTrans
+
+
+    gfunc_DoUpdate = True
+
+    Exit Function
+
+RollbackSection:
+    'ロールバック
+    cnAdo.RollbackTrans
+
+    gfunc_DoUpdate = False
+    Exit Function
+
+ErrorSection:
+
+    gfunc_DoUpdate = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(MODULE_NAME, "gfunc_DoUpdate", Err.Number, Err.Description)
+    On Error GoTo 0
+    On Error Resume Next
+    'ロールバック
+    cnAdo.RollbackTrans
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+
+
+End Function
+
+'
+'*************************************************************************
+'関数名　　：トランザクションチェック処理
+'
+'引　　数　：
+'           TargetSheets        I       処理対象ワークシート
+'           dtKoushinYmdFirst   I       検索時
+'           lngStatus           O       エラーステータス(0:正常,1:ロック,2:更新済,-1:その他)
+'           lngRow              O       検索数
+'
+'戻り値　　：なし
+'
+'機能説明　：掛目テーブルの排他・ロックチェック
+'
+'更新履歴　：2006/11/30 SRA Y.Azuma    新規作成
+'更新履歴　：2008/01/21 SRA Y.Azuma    変更     (PH4)特殊文字バグ対応
+'
+'*************************************************************************
+Public Function func_UpdateCheck(ByRef TargetSheets As Object _
+                                , ByVal dtKoushinYmdFirst As Date _
+                                , ByRef lngStatus As Long _
+                                , ByRef lngRow As Long _
+                                ) As Boolean
+
+On Error GoTo ErrorSection
+
+
+    Dim vData()                 As Variant
+    Dim strSql                  As String
+    Dim lngCol                  As Long
+    Dim strErrCode              As String
+    Dim blnRet                  As Boolean
+    Dim dtKoushinYmd            As Date         '
+    Dim strKakemeCd             As String
+
+
+    func_UpdateCheck = False
+
+    strErrCode = ""
+    lngStatus = -1
+
+
+    '掛目コード
+    strKakemeCd = TargetSheets.Range("掛目コード").Value2
+
+    strSql = ""
+    strSql = strSql & " SELECT"
+    strSql = strSql & "     KOUSHIN_YMD"
+    strSql = strSql & " FROM"
+    strSql = strSql & "     KYK_KAKEME_NAME"
+    strSql = strSql & " WHERE"
+'------------<Modify Start azuma 2008/01/21 (PH4)> ★★★☆-----------------------
+    strSql = strSql & "     KAKEME_CD ='" & func_ChkQuoteshon(strKakemeCd, "'") & "'"
+'    strSql = strSql & "     KAKEME_CD ='" & strKakemeCd & "'"
+'------------<Modify End   azuma 2008/01/21 (PH4)> ★★★☆-----------------------
+'    strSql = strSql & "     KAKEME_TABLE_NO =1 "
+'    strSql = strSql & "     SAKUJO_FLG='0'"
+    strSql = strSql & "  FOR UPDATE NOWAIT"
+
+    'データ取得
+    blnRet = gclsdb.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow, strErrCode)
+
+    If Trim(strErrCode) <> "" Then
+
+        If strErrCode = "ORA-00054" Then
+        '他セッションからのロック状態
+            lngStatus = 1
+        Else
+        'その他エラー
+            lngStatus = -1
+        End If
+
+        Exit Function
+    
+    End If
+
+    '更新日付の比較確認
+    If lngRow > 0 Then
+        If IsNull(vData(0, 0)) = False Then
+            If IsDate(vData(0, 0)) = True Then
+                dtKoushinYmd = Format(vData(0, 0), "yyyy/mm/dd") & " " & Format(vData(0, 0), "hh:mm:ss")
+                
+                If dtKoushinYmdFirst <> dtKoushinYmd Then
+                
+                    lngStatus = 2
+                    Exit Function
+                End If
+                
+            End If
+        End If
+    End If
+
+    lngStatus = 0
+    func_UpdateCheck = True
+
+    Exit Function
+
+ErrorSection:
+
+    func_UpdateCheck = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(MODULE_NAME, "func_UpdateCheck", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+
+End Function
+
+
+
+'*************************************************************************
+'関数名　　：顧問料請求期間テーブル登録処理
+'
+'引　　数　：
+'           TargetSheets        I       処理対象ワークシート
+'           strKakemeCd         I       掛目コード
+'           dtKoushinYmd   I       更新日
+'           blnInsFlg           I       新規登録フラグ(True:Insert,False:Update)
+'           strError            O       エラーコード
+'
+'戻り値　　：なし
+'
+'機能説明　：顧問料請求期間テーブルへ登録を行う
+'
+'更新履歴　：2006/11/30 SRA Y.Azuma    新規作成
+'更新履歴　：2008/01/21 SRA Y.Azuma    変更     (PH4)特殊文字バグ対応
+'
+'*************************************************************************
+Private Function func_KAKEME_NAME(ByVal TargetSheets As Object _
+                                    , ByVal strKakemeCd As String _
+                                    , ByVal dtKoushinYmd As Date _
+                                    , ByVal blnInsFlg As Boolean _
+                                    , ByRef strError As String) As Boolean
+
+On Error GoTo ErrorSection
+
+    Dim vData()                 As Variant
+    Dim strSql                  As String
+    Dim lngCol                  As Long
+    Dim lngRow                  As Long
+    Dim lngCnt                  As Long
+    Dim strErrCode              As String
+    Dim blnRet                  As Boolean
+    Dim strKakemeName           As String
+    Dim lngSyori                As Long
+    
+    Dim strKoushinYmd           As String
+    
+    
+    func_KAKEME_NAME = False
+    
+    With TargetSheets
+        strKakemeName = Trim(.Range("掛目名称").Value)
+    End With
+
+'------------<Modify Start azuma 2007/01/10 > -----------------------
+    strKoushinYmd = Format(dtKoushinYmd, "YYYY/MM/DD") & " " & Format(dtKoushinYmd, "hh:nn:ss")
+'------------<Modify End   azuma 2007/01/10 > -----------------------
+
+
+    If blnInsFlg Then
+    '新規登録
+        lngSyori = gcINSERT
+        
+        strSql = ""
+        strSql = strSql & " INSERT INTO KYK_KAKEME_NAME ("
+        strSql = strSql & " KAKEME_CD,"
+        strSql = strSql & " KAKEME_NAME,"
+        strSql = strSql & " TOHROKU_YMD,"
+        strSql = strSql & " KOUSHIN_YMD,"
+        strSql = strSql & " KOUSHIN_PGM_ID,"
+        strSql = strSql & " KOUSHIN_TANTOUSHA,"
+        strSql = strSql & " SAKUJO_FLG"
+        strSql = strSql & " )"
+        strSql = strSql & " VALUES"
+        strSql = strSql & "   ("
+'------------<Modify Start azuma 2008/01/21 (PH4)> ★★★☆-----------------------
+'        strSql = strSql & " '" & strKakemeCd & "'"
+'        strSql = strSql & ",'" & strKakemeName & "'"
+        strSql = strSql & " '" & func_ChkQuoteshon(strKakemeCd, "'") & "'"
+        strSql = strSql & ",'" & func_ChkQuoteshon(strKakemeName, "'") & "'"
+'------------<Modify End   azuma 2008/01/21 (PH4)> ★★★☆-----------------------
+'------------<Modify Start azuma 2007/01/10 > -----------------------
+        strSql = strSql & ",TO_date('" & strKoushinYmd & "','YYYY/MM/DD HH24:mi:ss')"
+        strSql = strSql & ",TO_date('" & strKoushinYmd & "','YYYY/MM/DD HH24:mi:ss')"
+'        strSql = strSql & ",TO_date('" & dtKoushinYmd & "','YYYY/MM/DD HH24:mi:ss')"
+'        strSql = strSql & ",TO_date('" & dtKoushinYmd & "','YYYY/MM/DD HH24:mi:ss')"
+'------------<Modify End   azuma 2007/01/10 > -----------------------
+        strSql = strSql & ",'" & UPDATE_PGM_ID & "'"
+        strSql = strSql & ",'" & UPDATE_USER & "'"
+        strSql = strSql & ",     '0'"
+        strSql = strSql & " )"
+    Else
+    '更新
+        lngSyori = gcUPDATE
+        
+        strSql = ""
+        strSql = strSql & " UPDATE"
+        strSql = strSql & "     KYK_KAKEME_NAME"
+        strSql = strSql & " SET"
+'------------<Modify Start azuma 2008/01/21 (PH4)> ★★★☆-----------------------
+        strSql = strSql & "     KAKEME_NAME       = '" & func_ChkQuoteshon(strKakemeName, "'") & "'"
+'        strSql = strSql & "     KAKEME_NAME       = '" & strKakemeName & "'"
+'------------<Modify End   azuma 2008/01/21 (PH4)> ★★★☆-----------------------
+'------------<Modify Start azuma 2007/01/10 > -----------------------
+        strSql = strSql & "    ,KOUSHIN_YMD       = TO_date('" & strKoushinYmd & "','YYYY/MM/DD HH24:mi:ss')"
+'        strSql = strSql & "    ,KOUSHIN_YMD       = TO_date('" & dtKoushinYmd & "','YYYY/MM/DD HH24:mi:ss')"
+'------------<Modify End   azuma 2007/01/10 > -----------------------
+        strSql = strSql & "    ,KOUSHIN_PGM_ID    = '" & UPDATE_PGM_ID & "'"
+        strSql = strSql & "    ,KOUSHIN_TANTOUSHA = '" & UPDATE_USER & "'"
+        strSql = strSql & "    ,SAKUJO_FLG        = '0'"
+        strSql = strSql & " WHERE"
+'------------<Modify Start azuma 2008/01/21 (PH4)> ★★★☆-----------------------
+'        strSql = strSql & "     KAKEME_CD = '" & strKakemeCd & "'"
+        strSql = strSql & "     KAKEME_CD = '" & func_ChkQuoteshon(strKakemeCd, "'") & "'"
+'------------<Modify End   azuma 2008/01/21 (PH4)> ★★★☆-----------------------
+    End If
+        
+        
+
+    '実行
+    blnRet = gclsdb.DoExequteSql(lngSyori, strSql, vData, lngCol, lngRow, strErrCode)
+
+
+    If blnRet = False Then
+        If Trim(strErrCode) <> "" Then
+            strError = strErrCode
+        End If
+
+        Exit Function
+    End If
+
+    Erase vData
+    func_KAKEME_NAME = True
+
+    Exit Function
+
+ErrorSection:
+
+    func_KAKEME_NAME = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(MODULE_NAME, "func_KAKEME_NAME", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Erase vData
+
+
+End Function
+
+'*************************************************************************
+'関数名　　：掛目テーブル登録処理
+'
+'引　　数　：
+'           TargetSheets        I       処理対象ワークシート
+'           strKakemeCd         I       掛目コード
+'           dtKoushinYmd   I       更新日
+'           blnInsFlg           I       新規登録フラグ(True:Insert,False:Update)
+'           strError            O       エラーコード
+'
+'
+'戻り値　　：なし
+'
+'機能説明　：掛目テーブルへの登録を行う
+'
+'更新履歴　：2006/11/30 SRA Y.Azuma    新規作成
+'更新履歴　：2008/01/21 SRA Y.Azuma    変更     (PH4)特殊文字バグ対応
+'
+'*************************************************************************
+Private Function func_KAKEME(ByVal TargetSheets As Object _
+                           , ByVal strKakemeCd As String _
+                           , ByVal dtKoushinYmd As Date _
+                           , ByVal blnInsFlg As Boolean _
+                           , ByRef strError As String) As Boolean
+
+On Error GoTo ErrorSection
+
+    Dim vData()                 As Variant
+    Dim strSql                  As String
+    Dim lngCol                  As Long
+    Dim lngRow                  As Long
+    Dim lngCnt                  As Long
+    Dim blnRet                  As Boolean
+    Dim strErrCode              As String
+    
+    Dim lngItem                 As Long
+    Dim strBuff                 As String
+    Dim lngDankai               As Long
+    Dim lngSyori                As Long
+    Dim lngTourokuZumi          As Long
+
+    Dim strKoushinYmd           As String
+
+'    Const ROW = 10
+
+    func_KAKEME = False
+    lngTourokuZumi = 0
+
+'------------<Modify Start azuma 2007/01/10 > -----------------------
+    strKoushinYmd = Format(dtKoushinYmd, "YYYY/MM/DD") & " " & Format(dtKoushinYmd, "hh:nn:ss")
+'------------<Modify End   azuma 2007/01/10 > -----------------------
+
+
+    '更新処理の場合、登録済みのデータを物理削除する。
+    If blnInsFlg = False Then
+        strSql = ""
+        strSql = strSql & " DELETE"
+        strSql = strSql & "     KYK_KAKEME"
+        strSql = strSql & " WHERE"
+'------------<Modify Start azuma 2008/01/21 (PH4)> ★★★☆-----------------------
+        strSql = strSql & "     KAKEME_CD = '" & func_ChkQuoteshon(strKakemeCd, "'") & "'"
+'        strSql = strSql & "     KAKEME_CD = '" & strKakemeCd & "'"
+'------------<Modify End   azuma 2008/01/21 (PH4)> ★★★☆-----------------------
+'        strSql = strSql & " UPDATE"
+'        strSql = strSql & "     KYK_KAKEME"
+'        strSql = strSql & " SET"
+'        strSql = strSql & "     SAKUJO_FLG        = '1'"
+'        strSql = strSql & " WHERE"
+'        strSql = strSql & "     KAKEME_CD = '" & strKakemeCd & "'"
+        '実行
+        blnRet = gclsdb.DoExequteSql(gcUPDATE, strSql, vData, lngCol, lngRow, strErrCode)
+        
+        If blnRet = False Then
+    
+            If Trim(strErrCode) <> "" Then
+                strError = strErrCode
+            End If
+    
+            Exit Function
+        End If
+        
+        lngTourokuZumi = lngRow
+    End If
+    
+    
+    For lngCnt = 1 To ROWS
+        strBuff = ""
+        strSql = ""
+        lngDankai = lngCnt
+        With TargetSheets
+                strBuff = strBuff & .Range("収益率").Offset(lngDankai, 0)
+                strBuff = strBuff & .Range("符号").Offset(lngDankai, 0)
+                strBuff = strBuff & .Range("A").Offset(lngDankai, 0)
+                strBuff = strBuff & .Range("B").Offset(lngDankai, 0)
+            
+    
+            If Trim(strBuff) <> "" Then
+'            If (blnInsFlg = True And Trim(strBuff) <> "") Or (lngTourokuZumi = 0 And Trim(strBuff) <> "") Then
+            '登録
+                lngSyori = gcINSERT
+                
+                strSql = ""
+                strSql = strSql & " INSERT INTO KYK_KAKEME ("
+                strSql = strSql & " KAKEME_CD,"
+                strSql = strSql & " KAKEME_TABLE_NO,"
+                strSql = strSql & " SHUEKI_RATE_HANI,"
+                strSql = strSql & " FUGOU,"
+                strSql = strSql & " A,"
+                strSql = strSql & " B,"
+                strSql = strSql & " TOHROKU_YMD,"
+                strSql = strSql & " KOUSHIN_YMD,"
+                strSql = strSql & " KOUSHIN_PGM_ID,"
+                strSql = strSql & " KOUSHIN_TANTOUSHA,"
+                strSql = strSql & " SAKUJO_FLG"
+                strSql = strSql & " )"
+                strSql = strSql & " VALUES"
+                strSql = strSql & "  ("
+'------------<Modify Start azuma 2008/01/21 (PH4)> ★★★☆-----------------------
+'                strSql = strSql & " '" & strKakemeCd & "'"
+                strSql = strSql & " '" & func_ChkQuoteshon(strKakemeCd, "'") & "'"
+'------------<Modify End   azuma 2008/01/21 (PH4)> ★★★☆-----------------------
+                strSql = strSql & ", " & lngDankai
+                strSql = strSql & ", " & IIf(Trim(.Range("収益率").Offset(lngDankai, 0)) = "", "NULL", CStr(.Range("収益率").Offset(lngDankai, 0)))
+                strSql = strSql & ", " & IIf(Trim(.Range("符号").Offset(lngDankai, 0)) = "", "NULL", func_GetFugouIndex(CStr(.Range("符号").Offset(lngDankai, 0))))
+                strSql = strSql & ", " & IIf(Trim(.Range("A").Offset(lngDankai, 0)) = "", "NULL", CStr(.Range("A").Offset(lngDankai, 0)))
+                strSql = strSql & ", " & IIf(Trim(.Range("B").Offset(lngDankai, 0)) = "", "NULL", CStr(.Range("B").Offset(lngDankai, 0)))
+'------------<Modify Start azuma 2007/01/10 > -----------------------
+                strSql = strSql & ",TO_date('" & strKoushinYmd & "','YYYY/MM/DD HH24:mi:ss')"
+                strSql = strSql & ",TO_date('" & strKoushinYmd & "','YYYY/MM/DD HH24:mi:ss')"
+'                strSql = strSql & ",TO_date('" & dtKoushinYmd & "','YYYY/MM/DD HH24:mi:ss')"
+'                strSql = strSql & ",TO_date('" & dtKoushinYmd & "','YYYY/MM/DD HH24:mi:ss')"
+'------------<Modify End   azuma 2007/01/10 > -----------------------
+                strSql = strSql & ",'" & UPDATE_PGM_ID & "'"
+                strSql = strSql & ",'" & UPDATE_USER & "'"
+                strSql = strSql & ",    '0'"
+                strSql = strSql & " )"
+        
+'            ElseIf blnInsFlg = False And Trim(strBuff) <> "" Then
+'            '更新
+'                lngSyori = gcUPDATE
+'
+'                strSql = ""
+'                strSql = strSql & " UPDATE"
+'                strSql = strSql & "     KYK_KAKEME"
+'                strSql = strSql & " SET"
+'                strSql = strSql & "     SHUEKI_RATE_HANI = " & IIf(Trim(.Range("収益率").Offset(lngDankai, 0)) = "", "NULL", CStr(.Range("収益率").Offset(lngDankai, 0)))
+'                strSql = strSql & "    ,FUGOU                  = " & IIf(Trim(.Range("符号").Offset(lngDankai, 0)) = "", "NULL", func_GetFugouIndex(CStr(.Range("符号").Offset(lngDankai, 0))))
+'                strSql = strSql & "    ,A                      = " & IIf(Trim(.Range("A").Offset(lngDankai, 0)) = "", "NULL", CStr(.Range("A").Offset(lngDankai, 0)))
+'                strSql = strSql & "    ,B                      = " & IIf(Trim(.Range("B").Offset(lngDankai, 0)) = "", "NULL", CStr(.Range("B").Offset(lngDankai, 0)))
+'                strSql = strSql & "    ,KOUSHIN_YMD            = TO_date('" & dtKoushinYmd & "','YYYY/MM/DD HH24:mi:ss')"
+'                strSql = strSql & "    ,KOUSHIN_PGM_ID         = '" & UPDATE_PGM_ID & "'"
+'                strSql = strSql & "    ,KOUSHIN_TANTOUSHA      = '" & UPDATE_USER & "'"
+'                strSql = strSql & "    ,SAKUJO_FLG             = '0'"
+'                strSql = strSql & " WHERE"
+'                strSql = strSql & "     KAKEME_CD = '" & strKakemeCd & "'"
+'                strSql = strSql & " AND KAKEME_TABLE_NO = " & lngDankai
+'
+            End If
+        End With
+        
+        '実行
+        If Trim(strSql) <> "" Then
+            blnRet = gclsdb.DoExequteSql(lngSyori, strSql, vData, lngCol, lngRow, strErrCode)
+    
+            If blnRet = False Then
+        
+                If Trim(strErrCode) <> "" Then
+                    strError = strErrCode
+                End If
+        
+                Exit Function
+            End If
+        End If
+        
+    Next lngCnt
+
+    Erase vData
+
+    func_KAKEME = True
+
+    Exit Function
+
+ErrorSection:
+
+    func_KAKEME = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(MODULE_NAME, "func_KAKEME", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+    Erase vData
+
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：検索時更新日付取得
+'
+'引　　数　：なし
+'
+'戻り値　　：検索時更新日付
+'
+'機能説明　：検索時更新日付を取得する
+'
+'更新履歴　：2006/11/30 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Private Function func_GetKoushinYmdFirst() As Date
+
+    Dim dtKoushinYmdFirst     As Date
+
+    If IsNull(Worksheets(MAIN_SHEETNAME).Range("検索時更新日")) = False Then
+        dtKoushinYmdFirst = Worksheets(MAIN_SHEETNAME).Range("検索時更新日")
+    Else
+        dtKoushinYmdFirst = 0
+    End If
+
+    func_GetKoushinYmdFirst = dtKoushinYmdFirst
+
+End Function
+
+

@@ -1,0 +1,93 @@
+Attribute VB_Name = "bas30Shinki"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：国内顧問料計算システム・平均超過収益率確認書作成
+'
+'オブジェクト名：bas30Shinki
+'
+'機能概要　：新規処理
+'
+'更新履歴　：2011/02/01 SRA 宮嵜     新規作成
+'
+'*************************************************************************
+Const MODULE_NAME = "bas30Shinki"
+
+'*************************************************************************
+'関数名　　：新規ボタン押下処理関数
+'
+'引　　数　：
+'           lngType       I       追加対象
+'                           (1:ローリング期間
+'戻り値　　：なし
+'
+'機能説明　：新規ボタン押下時の行追加処理
+'
+'更新履歴　：2011/02/01 SRA 宮嵜     新規作成
+'
+'*************************************************************************
+Public Sub gsub_NewClick(ByVal lngType As Long)
+    
+    Dim lngAddRow As Long       '追加開始行番号
+    Dim lngSrcRow As Long       '複写元ROW
+
+    '追加行番号取得
+    lngAddRow = fncKsCmnSearchNewRow(ThisWorkbook.Worksheets(MAIN_SHEETNAME), lngType)
+    
+    Call mainmenu.gCom01_SheetProtect(ThisWorkbook.Worksheets(MAIN_SHEETNAME), False)        'シート保護解除
+    
+    '複写元ROWの判別
+    Select Case lngType
+    Case 1
+    'ローリング期間
+        lngSrcRow = 5
+    Case Else
+        Call gfunc_ErrorMsg(4, 27007, "", "")
+        Call gCom01_SheetProtect(ThisWorkbook.Worksheets(MAIN_SHEETNAME), True)         'シート保護
+        Exit Sub
+    End Select
+
+    '行追加
+    Call gKsC_fncKsCmnInsRow(ThisWorkbook.Worksheets(MAIN_SHEETNAME), lngAddRow, lngSrcRow)
+    
+    '印刷ボタン無効
+    ThisWorkbook.Worksheets(MAIN_SHEETNAME).cmdPrint.Enabled = False
+    '作成ボタン無効
+    ThisWorkbook.Worksheets(MAIN_SHEETNAME).cmdSakusei.Enabled = False
+    
+    Call gCom01_SheetProtect(ThisWorkbook.Worksheets(MAIN_SHEETNAME), True)         'シート保護
+    
+    'ローリング期間のデフォルト設定
+    Call gsubKeisan_SetDefaltTerm(ThisWorkbook.Worksheets(MAIN_SHEETNAME), lngAddRow)
+
+    
+
+End Sub
+
+
+'*************************************************************************
+'関数名　　：新規時のローリング期間初期設定
+'
+'引　　数　：
+'           TargetSheets   O       対象シート
+'           lngAddRow      I       設定ROW
+'
+'戻り値　　：
+'
+'機能説明　：
+'
+'更新履歴　：2011/02/01 SRA 宮嵜     新規作成
+'
+'*************************************************************************
+Private Sub gsubKeisan_SetDefaltTerm(ByRef TargetSheets As Object, ByVal lngAddRow As Long)
+    
+    '年番号の再設定を行う
+    Call fncNenNumber(ThisWorkbook.Worksheets(MAIN_SHEETNAME))
+
+    With TargetSheets
+        .Cells(lngAddRow, 9).Value = "0:なし"       '年率換算方式
+        .Cells(lngAddRow, 14).Value = "1:365日固定" '年間日数
+    End With
+
+End Sub

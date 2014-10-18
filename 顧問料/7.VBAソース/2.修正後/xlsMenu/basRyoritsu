@@ -1,0 +1,168 @@
+Attribute VB_Name = "basRyoritsu"
+Option Explicit
+'*************************************************************************
+'
+'プロジェクト名：国内顧問料計算システム・請求書作成指示
+'
+'オブジェクト名：basRyoritsu
+'
+'機能概要　：KYK_RATEから段階を取得する。
+'
+'更新履歴　：2007/10/30 SRA T.Ichikawa 新規作成
+'
+'*************************************************************************
+Const MODULE_NAME = "basRyoritsu"
+
+'*************************************************************************
+'関数名　　：料率段階文字列編集
+'
+'引　　数　：
+'           dblKingakuFrom  I       段階金額From
+'           dblKingakuTo    I       段階金額To
+'           strTukaCd       I       KYK_RATEの通貨コード(デフォルト"000"日本)
+'
+'戻り値　　：料率段階文字列　例)　10億円超　20億円以下の金額
+'
+'機能説明　：PK_NAME.SF_KUBUN_EDITをVBに移植
+'
+'更新履歴　：2007/10/30 SRA T.Ichikawa 新規作成
+'
+'*************************************************************************
+Public Function func_RyorituDankaiEdit(ByVal dblKingakuFrom As Double _
+                                     , ByVal dblKingakuTo As Double _
+                                     , Optional strTukaCd As String = "000") As String
+                                     
+    Dim strTuka             As String   '通貨単位文字
+    Dim dblKingakuFrom_w    As Double   '金額Fromワーク
+    Dim dblKingakuTo_w      As Double   '金額Toワーク
+    Dim strKingakuFrom_w    As String   '金額Fromワーク
+    Dim strKingakuTo_w      As String   '金額Toワーク
+    
+    Dim strResutl           As String   '結果
+    
+    
+    If dblKingakuFrom = 0 And dblKingakuTo = 0 Then
+        func_RyorituDankaiEdit = ""
+        Exit Function
+    End If
+
+    '/*通貨名称の取得*/
+    strTuka = func_GetTukaName(strTukaCd)
+
+    '/*表示書式編集（kingaku_from）*/
+    dblKingakuFrom_w = dblKingakuFrom / 10
+    If dblKingakuFrom_w < 1 Then
+        strKingakuFrom_w = CStr(Format(dblKingakuFrom_w, "0.9"))
+    Else
+        strKingakuFrom_w = CStr(dblKingakuFrom_w)
+    End If
+
+    '/*表示書式編集（kingaku_to）*/
+    dblKingakuTo_w = dblKingakuTo / 10
+    If dblKingakuTo_w < 1 Then
+        strKingakuTo_w = CStr(Format(dblKingakuTo_w, "0.9"))
+    Else
+        strKingakuTo_w = CStr(dblKingakuTo_w)
+    End If
+
+    '/*区分内容の設定*/
+'------------<Modify 1兆円超対応20080218 2008/02/29 SRA市川 Start > ----------------------------------------
+'    If dblKingakuFrom = 0 And dblKingakuTo >= 99999 Then
+'        strResutl = "　　本契約資産額に対し"
+'
+'    ElseIf dblKingakuFrom = 0 And dblKingakuTo < 99999 Then
+'        strResutl = "　" & Right(String(4, " ") & strKingakuTo_w, 4) & "億" & Trim(strTuka) & "以下の金額"
+'
+'    ElseIf dblKingakuFrom > 0 And dblKingakuTo < 99999 Then
+'        strResutl = "　" & Right(String(4, " ") & strKingakuFrom_w, 4) & "億" & Trim(strTuka) & "超" & Right(String(4, " ") & strKingakuTo_w, 4) & "億" & Trim(strTuka) & "以下の金額"
+'
+'    ElseIf dblKingakuTo >= 99999 Then
+'        strResutl = "　" & Right(String(4, " ") & strKingakuFrom_w, 4) & "億" & Trim(strTuka) & "超の金額"
+'    End If
+    
+    If dblKingakuFrom = 0 And dblKingakuTo >= 9999999 Then
+        strResutl = "　　本契約資産額に対し"
+
+    ElseIf dblKingakuFrom = 0 And dblKingakuTo < 9999999 Then
+        strResutl = "　" & Right(String(7, " ") & strKingakuTo_w, 7) & "億" & Trim(strTuka) & "以下の金額"
+
+    ElseIf dblKingakuFrom > 0 And dblKingakuTo < 9999999 Then
+        strResutl = "　" & Right(String(7, " ") & strKingakuFrom_w, 7) & "億" & Trim(strTuka) & "超" & Right(String(7, " ") & strKingakuTo_w, 7) & "億" & Trim(strTuka) & "以下の金額"
+
+    ElseIf dblKingakuTo >= 9999999 Then
+        strResutl = "　" & Right(String(7, " ") & strKingakuFrom_w, 7) & "億" & Trim(strTuka) & "超の金額"
+    End If
+'------------<Modify 1兆円超対応20080218 2008/02/29 SRA市川 End   > ----------------------------------------
+
+    func_RyorituDankaiEdit = strResutl
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：通貨単位文字列取得
+'
+'引　　数　：
+'           strTukaCd       I       KYK_RATEの通貨コード
+'
+'戻り値　　：通貨の単位文字
+'
+'機能説明　：PK_NAME.SF_TUUKA_NAMEをVBに移植
+'
+'更新履歴　：2007/10/30 SRA T.Ichikawa 新規作成
+'
+'*************************************************************************
+Public Function func_GetTukaName(ByVal strTukaCd As String) As String
+On Error GoTo ErrHandler
+    
+    Const PROCEDURE_NAME = "sub_Ryoritsu"
+    Dim strSql      As String
+    Dim vdata()     As Variant
+    Dim lngCol      As Long
+    Dim lngRow      As Long
+    Dim strResult   As String
+    
+    
+    If strTukaCd = "000" Then
+    '/*日本の場合*/
+        strResult = "円"
+    Else
+    '/*日本以外*/
+        strSql = ""
+        strSql = strSql & " SELECT NAME_KANA"
+        strSql = strSql & "   FROM VW_DT301D"
+        strSql = strSql & "  WHERE TRIM(CD_KBN) = '02' "
+        strSql = strSql & "    AND TRIM(CD_1)   = TRIM('" & strTukaCd & "')"
+    
+        'データ取得
+        Call gclsDB.DoExequteSql(gcSELECT, strSql, vdata, lngCol, lngRow)
+        
+        '取得データを設定
+        If lngRow > 0 Then
+            strResult = Trim(CStr(vdata(0, 0)))
+        Else
+            strResult = ""
+        End If
+    
+    End If
+    
+    Erase vdata
+
+    func_GetTukaName = strResult
+    Exit Function
+ErrHandler:
+
+    Erase vdata
+Debug.Print strSql
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_GetTukaName", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+End Function
+
+
+

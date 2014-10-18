@@ -1,0 +1,102 @@
+Attribute VB_Name = "bas60Print"
+Option Explicit
+
+Const MODULE_NAME = "bas60Print"
+
+
+'*************************************************************************
+'関数名　　：請求書印刷
+'
+'引　　数　：   strBookName     I       ブック名
+'
+'戻り値　　：
+'
+'機能説明　：全シートの印刷を行う
+'
+'更新履歴　：2006/08/23 SRA Y.Azuma    新規作成
+'更新履歴　：2007/07/31 SRA Y.Azuma    変更     (PH3.5)PH3.5機能追加
+'
+'*************************************************************************
+Public Sub SeikyushoPrint(ByVal strBookName As String)
+
+On Error GoTo Error_Section
+
+    Dim lngSheetCnt As Long
+    Dim lngSheetMax As String
+    
+    Dim lngCnt  As Long
+    Dim arySheetName
+    Dim wkPrintBook As Workbook
+    
+    lngSheetMax = Workbooks(strBookName).Sheets.Count
+    
+    ReDim arySheetName(0)
+    lngCnt = 0
+
+    For lngSheetCnt = 1 To lngSheetMax
+        With Workbooks(strBookName).Worksheets(lngSheetCnt).PageSetup
+    
+'------------<Modify Start azuma 2007/07/31 (PH3.5)> ★★★☆-----------------------
+            '「日次計算書」の場合、1ページに収まるようにしない
+            '　「日次計算書」は、複数ページになる仕様のため
+            If InStr(1, Workbooks(strBookName).Worksheets(lngSheetCnt).Name, DATASHEET_NICHIJI_KSAN_SHO) = 0 Then
+    
+                '印刷範囲を1ページに収まるよう設定
+                .Zoom = False
+                .FitToPagesWide = 1
+                .FitToPagesTall = 1
+            End If
+            
+'            '印刷範囲を1ページに収まるよう設定
+'            .Zoom = False
+'            .FitToPagesWide = 1
+'            .FitToPagesTall = 1
+            
+'------------<Modify End   azuma 2007/07/31 (PH3.5)> ★★★☆-----------------------
+    
+            '印刷のサイズをＡ４に設定
+            .PaperSize = xlPaperA4
+            
+        If lngSheetCnt > 1 Then
+            If lngCnt > 0 Then
+                ReDim Preserve arySheetName(lngCnt)
+            End If
+            arySheetName(lngCnt) = Workbooks(strBookName).Worksheets(lngSheetCnt).Name
+            lngCnt = lngCnt + 1
+        End If
+            
+        End With
+    Next lngSheetCnt
+    
+'------------<Modify Start azuma 2006/12/14 総No.35> -----------------------
+    Set wkPrintBook = Workbooks(strBookName)
+    
+    wkPrintBook.Sheets(arySheetName).Select
+    DoEvents
+    wkPrintBook.Application.ActiveWindow.SelectedSheets.PrintOut
+'Debug.Print "請求書印刷"
+'    Sheets(arySheetName).Select
+''    ActiveWindow.SelectedSheets.PrintPreview
+'    DoEvents
+'    ActiveWindow.SelectedSheets.PrintOut
+'------------<Modify End   azuma 2006/12/14 総No.35> -----------------------
+    DoEvents
+    
+    Set wkPrintBook = Nothing
+
+    Exit Sub
+
+Error_Section:
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "SeikyushoPrint", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Set wkPrintBook = Nothing
+    
+    ThisWorkbook.Application.ScreenUpdating = True
+    
+End Sub
+

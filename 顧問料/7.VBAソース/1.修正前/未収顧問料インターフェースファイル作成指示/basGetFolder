@@ -1,0 +1,42 @@
+Attribute VB_Name = "basGetFolder"
+Type BROWSEINFO
+  hWndOwner As Long
+  pidlRoot As Long
+  pszDisplayName As String
+  lpszTitle As String
+  ulFlags As Long
+  lpfn As Long
+  lParam As String
+  iImage As Long
+End Type
+Declare Function SHBrowseForFolder Lib "shell32" (lpbi As BROWSEINFO) As Long
+Declare Function SHGetPathFromIDList Lib "shell32" (ByVal pidl As Long, ByVal pszPath As String) As Long
+
+Public Const CSIDL_DESKTOP = &H0                'デスクトップ
+Public Const BIF_BROWSEINCLUDEFILES = &H4000
+Public Const BIF_RETURNONLYFSDIRS = &H1         'フォルダのみ選択可能
+
+'フォルダ選択関数
+Public Function GetFolder(strComent As String, strPath As String) As Boolean
+  Dim bif As BROWSEINFO
+  Dim pidl As Long
+  On Error GoTo ErrGetFolder
+  With bif
+    .pidlRoot = CSIDL_DESKTOP
+    .ulFlags = BIF_RETURNONLYFSDIRS
+    .lpszTitle = strComent
+  End With
+  pidl = SHBrowseForFolder(bif)
+  If pidl <> 0 Then
+    strPath = String$(256, vbNullChar)
+    SHGetPathFromIDList pidl, strPath
+    strPath = Left(strPath, InStr(strPath, vbNullChar) - 1)
+    GetFolder = True
+  Else
+    GetFolder = False
+  End If
+  Exit Function
+ErrGetFolder:
+  GetFolder = False
+End Function
+

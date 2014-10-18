@@ -1,0 +1,638 @@
+Attribute VB_Name = "basKsCommon"
+'*************************************************************************
+'
+'プロジェクト名：契約管理システム・請求額修正
+'
+'オブジェクト名：basKsCommon
+'
+'機能概要　：チェック機能
+'
+'更新履歴　：2007/04/17 SRA T.Ichikawa  新規作成
+'
+'*************************************************************************
+Private Const MODULE_NAME As String = "basKsCommon"
+
+'*************************************************************************
+'関数名　　：行削除
+'
+'引　　数　：ARG1   I   iDelRow   long    対象行番号
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：指定された行を削除する
+'
+'更新履歴　：2007/04/17 SRA T.Ichikawa  新規作成
+'
+'*************************************************************************
+Function fncKsCmnDeleteRow(iDelRow As Long) As Long
+On Error GoTo ErrorHandler
+
+    fncKsCmnDeleteRow = 0
+
+    With ActiveSheet
+        If .Cells(iDelRow, COLN_DATA_FLAG) = "" Then
+            MsgBox "消す行がない！！", vbExclamation
+            Exit Function
+        End If
+
+        Call fncCmnDelCheckBox
+
+        .Rows(iDelRow & ":" & iDelRow).Select
+        Application.CutCopyMode = False
+        Selection.Delete Shift:=xlUp
+
+        .Cells(iDelRow, COLN_DATA_TOP).Select
+    End With
+
+    Exit Function
+
+ErrorHandler:
+    MsgBox Err.Description
+    fncKsCmnDeleteRow = Err.Number
+
+End Function
+
+'*************************************************************************
+'関数名　　：明細行位置取得
+'
+'引　　数　：なし
+'
+'戻り値　　：明細行の開始行番号
+'
+'機能説明　：明細行の開始行番号を返す
+'
+'更新履歴　：2007/04/17 SRA T.Ichikawa  新規作成
+'
+'*************************************************************************
+Function fncKsCmnSearchDataTopRow() As Long
+    Dim lngKindCnt  As Long
+    Dim lngCnt      As Long
+
+On Error GoTo ErrorHandler
+
+    fncKsCmnSearchDataTopRow = 0
+    
+    
+    lngCnt = HEADER_BOTTOM_ROW
+    With ActiveSheet
+        Do While (1)
+            If .Cells(lngCnt, COLN_DATA_TOP) = "修正額 採用" Then
+                fncKsCmnSearchDataTopRow = lngCnt + 1
+                Exit Function
+            End If
+            lngCnt = lngCnt + 1
+            If lngCnt = 65536 Then Exit Function
+        Loop
+    End With
+    
+    Exit Function
+
+ErrorHandler:
+    MsgBox Err.Description
+'    fncKsCmnSearchDataTopRow = Err.Number
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：指定情報削除
+'
+'引　　数　：
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：指定された削除対象の行を全て削除する
+'
+'更新履歴　：2007/04/17 SRA T.Ichikawa  新規作成
+'
+'*************************************************************************
+Function fncKsCmnRowDelete() As Long
+    Dim lngCnt As Long
+
+On Error GoTo ErrorHandler
+
+    fncKsCmnRowDelete = 0
+    
+    lngCnt = fncKsCmnSearchDataTopRow
+        
+    With ActiveSheet
+       
+        Do While (.Cells(lngCnt, COLN_DATA_FLAG) <> vbNullString)
+            fncKsCmnDeleteRow lngCnt
+        Loop
+    End With
+    
+    Exit Function
+
+ErrorHandler:
+    MsgBox Err.Description
+    fncKsCmnRowDelete = Err.Number
+
+End Function
+
+'*************************************************************************
+'関数名　　：新規行追加
+'
+'引　　数　：ARG1   I   iInsRow     long    追加先シートの行番号
+'　　　　　：ARG2   I   iSrcRow     long    コピー元シートの行番号
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：追加先シートの指定行番号に新規行を追加(コピー)する。
+'           追加する行はコピー元シートの指定行番号より取得する。
+'
+'更新履歴　：2007/04/17 SRA T.Ichikawa  新規作成
+'
+'*************************************************************************
+Function fncKsCmnInsRow(iInsRow As Long, iSrcRow As Long) As Long
+    
+On Error GoTo ErrorHandler
+
+    fncKsCmnInsRow = 0
+    
+    Sheets(SHEET_TEMP).Rows(iSrcRow & ":" & iSrcRow).Copy
+    Sheets(SHEET_MAIN).Select
+    Rows(iInsRow & ":" & iInsRow).Select
+    Selection.Insert Shift:=xlDown
+    Application.CutCopyMode = False
+
+    With ActiveSheet
+        
+        fncCmnSetCheckBox Replace(.Cells(iInsRow, COLN_DATA_TOP).Address, "$", vbNullString), RNG_CHK_FLG_LINKCELL & iInsRow
+        
+        .Cells(iInsRow, 5).Select
+    End With
+    
+    Exit Function
+
+ErrorHandler:
+    MsgBox Err.Description
+    fncKsCmnInsRow = Err.Number
+    
+End Function
+
+'*************************************************************************
+'関数名　　：新規行追加(メイン処理)
+'
+'引　　数　：ARG1   I   RowCnt      long    追加行数
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：追加対象の新規行を指定された行数追加する。
+'
+'更新履歴　：2007/04/17 SRA T.Ichikawa  新規作成
+'
+'*************************************************************************
+Function fncKsCmnAddNrow(RowCnt As Long) As Long
+    
+On Error GoTo ErrorHandler
+    Dim lngCnt As Long
+    Dim lngRow As Long
+
+    fncKsCmnAddNrow = 0
+    lngRow = fncKsCmnSearchDataTopRow
+    For lngCnt = 1 To RowCnt
+        fncKsCmnInsRow lngRow, 2
+        lngRow = lngRow + 1
+    Next
+    Exit Function
+
+ErrorHandler:
+    MsgBox Err.Description
+    fncKsCmnAddNrow = Err.Number
+    
+End Function
+
+
+'*************************************************************************
+'関数名　　：メイン画面の初期化
+'
+'引　　数　：ARG1   I   iKind   long    0:全項目クリア
+'　　　　　　                           1:一覧表示欄クリア
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：入力フィールドの初期化
+'
+'更新履歴　：2007/04/17 SRA T.Ichikawa  新規作成
+'
+'*************************************************************************
+Function fncKsCmnClearField(iKind As Long) As Long
+    
+On Error GoTo ErrorHandler
+
+    fncKsCmnClearField = 0
+    
+    
+    If iKind = 0 Then
+        '全項目クリア
+        With Sheets(SHEET_MAIN)
+            .Range(RNG_KOUZA_NO).Value = vbNullString  '口座番号
+            .Range(RNG_KOUZA_NM).Value = vbNullString  '口座名
+            .Range(RNG_SEIKYUBI).Value = vbNullString  '請求日
+        End With
+        '検索ボタンを押せるようにする
+        Sheets(SHEET_MAIN).cmdSearch.Enabled = True
+    End If
+    
+    '一覧表示欄クリア
+    Call fncKsCmnRowDelete
+    '更新ボタンを押せなくする
+    Sheets(SHEET_MAIN).cmdUpdate.Enabled = False
+    
+    Exit Function
+
+ErrorHandler:
+    MsgBox Err.Description
+    fncKsCmnClearField = Err.Number
+    
+End Function
+
+
+'*************************************************************************
+'関数名　　：トランザクション開始
+'
+'引　　数　：
+'
+'機能説明　：トランザクションを開始する。
+'
+'更新履歴　：2007/04/17 SRA T.Ichikawa  新規作成
+'
+'*************************************************************************
+Public Sub fncKsCmnBeginTrans()
+On Error GoTo 0 'ErrHandler
+    
+    MainMenu.cnAdo.BeginTrans
+    
+    Exit Sub
+ErrHandler:
+Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(MODULE_NAME, "", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+End Sub
+
+'*************************************************************************
+'関数名　　：トランザクションコミット
+'
+'引　　数　：
+'
+'機能説明　：トランザクションをコミットする。
+'
+'更新履歴　：2007/04/17 SRA T.Ichikawa  新規作成
+'
+'*************************************************************************
+Public Sub fncKsCmnCommitTrans()
+On Error GoTo 0 'ErrHandler
+    
+    MainMenu.cnAdo.CommitTrans
+    
+    Exit Sub
+ErrHandler:
+Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(MODULE_NAME, "", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+End Sub
+
+'*************************************************************************
+'関数名　　：トランザクションロールバック
+'
+'引　　数　：
+'
+'機能説明　：トランザクションをロールバックする。
+'
+'更新履歴　：2007/04/17 SRA T.Ichikawa  新規作成
+'
+'*************************************************************************
+Public Sub fncKsCmnRollbackTrans()
+On Error GoTo 0 'ErrHandler
+    
+    MainMenu.cnAdo.RollbackTrans
+    
+    Exit Sub
+ErrHandler:
+Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(MODULE_NAME, "", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+End Sub
+
+
+'*************************************************************************
+'関数名　　：
+'
+'引　　数　：
+'           lngProcess     I         処理フラグ 0=抽出処理 1=追加処理 2=更新処理 3=削除処理
+'           strSql         I         SQL文
+'           vntRs()        O         取得したデータ(２次元)
+'           lngCols        O         列数
+'           lngRows        O         行数
+'           strErrCode     I/O       エラーコード(入力時は、除外するエラーコードが入ってくる。)
+'戻り値　　：Boolean
+'
+'機能説明　：引数で取得したSQL文を実行し、結果を返す。
+'
+'更新履歴　：2007/04/17 SRA T.Ichikawa  新規作成
+'
+'*************************************************************************
+Public Function fncKsCmnDoExequteSql( _
+                             lngProcess As Long, _
+                             strSql As String, _
+                             vntRs() As Variant, _
+                             lngCols As Long, _
+                             lngRows As Long, _
+                             Optional strErrCode As String = "") As Boolean
+
+'関数説明
+' 1.SQL文の実行処理を行う。
+' 2.処理フラグが、0の場合、抽出したデータ件数をlngRows引数に返す。
+' 3.処理フラグが、0の場合、抽出したデータをstrSql引数に返す。
+' 4.処理フラグが、1,2,3の場合、更新したデータ件数をlngRows引数に返す。
+' 5.処理フラグが、1,2,3の場合、strSqlに""を返す。
+' 6.処理が成功した場合はTrueを返し、終了する。
+' 7.エラーが発生した場合はFalseを返し、終了する。
+
+
+'On Error GoTo ErrSection
+
+    Dim blnRet As Boolean
+
+    fncKsCmnDoExequteSql = gclsdb.DoExequteSql(lngProcess, strSql, vntRs, lngCols, lngRows, strErrCode)
+
+
+Exit Function
+
+'*******************************************************
+'* エラーセクション                                　  *
+'*******************************************************
+ErrSection:
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：DBシステム日付取得
+'
+'引　　数　：ARG1   O   DbSysdate   String (YYYYMMDD)
+'
+'戻り値　　：エラー番号
+'
+'機能説明　：DBのシステム日付(SYSDATE)を取得する
+'
+'更新履歴　：2007/04/17 SRA T.Ichikawa  新規作成
+'
+'*************************************************************************
+Function fncGetDbSysdate(DbSysdate As String) As Long
+
+    Const PROCEDURE_NAME As String = "fncGetDbSysdate"
+    
+    Dim strDay As String
+
+On Error GoTo ErrHandler
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    '共通関数よりDBシステム日付取得
+    gfunc_GetSvDateTime DbSysdate, strDay
+    
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+ErrHandler:
+    fncGetDbSysdate = Err.Number
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+
+
+'*************************************************************************
+'関数名　　：一覧表示欄取得
+'
+'引　　数　：ARG1   I   Kouza_no    Strinng 口座番号("0000000")
+'　　　　　：ARG2   I   Seikyubi    Strinng 請求日("YYYYMMDD")
+'　　　　　：ARG5   O   vntRec      Variant データ配列
+'
+'戻り値　　：エラー番号
+'
+'機能説明　：一覧表示情報を取得する
+'
+'更新履歴　：2007/04/17 SRA T.Ichikawa  新規作成
+'          ：2009/09/16 SRA T.Mizutani  請求額修正画面における消費税額修正
+'
+'*************************************************************************
+Function fncIchiranRead( _
+            Kouza_no As String, _
+            Seikyubi As String, _
+            vntRec() As Variant, _
+            lngRow As Long) As Long
+
+    Const PROCEDURE_NAME As String = "fncIchiranRead"
+
+    On Error GoTo ErrHandler
+    
+    Dim strRet      As String
+    Dim strKouza_no As String
+    Dim strSql      As String
+    Dim lngCol      As Long
+    Dim strErrCd    As String
+    Dim blnRet      As Boolean
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    fncIchiranRead = 0
+ 
+    strSql = ""
+    strSql = strSql & "SELECT" & vbCrLf
+    strSql = strSql & "    A.SEIKYU_KIKAN_ID," & vbCrLf
+    strSql = strSql & "    B.SHUUSEIGAKU_SAIYOU_FLG," & vbCrLf
+    strSql = strSql & "    A.SEIKYUSHO_KIKAN_FROM," & vbCrLf
+    strSql = strSql & "    A.SEIKYUSHO_KIKAN_TO," & vbCrLf
+    strSql = strSql & "    A.HIZUKE_SHURUI," & vbCrLf
+    strSql = strSql & "    A.NYUKIN_YOTEI_YMD," & vbCrLf
+    strSql = strSql & "    A.STATUS," & vbCrLf
+    strSql = strSql & "    B.KAZEI_ATO_KONKAI_SEIKYU_GAKU," & vbCrLf
+    strSql = strSql & "    B.SHOHIZEI_GAKU," & vbCrLf
+    
+'------------<Modify Start T.Mizutani 2009/07/16>-----------------------
+'    strSql = strSql & "    B.KAZEI_ATO_SEIKYU_SHUUSEIGAKU" & vbCrLf
+    strSql = strSql & "    B.KAZEI_ATO_SEIKYU_SHUUSEIGAKU," & vbCrLf
+    strSql = strSql & "    B.SHOHIZEI_SHUUSEIGAKU" & vbCrLf
+'------------<Modify End T.Mizutani 2009/07/16>-----------------------
+
+    strSql = strSql & "FROM" & vbCrLf
+    strSql = strSql & "    KYK_SEIKYU_KANRI A," & vbCrLf
+    strSql = strSql & "    KYK_KOMONRYOH_SUM B" & vbCrLf
+    strSql = strSql & "WHERE" & vbCrLf
+    strSql = strSql & "    A.KOHZA_NO = B.KOHZA_NO" & vbCrLf
+    strSql = strSql & "AND A.SEIKYU_KIKAN_ID = B.SEIKYU_KIKAN_ID" & vbCrLf
+    strSql = strSql & "AND A.HIZUKE_SHURUI = B.HIZUKE_SHURUI" & vbCrLf
+    strSql = strSql & "AND A.SEIKYUSHO_KIKAN_FROM = B.KEISAN_FROM_YMD" & vbCrLf
+    strSql = strSql & "AND A.KOHZA_NO = '" & Kouza_no & "'" & vbCrLf
+    strSql = strSql & "AND A.HIZUKE_SHURUI <> '0'" & vbCrLf     '日付種類が未収以外
+    strSql = strSql & "AND A.SEIKYU_YMD = " & Seikyubi & vbCrLf
+    strSql = strSql & "AND A.SAKUJO_FLG = '0'" & vbCrLf
+    strSql = strSql & "AND B.SAKUJO_FLG = '0'" & vbCrLf
+    
+    strSql = strSql & "ORDER BY" & vbCrLf
+    strSql = strSql & "    A.SEIKYUSHO_KIKAN_FROM," & vbCrLf
+    strSql = strSql & "    A.SEIKYUSHO_KIKAN_TO" & vbCrLf
+    
+    blnRet = fncKsCmnDoExequteSql(MainMenu.gcSELECT, strSql, vntRec, lngCol, lngRow, strErrCd)
+    If blnRet = False Then
+        fncIchiranRead = strErrCd
+        Exit Function
+    End If
+    
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+ErrHandler:
+    fncIchiranRead = Err.Number
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+
+
+'*************************************************************************
+'関数名　　：メッセージ表示
+'
+'引　　数　：ARG1   I   strMsgKbn   String  メッセージ区分(1:情報,2:質問,3:警告,4:エラー)
+'　　　　　：ARG2   I   lngMsgId    long    メッセージＩＤ
+'　　　　　：ARG3   I   strAddText  String  追加テキスト(項目名)
+'　　　　　：ARG4   I   strAddText2 String  追加テキスト
+'　　　　　：ARG5   I   blnPopUp    boolean メッセージボックス出力フラグ(デフォルト：True(表示))
+'
+'戻り値　　：エラー番号
+'
+'機能説明　：メッセージを出力する
+'
+'更新履歴　：2007/04/17 SRA T.Ichikawa  新規作成
+'
+'*************************************************************************
+Function fncKsCmnMessageDisp( _
+              ByVal strMsgKbn As String _
+            , ByVal lngMsgId As Long _
+            , ByVal strAddText As String _
+            , Optional ByVal strAddText2 As String _
+            , Optional ByVal blnPopUp As Boolean = True) As String
+
+    '共通関数をCALL
+    fncKsCmnMessageDisp = gfunc_ErrorMsg( _
+                            strMsgKbn, _
+                            lngMsgId, _
+                            strAddText, _
+                            strAddText2, _
+                            blnPopUp)
+
+
+End Function
+
+'*************************************************************************
+'関数名　　：コンボ表示検索
+'
+'引　　数　：
+'           strCode     I       コード(DBなどから取得したコード)
+'           strName     I       サーチするリスト名
+'           intCut      I       コード桁数
+'
+'戻り値　　：コンボ表示文字列
+'
+'機能説明　：コード値を入力するとその文字列を返す
+'
+'更新履歴　：2007/04/17 SRA T.Ichikawa    新規作成
+'
+'*************************************************************************
+Public Function fnc_SearchComboItem(ByVal strCode As String, _
+                                      ByVal strName As String, _
+                                      ByVal intLen As Integer) As String
+
+    Dim c       As Variant
+    
+    fnc_SearchComboItem = ""
+    
+    For Each c In Worksheets(SHEET_DATA).Range(strName)
+        
+        If Trim(c.Value) <> "" Then
+            If strCode = Left(c.Value, intLen) Then
+                fnc_SearchComboItem = Mid(c.Value, 3)
+                Exit For
+            End If
+        End If
+    
+    Next c
+    
+    Set c = Nothing
+
+End Function
+
+'*************************************************************************
+'関数名　　：消費税率取得
+'
+'引　　数　：ARG1   I   Seikyu_Kikan_From   Strinng 請求書期間FROM("YYYYMMDD")
+'　　　　　：ARG2   O   vntRec              Variant データ配列("YYYYMMDD")
+'
+'戻り値　　：エラー番号
+'
+'機能説明　：消費税率を取得する
+'
+'更新履歴　：2007/04/17 SRA T.Ichikawa  新規作成
+'更新履歴　：2007/11/09 SRA Y.Azuma     変更     (PH4)消費税テーブル変更
+'
+'*************************************************************************
+Function fncShouhizeiGet( _
+            ByVal Seikyu_Kikan_From As String, _
+            ByRef vntRec() As Variant, _
+            ByRef lngRow As Long) As Long
+
+    Const PROCEDURE_NAME As String = "fncShouhizeiGet"
+
+    On Error GoTo ErrHandler
+    
+    Dim strRet      As String
+    Dim strKouza_no As String
+    Dim strSql      As String
+    Dim lngCol      As Long
+    Dim strErrCd    As String
+    Dim blnRet      As Boolean
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    fncShouhizeiGet = 0
+ 
+'------------<Modify Start azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+    strSql = ""
+    strSql = strSql & " SELECT ZEI"
+    strSql = strSql & "   FROM KYK_SHOHIZEI"
+    strSql = strSql & "  WHERE TEKIYOH_KIKAN_FROM <= " & Seikyu_Kikan_From
+    strSql = strSql & "    AND TEKIYOH_KIKAN_TO   >= " & Seikyu_Kikan_From
+    
+'    strSql = ""
+'    strSql = strSql & "SELECT" & vbCrLf
+'    strSql = strSql & "    A.SHOUHI_ZEI" & vbCrLf
+'    strSql = strSql & "FROM" & vbCrLf
+'    strSql = strSql & "    SHOUHI_ZEI A," & vbCrLf
+'    strSql = strSql & "   (SELECT" & vbCrLf
+'    strSql = strSql & "        MAX(KIJYUN_YMD) KIJYUN_YMD" & vbCrLf
+'    strSql = strSql & "    FROM" & vbCrLf
+'    strSql = strSql & "        SHOUHI_ZEI) B" & vbCrLf
+'    strSql = strSql & "WHERE" & vbCrLf
+'    strSql = strSql & "    A.KIJYUN_YMD = B.KIJYUN_YMD" & vbCrLf
+'    strSql = strSql & "AND A.KIJYUN_YMD <= " & Seikyu_Kikan_From & vbCrLf
+'------------<Modify End   azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+        
+    blnRet = fncKsCmnDoExequteSql(MainMenu.gcSELECT, strSql, vntRec, lngCol, lngRow, strErrCd)
+    If blnRet = False Then
+        fncShouhizeiGet = strErrCd
+        Exit Function
+    End If
+    
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+ErrHandler:
+    fncShouhizeiGet = Err.Number
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+
+

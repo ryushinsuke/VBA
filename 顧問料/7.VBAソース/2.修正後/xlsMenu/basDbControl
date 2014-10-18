@@ -1,0 +1,6 @@
+Attribute VB_Name = "basDbControl"
+Option Explicit
+
+Const MODULE_NAME = "basDbControl"
+
+Public blnDbCon As Boolean          'DBÚ‘±Œ‹‰Ê@True:¬Œ÷AFalse:¸”s

@@ -1,0 +1,86 @@
+Attribute VB_Name = "basCommon"
+'*************************************************************************
+'
+'プロジェクト名：契約管理システム・共通モジュール
+'
+'オブジェクト名：basCommon
+'
+'機能概要　：共通機能
+'
+'更新履歴　：2007/04/17 SRA T.Ichikawa  新規作成
+'
+'*************************************************************************
+Private Const MODULE_NAME As String = "basCommon"
+
+
+Public Sub subCmnProtectActiveSheet()
+'    ActiveSheet.Protect DrawingObjects:=True, Contents:=True, Scenarios:=True, Password:="sra"
+    gCom01_SheetProtect ActiveSheet, True
+End Sub
+
+Public Sub subCmnUnProtectActiveSheet()
+'    ActiveSheet.Unprotect Password:="sra"
+    gCom01_SheetProtect ActiveSheet, False
+End Sub
+
+Public Function fncCmnSetCheckBox(CellName As String, LinkCellName As String) As Long
+    
+On Error GoTo ErrorHandler
+    fncCmnSetCheckBox = 0
+    
+    Dim lngZoom As Long
+    Dim objX    As Object
+    
+    lngZoom = ActiveWindow.Zoom
+    ActiveWindow.Zoom = 100
+    
+    With ThisWorkbook.ActiveSheet.Range(CellName)
+        Set objX = ThisWorkbook.ActiveSheet.Shapes.AddFormControl( _
+            xlCheckBox, _
+            .Left + 14, _
+            .Top - 0.5, _
+            5, _
+            5)
+        With objX.OLEFormat.Object
+            .Display3DShading = True
+            .Caption = ""
+            .LinkedCell = LinkCellName
+'Debug.Print .LinkedCell
+        End With
+    End With
+    
+    ActiveWindow.Zoom = lngZoom
+    
+    Exit Function
+
+ErrorHandler:
+    MsgBox Err.Description
+    fncCmnSetCheckBox = Err.Number
+    
+End Function
+
+Function fncCmnDelCheckBox() As Long
+    Dim ccc As Object
+    Dim objRange As Object
+    Dim strName As String
+
+On Error GoTo ErrorHandler
+    fncCmnDelCheckBox = 0
+
+    With ActiveSheet
+        For Each ccc In .Shapes
+            If ccc.Type = msoFormControl Then
+                If ccc.FormControlType = xlCheckBox Then
+                    ccc.Delete
+                End If
+            End If
+        Next
+    End With
+
+    Exit Function
+
+ErrorHandler:
+    MsgBox Err.Description
+    fncCmnDelCheckBox = Err.Number
+
+End Function

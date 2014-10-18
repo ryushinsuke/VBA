@@ -1,0 +1,287 @@
+Attribute VB_Name = "bas10Initialize"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：外部委託ライセンスフィー算出システム・支払日登録
+'
+'オブジェクト名：bas10Initialize
+'
+'機能概要　：初期処理
+'
+'更新履歴　：2008/06/10 SRA吉井   新規作成
+'
+'*************************************************************************
+
+Const MODULE_NAME = "bas10Initialize"
+
+'*************************************************************************
+'関数名　　：支払日登録画面の初期化メイン
+'
+'引　数　　：なし
+'
+'戻り値　　：Boolean（True:異常なし False:異常検出）
+'
+'機能説明　：初期起動時に行われる初期処理のメイン
+'
+'更新履歴　：2008/06/10 SRA吉井   新規作成
+'
+'*************************************************************************
+Public Function g_subKeisanInitialize() As Boolean
+
+    g_subKeisanInitialize = False                           '異常で初期化
+    
+    '画面の初期化
+    With ThisWorkbook.Worksheets(MAIN_SHEETNAME)            '検索条件初期化
+        .Range("外部委託先").Value = "1:RAFI"
+        .Range("支払期間FROM").Value = ""
+        .Range("支払期間TO").Value = ""
+        .Range("送付日FROM").Value = ""
+        .Range("送付日TO").Value = ""
+        .Range("支払予定日FROM").Value = ""
+        .Range("支払予定日TO").Value = ""
+        .Range("支払日FROM").Value = ""
+        .Range("支払日TO").Value = ""
+    End With
+    
+    Call g_subKeisanIniScreenH(Worksheets(MAIN_SHEETNAME))   'ヘッダー部
+''    Call g_subKeisanIniScreenD(Worksheets(MAIN_SHEETNAME))   '明細部
+    
+    'コンボ項目の初期化
+    If Not keisanIniCombo Then
+        Exit Function
+    End If
+    
+    g_subKeisanInitialize = True                            '正常値セット
+
+End Function
+
+'*************************************************************************
+'関数名　　：支払日登録画面のクリア処理(ヘッダー部)
+'
+'引　数　　：TargetSheets
+'
+'戻り値　　：なし
+'
+'機能説明　：ヘッダー部のセルをクリアする
+'
+'更新履歴　：2008/06/10 SRA吉井   新規作成
+'
+'*************************************************************************
+Public Sub g_subKeisanIniScreenH(ByRef TargetSheets As Object)
+    
+    ' ヘッダー部の初期化
+    With ThisWorkbook.Worksheets(MAIN_SHEETNAME)
+
+        .Range("外部委託支払計算額合計").Value = ""
+        .Range("消費税合計").Value = ""
+
+        With TargetSheets
+            .CmdAll.Enabled = False
+            .cmdUp.Enabled = False
+        End With
+        
+    End With
+
+End Sub
+
+'*************************************************************************
+'関数名　　：支払日登録画面のクリア処理(明細部)
+'
+'引　数　　：TargetSheets
+'
+'戻り値　　：なし
+'
+'機能説明　：明細部行を全て削除する
+'
+'更新履歴　：2008/06/10 SRA吉井   新規作成
+'
+'*************************************************************************
+Public Sub g_subKeisanIniScreenD(ByRef TargetSheets As Object)
+        
+    TargetSheets.Range("変更比較FLAG合計").Formula = ""
+    
+    Call gKsC_fncKsCmnCheckRowDelete(ThisWorkbook.Worksheets(MAIN_SHEETNAME), True)  '支払情報
+    
+End Sub
+'*************************************************************************
+'関数名　　：コンボ項目の初期化
+'
+'引　数　　：なし
+'
+'戻り値　　：Boolean（True:異常なし False:異常検出）
+'
+'機能説明　：コンボ項目のリストデータを取得する
+'
+'更新履歴　：2008/06/10 SRA吉井    新規作成
+'
+'*************************************************************************
+Private Function keisanIniCombo() As Boolean
+
+    Dim strErrMsg As String
+    
+    keisanIniCombo = False      '異常値で初期化
+    
+    strErrMsg = ""
+
+    '外部委託先のデータ取得
+    If fncGet_GI_INFO = False Then
+        Exit Function
+    End If
+    
+    '外部委託先の名前定義
+    Call subNameDefine
+    
+    keisanIniCombo = True       '正常値セット
+
+End Function
+
+'*************************************************************************
+'関数名　　：コード値テーブル抽出処理（契約区分 = 外部委託先）
+'
+'引　数　　：なし
+'
+'戻り値　　：Boolean
+'
+'機能説明　：コード値テーブルからコンボ項目を取得し「data」シートに記入
+'
+'更新履歴　：2008/06/10 SRA吉井   新規作成
+'
+'*************************************************************************
+Private Function fncGet_GI_INFO() As Boolean
+       
+On Error GoTo ErrHandler
+    
+    Dim strSql      As String
+    Dim vData()     As Variant
+    Dim lngCol      As Long
+    Dim lngRow      As Long
+    Dim lngCnt      As Long
+    Dim strErrCode  As String
+    Const strConnErrCd As String = "この操作を実行する"
+    Dim blnRet      As Boolean
+    
+    fncGet_GI_INFO = False
+
+    strSql = ""
+    strSql = strSql & " SELECT"
+    strSql = strSql & "       CODE_VALUE || ':' || VALUE_NAME"
+    strSql = strSql & " FROM  KYK_CODE_VALUE"
+    strSql = strSql & " WHERE CODE_NO = '56' AND SAKUJO_FLG = '0'"
+    strSql = strSql & " ORDER BY CODE_VALUE"
+
+    'データ取得
+    strErrCode = strConnErrCd
+    blnRet = gclsdb.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow, strErrCode)
+    If Not blnRet Then
+        If strErrCode = strConnErrCd Then   'DB接続エラー
+        '接続失敗(メッセージテーブルは使用不可注意)
+            Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "fncGet_GI_INFO", 0, _
+            "ＤＢ接続エラー。設定を確認してください。")
+            Exit Function
+        Else                                'その他エラー
+            Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "fncGet_GI_INFO", 0, _
+            "システムエラー。管理者に連絡してください。")
+            Exit Function
+        End If
+    End If
+    
+    With ThisWorkbook.Worksheets(DATA_SHEETNAME)
+        .Activate
+        '「外部委託先」のデータセル範囲をクリア
+        .Range("A2:A65536").ClearContents
+        '取得データをセルに設定
+        For lngCnt = 0 To lngRow - 1
+             .Cells(3 + lngCnt, 1).Value = vData(0, lngCnt)
+        Next lngCnt
+    End With
+    
+    Erase vData
+    
+    fncGet_GI_INFO = True
+    
+    Exit Function
+
+ErrHandler:
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "fncGet_GI_INFO", Err.Number, Err.Description)
+    On Error GoTo 0
+'---- Error Log End   ----------------------------------------------------
+    Erase vData
+
+End Function
+
+'*************************************************************************
+'関数名　　：外部委託先の名前定義設定
+'
+'引　数　　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：外部委託先の名前定義を再設定する。
+'
+'更新履歴　：2008/06/10 SRA吉井   新規作成
+'
+'*************************************************************************
+Private Sub subNameDefine()
+
+    Dim rowcnt  As Long
+
+    '*** 外部委託先の名前定義
+    For rowcnt = 3 To 65536
+        If ThisWorkbook.Worksheets(DATA_SHEETNAME).Cells(rowcnt, 1).Value = "" Then
+            rowcnt = rowcnt - 1
+            Exit For
+        End If
+    Next rowcnt
+    
+    '再定義
+    ThisWorkbook.Names.Add Name:="外部委託先コードリスト", _
+    RefersToR1C1:="=data!R2C1:R" & rowcnt & "C1"
+
+End Sub
+
+'*************************************************************************
+'関数名　　：全部支払ボタン処理
+'
+'引　数　　：TargetSheets     I           対象のシート
+'
+'戻り値　　：Boolean
+'
+'機能説明　：支払チェックボックスを全てＯＮにする。
+'
+'更新履歴　：2008/06/10 SRA吉井   新規作成
+'更新履歴　：2008/08/08 SRA Y.Azuma    変更   連結障害対応(No.24)
+'
+'*************************************************************************
+Public Function gfunc_cmdAll(TargetSheets As Object) As Boolean
+
+    Dim lngCnt As Long
+    
+On Error GoTo ErrorHandler
+        
+'------------<Modify Start azuma 2008/08/08 > 連結障害対応(No.24)-----------------------
+    lngCnt = DATA_TOP_ROW
+'    lngCnt = lngDataTopRow
+'------------<Modify End   azuma 2008/08/08 > 連結障害対応(No.24)-----------------------
+    
+    With TargetSheets
+        Do While (.Cells(lngCnt, DTCol.支払期間ID) <> vbNullString)
+            .Cells(lngCnt, DTCol.支払ChkLink) = True
+            lngCnt = lngCnt + 1
+        Loop
+    End With
+
+    Exit Function
+    
+ErrorHandler:
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gfunc_cmdAll", Err.Number, Err.Description)
+    On Error GoTo 0
+'---- Error Log End   ----------------------------------------------------
+
+End Function

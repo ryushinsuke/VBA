@@ -1,0 +1,441 @@
+VERSION 1.0 CLASS
+BEGIN
+  MultiUse = -1  'True
+END
+Attribute VB_Name = "Main"
+Attribute VB_GlobalNameSpace = False
+Attribute VB_Creatable = False
+Attribute VB_PredeclaredId = True
+Attribute VB_Exposed = True
+Option Explicit
+'*************************************************************************
+'
+'プロジェクト名     ：国内顧問料計算システム
+'
+'サブプログラム名 　：契約更改処理
+'
+'機能概要　：メイン画面
+'
+'作成履歴　：2006/08/01 SRA Iida
+'修正履歴　：
+'
+'*************************************************************************
+'定義/
+Dim strmsg      As String
+
+
+'*************************************************************************
+'イベント名　：Txt_Kouza_LostFocus
+'
+'引　　数　　：なし
+'
+'戻り値　　　：なし
+'
+'機能説明　  ：Txt_Kouza_LostFocus
+'
+'作成履歴　：2006/08/04 SRA Iida
+'修正履歴　：2008/01/30 SRA市川        変更     既存バグ対応
+'*************************************************************************
+Private Sub Txt_Kouza_LostFocus()
+
+    Dim strKouzaMei As String
+'------------<Modify 既存バグ対応 2008/01/30 SRA市川 Start > ----------------------------------------
+'    If Txt_Kouza.Text = "" Then
+'        Lbl_Kouza.Caption = ""
+'    Else
+'        Txt_Kouza.Text = Format(Txt_Kouza.Text, "0000000")
+    
+    Dim strKouza
+    
+    If Trim(Txt_Kouza.Text) = "" Then
+        Lbl_Kouza.Caption = ""
+    Else
+        'スペースを除去する
+        strKouza = Replace(Txt_Kouza.Text, " ", "")
+        Txt_Kouza.Text = Format(Trim(strKouza), "0000000")
+'------------<Modify 既存バグ対応 2008/01/30 SRA市川 End   > ----------------------------------------
+        If Len(Txt_Kouza.Text) <> 7 Then
+            Call gfunc_ErrorMsg(3, 8000, "口座番号", "")
+'------------<Modify 既存バグ対応 2008/01/30 SRA市川 Start > ----------------------------------------
+'            Txt_Kouza.Activate
+
+            Lbl_Kouza.Caption = ""
+'------------<Modify 既存バグ対応 2008/01/30 SRA市川 End   > ----------------------------------------
+            Exit Sub
+        End If
+        '口座名をセットする
+        '口座存在チェック
+        If gfunc_ExistKouzaNo(Format(Txt_Kouza.Text, "0000000"), strKouzaMei) = False Then
+         '"該当する口座番号が存在しません。"
+            Lbl_Kouza.Caption = ""
+            Call gfunc_ErrorMsg(3, 8003, "口座番号", "")
+'------------<Modify 既存バグ対応 2008/01/30 SRA市川 Start > ----------------------------------------
+'            Txt_Kouza.Activate
+
+            Lbl_Kouza.Caption = ""
+'------------<Modify 既存バグ対応 2008/01/30 SRA市川 End   > ----------------------------------------
+            Exit Sub
+        End If
+        Lbl_Kouza.Caption = strKouzaMei
+    End If
+
+End Sub
+'*************************************************************************
+'イベント名　：Txt_BaseDate_LostFocus
+'
+'引　　数　　：なし
+'
+'戻り値　　　：なし
+'
+'機能説明　  ：Txt_BaseDate_LostFocus
+'
+'作成履歴　：2006/08/04 SRA Iida
+'修正履歴　：2008/01/30 SRA市川        変更     既存バグ対応
+'*************************************************************************
+Private Sub Txt_BaseDate_LostFocus()
+'------------<Modify 既存バグ対応 2008/01/30 SRA市川 Start > ----------------------------------------
+'    If Txt_BaseDate.Text = "" Then
+'        'システム日付
+'        Txt_BaseDate.Text = Format(Now, "yyyy/mm")
+'        Exit Sub
+'    Else
+'        If Len(Txt_BaseDate.Text) = 6 Then
+'            Txt_BaseDate.Text = Format(Txt_BaseDate.Text, "0000/00")
+'            If IsDate(Txt_BaseDate.Text) = False Then
+'                Call gfunc_ErrorMsg(3, 8000, "基準年月", "")
+'                Txt_BaseDate.Activate
+'                Exit Sub
+'            End If
+'        Else
+'            If Len(Txt_BaseDate.Text) = 7 Then
+'                If Mid(Txt_BaseDate.Text, 5, 1) <> "/" Then
+'                    Call gfunc_ErrorMsg(3, 8000, "基準年月", "")
+'                    Txt_BaseDate.Activate
+'                    Exit Sub
+'                End If
+'            Else
+'                Call gfunc_ErrorMsg(3, 8000, "基準年月", "")
+'                Txt_BaseDate.Activate
+'                Exit Sub
+'            End If
+'        End If
+'    End If
+    
+    Dim strBaseDate As String
+
+    If Trim(Txt_BaseDate.Text) = "" Then
+        'システム日付
+        Txt_BaseDate.Text = Format(Now, "yyyy/mm")
+        Exit Sub
+    Else
+        strBaseDate = Replace(Txt_BaseDate.Text, "/", "")
+        If Len(strBaseDate) = 6 Then
+
+            If IsDate(Mid(strBaseDate, 1, 4) & "/" & Mid(strBaseDate, 5, 2) & "/01") = False Then
+                Call gfunc_ErrorMsg(3, 8000, "基準年月", "日付として認識できません。" & vbCrLf _
+                                           & "YYYYMM形式又はYYYY/MM形式で入力して下さい。")
+                Exit Sub
+            Else
+                Txt_BaseDate.Text = Format(Mid(strBaseDate, 1, 4) & "/" & Mid(strBaseDate, 5, 2) & "/01", "YYYY/MM")
+            End If
+            
+        Else
+            If IsDate(Txt_BaseDate.Text) Then
+                Txt_BaseDate.Text = Format(Txt_BaseDate.Text, "YYYY/MM")
+            Else
+                Call gfunc_ErrorMsg(3, 8000, "基準年月", "YYYYMM形式又はYYYY/MM形式で入力して下さい。")
+                Exit Sub
+            End If
+        End If
+    End If
+'------------<Modify 既存バグ対応 2008/01/30 SRA市川 End   > ----------------------------------------
+End Sub
+
+'*************************************************************************
+'イベント名　：Cmd_OnOff_Click
+'
+'引　　数　　：なし
+'
+'戻り値　　　：なし
+'
+'機能説明　  ：全選択ボタン押下時の処理
+'
+'作成履歴　：2006/08/04 SRA Iida
+'修正履歴　：2008/01/30 SRA市川        変更     既存バグ対応
+'*************************************************************************
+Private Sub Cmd_OnOff_Click()
+
+    Dim lngcnt As Long
+    
+'------------<Added 既存バグ対応 2008/01/30 SRA市川 Start > ----------------------------------------
+    Application.ScreenUpdating = True
+'------------<Added 既存バグ対応 2008/01/30 SRA市川 End   > ----------------------------------------
+    
+    If g_OnOffFlg = 0 Then
+        g_OnOffFlg = 1
+    Else
+        g_OnOffFlg = 0
+    End If
+    
+    With Me.Lst_Keiyaku
+        For lngcnt = 0 To .ListCount - 1
+            If g_OnOffFlg = 1 Then
+                .Selected(lngcnt) = False
+            Else
+                .Selected(lngcnt) = True
+            End If
+        Next
+        .ListIndex = 0
+    End With
+    
+End Sub
+
+'+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+'*************************************************************************
+'イベント名　：Cmd_Search_Click
+'
+'引　　数　　：なし
+'
+'戻り値　　　：なし
+'
+'機能説明　  ：検索ボタン押下時の処理
+'
+'作成履歴　：2006/08/01 SRA Iida
+'修正履歴　：2008/01/30 SRA市川        変更     既存バグ対応
+'*************************************************************************
+Private Sub Cmd_Search_Click()
+
+    Application.ScreenUpdating = False
+
+    Dim strDatefrom As String
+    Dim strDateto   As String
+    Dim strErr      As String
+    Dim rs          As ADODB.Recordset
+    Dim obj_WS      As Object
+    Dim lngcnt      As Long
+    Dim lngRow      As Long
+    
+    Set rs = Nothing
+    
+    Set obj_WS = ActiveWorkbook.Worksheets(WS_Main)
+    '入力チェック
+    If g_subSearch(strmsg) = False Then
+'------------<Modify 既存バグ対応 2008/01/30 SRA市川 Start > ----------------------------------------
+'        Txt_Kouza.SetFocus
+
+        'g_subSearch関数内でエラーの発生したTextBoxをActivateしているのでここでは必要なし。
+        Application.ScreenUpdating = True
+        Set obj_WS = Nothing
+        Exit Sub
+'------------<Modify 既存バグ対応 2008/01/30 SRA市川 End   > ----------------------------------------
+    End If
+    
+    '検索条件　追加
+    '検索基本条件取得　（基準期間作成）
+    strDatefrom = "": strDateto = ""
+    Call g_funGetBase(Txt_Kouza.Text, Txt_BaseDate.Text, strDatefrom, strDateto)
+    '★テストとして
+    'MsgBox "Debug:Test" & strDatefrom & "～" & strDateto
+    'データ取得
+    '対象データ検索処理
+    If gfunDataChk(Txt_Kouza.Text, strDatefrom, strDateto, rs) = False Then
+'------------<Modify 既存バグ対応 2008/01/30 SRA市川 Start > ----------------------------------------
+'        rs.Close
+'        Set rs = Nothing
+        
+        Set rs = Nothing
+        Set obj_WS = Nothing
+        Application.ScreenUpdating = True
+'------------<Modify 既存バグ対応 2008/01/30 SRA市川 End   > ----------------------------------------
+      Exit Sub
+    End If
+    
+    'Data表示処理
+    obj_WS.Lst_Keiyaku.Clear
+    obj_WS.Lst_Keiyaku.ListIndex = -1
+    Lbl_Cnt.Caption = ""
+    lngcnt = 0
+    
+    '区分配列セット
+    gsubArrKbnSet
+    
+    If gfunDataView(rs, obj_WS.Lst_Keiyaku, lngcnt) = False Then
+'------------<Modify 既存バグ対応 2008/01/30 SRA市川 Start > ----------------------------------------
+'        rs.Close
+'        Set rs = Nothing
+
+        Set rs = Nothing
+        Set obj_WS = Nothing
+        Application.ScreenUpdating = True
+'------------<Modify 既存バグ対応 2008/01/30 SRA市川 End   > ----------------------------------------
+        '何かのエラー
+        Exit Sub
+    End If
+    If lngcnt = 0 Then
+        Cmd_OnOff.Visible = False
+        Cmd_Exec.Visible = False
+        Lst_Keiyaku.Visible = False
+        Lbl_Cnt.Visible = False
+        Call gfunc_ErrorMsg(3, 8001, "", "")
+'------------<Added 既存バグ対応 2008/01/30 SRA市川 Start > ----------------------------------------
+        Set rs = Nothing
+        Set obj_WS = Nothing
+        Application.ScreenUpdating = True
+'------------<Added 既存バグ対応 2008/01/30 SRA市川 End   > ----------------------------------------
+        Exit Sub
+    End If
+    
+    With Me.Lst_Keiyaku
+        For lngRow = 0 To .ListCount - 1
+            .Selected(lngRow) = True
+        Next
+        '.ListIndex = 0
+    End With
+    
+    Lbl_Cnt.Caption = "検索結果は：" & CStr(lngcnt) & "件です。"
+    Lbl_Cnt.Visible = True
+    Cmd_Exec.Visible = True
+    Cmd_OnOff.Visible = True
+    Lst_Keiyaku.Visible = True
+    Lst_Keiyaku.ListIndex = -1
+    Lst_Keiyaku.Enabled = True
+    
+'------------<Modify 既存バグ対応 2008/01/30 SRA市川 Start > ----------------------------------------
+'    Application.ScreenUpdating = True
+    
+    '画面の初期化
+    g_OnOffFlg = 0
+    Set rs = Nothing
+    Set obj_WS = Nothing
+'------------<Modify 既存バグ対応 2008/01/30 SRA市川 End   > ----------------------------------------
+End Sub
+
+'*************************************************************************
+'イベント名：Cmd_Exec_Click
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：作成ボタン押下時の処理
+'
+'作成履歴　：2006/08/01 SRA Iida
+'修正履歴　：2008/01/30 SRA市川        変更     既存バグ対応
+'*************************************************************************
+Private Sub Cmd_Exec_Click()
+On Error GoTo Err_exit
+
+    Dim strmsg      As String
+    Dim obj_ctr     As Object
+    Dim lngSelcnt   As Long
+    Dim lngErrcnt   As Long
+    Dim lngMakecnt  As Long
+    Dim strDatefrom As String
+    Dim strDateto   As String
+    
+    Application.ScreenUpdating = False
+    
+    '選択確認
+    lngSelcnt = 0
+    Call gfunLstChK(Me.Lst_Keiyaku, lngSelcnt)
+    If lngSelcnt = 0 Then
+        Call gfunc_ErrorMsg(3, 8002, "", "")
+'------------<Added 既存バグ対応 2008/01/30 SRA市川 Start > ----------------------------------------
+        Me.Lst_Keiyaku.Visible = False
+        Application.ScreenUpdating = True
+        Me.Lst_Keiyaku.Visible = True
+'------------<Added 既存バグ対応 2008/01/30 SRA市川 End   > ----------------------------------------
+        Exit Sub
+    End If
+    
+    '作成処理確認
+    strmsg = gfunc_ErrorMsg(2, 1, "", "", False)
+    If MsgBox(strmsg, vbQuestion + vbOKCancel, Application.ActiveWorkbook.Name) = vbCancel Then
+'------------<Added 既存バグ対応 2008/01/30 SRA市川 Start > ----------------------------------------
+        Me.Lst_Keiyaku.Visible = False
+        Application.ScreenUpdating = True
+        Me.Lst_Keiyaku.Visible = True
+'------------<Added 既存バグ対応 2008/01/30 SRA市川 End   > ----------------------------------------
+        Exit Sub
+    End If
+
+    Application.Cursor = xlWait
+    
+    '作成処理
+    Call g_funGetBase(Txt_Kouza.Text, Txt_BaseDate.Text, strDatefrom, strDateto)
+    '★テストとして
+'    MsgBox "Debug:Test" & strDatefrom & "～" & strDateto
+    
+    lngErrcnt = 0: lngMakecnt = 0
+    If g_funExec(lngSelcnt, strDatefrom, strDateto, lngMakecnt, lngErrcnt) = False Then
+        GoTo Err_exit
+    End If
+    
+    'エラーがあった場合書き出す
+    'プロテクト解除
+    '2006/11/21 UPDATE S iida
+    Call gCom01_BookProtect(Workbooks(XLS_Name), False)
+'    Workbooks(XLS_Name).Unprotect Password:="NAM"
+    '2006/11/21 UPDATE E iida
+    If lngErrcnt = 0 Then
+        Call gfunXlsWSChk(Application.ActiveWorkbook, WS_Err)
+    Else
+        Call gfunXlsWSChk(Application.ActiveWorkbook, WS_Err)
+        Call gfunXlsWSSet(Application.ActiveWorkbook, WS_Err)
+    End If
+    'プロテクト
+    '2006/11/21 UPDATE S iida
+    Call gCom01_BookProtect(Workbooks(XLS_Name), True)
+'    Workbooks(XLS_Name).Protect Password:="NAM"
+    '2006/11/21 UPDATE E iida
+
+    Application.Cursor = xlDefault
+    
+    Worksheets(WS_Main).Activate
+    Application.ScreenUpdating = True
+    
+'------------<Modify 既存バグ対応 2008/01/30 SRA市川 Start > ----------------------------------------
+'    strmsg = ""
+'    strmsg = "選択件数:" & CStr(lngSelcnt) & "件" & vbCrLf
+'    strmsg = strmsg & "作成件数:" & CStr(lngMakecnt) & "件" & vbCrLf
+'    strmsg = strmsg & "ｴﾗｰ 件数:" & CStr(lngErrcnt) & "件" & vbCrLf
+'    If lngErrcnt > 0 Then
+'        strmsg = strmsg & vbCrLf & "処理は終了しましたが、ｴﾗｰﾃﾞｰﾀがありました。"
+'    Else
+'        strmsg = strmsg & vbCrLf & "処理は終了しました｡ "
+'    End If
+    
+    strmsg = ""
+    strmsg = "選択件数:" & CStr(lngSelcnt) & "件" & vbCrLf
+    strmsg = strmsg & "作成件数:" & CStr(lngMakecnt) & "件" & vbCrLf
+    If lngErrcnt > 0 Then
+        strmsg = strmsg & vbCrLf & "処理が異常終了しました。"
+        strmsg = strmsg & vbCrLf & "口座番号：" & g_KoukaiErrData(0).strKouzaNO
+        If Trim(g_KoukaiErrData(0).strNaiyou) <> "" Then
+            strmsg = strmsg & vbCrLf & "エラー内容：" & g_KoukaiErrData(0).strNaiyou
+        End If
+    Else
+        strmsg = strmsg & vbCrLf & "処理は終了しました｡ "
+    End If
+'------------<Modify 既存バグ対応 2008/01/30 SRA市川 End   > ----------------------------------------
+        
+    Call MsgBox(strmsg, vbOKOnly, Application.ActiveWorkbook.Name)
+    Application.ScreenUpdating = True
+    Exit Sub
+    
+Err_exit:
+    
+    Application.Cursor = xlDefault
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "cmdExec", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Application.ScreenUpdating = True
+
+End Sub
+
+
+

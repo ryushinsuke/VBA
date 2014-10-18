@@ -1,0 +1,426 @@
+Attribute VB_Name = "basCheck"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：契約管理システム・資産別時価登録
+'
+'オブジェクト名：basCheck
+'
+'機能概要　：チェック機能
+'
+'更新履歴　：2006/07/04 SRA H.Anpo      新規作成
+'
+'*************************************************************************
+Private Const MODULE_NAME As String = "basCheck"
+
+'*************************************************************************
+'関数名　　：口座番号フォーマットチェック
+'
+'引　　数　：ARG1   I   Target      String 入力テキスト
+'
+'戻り値　　：エラー番号
+'
+'機能説明　：入力必須チェック
+'　　　　　　レングスチェック(7桁以下)
+'
+'更新履歴　：2006/07/04 SRA H.Anpo      新規作成
+'
+'*************************************************************************
+Public Function fncChkKouzaNoFormat(ByVal Target As String) As Long
+
+    Const PROCEDURE_NAME As String = "fncChkKouzaNoFormat"
+
+On Error GoTo ErrHandler
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    fncChkKouzaNoFormat = 0
+    
+    Select Case Len(Target)
+        Case LEN_NULL
+            '未入力
+            '3005 未入力です。
+            fncKsCmnMessageDisp MSGLVL_WARNNING, 3005, MSG1_NUMCD, , True
+            fncChkKouzaNoFormat = 3005
+            Exit Function
+            
+        Case Is > LEN_KOUZA
+            '入力桁数が不正です。
+            '3006 桁数不正
+            fncKsCmnMessageDisp MSGLVL_WARNNING, 3006, MSG1_NUMCD, MSG2_LEN_KOUZANO, True
+            fncChkKouzaNoFormat = 3006
+            Exit Function
+    
+    End Select
+    
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+ErrHandler:
+    fncChkKouzaNoFormat = Err.Number
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+
+
+'*************************************************************************
+'関数名　　：口座番号情報チェック
+'
+'引　　数　：ARG1   I   Target      String 入力テキスト
+'　　　　　：ARG2   I   Kijyunbi    String 基準日
+'　　　　　：ARG6   O   Kouza_name  String 口座名称
+'
+'戻り値　　：エラー番号
+'
+'機能説明　：口座属性(VW_DT001D)の存在チェック(1件のみ存在すること)
+'
+'更新履歴　：2006/07/04 SRA H.Anpo      新規作成
+'更新履歴　：2008/01/23 SRA Y.Azuma     変更     (PH4)特殊文字バグ対応
+'        　：2013/04/12 GUT 趙 顧問バック更改対応
+'
+'*************************************************************************
+'Public Function fncChkKouzaNoInfo(ByVal Target As String, _
+'                            ByVal Kijyunbi As String, _
+'                            ByRef Kouza_name As String) As Long
+Public Function fncChkKouzaNoInfo(ByVal Target As String, _
+                            ByVal Kijyunbi As String, _
+                            ByRef Kouza_name As String, _
+                            ByRef Settei_date As String, _
+                            ByRef Calloff_date As String) As Long
+
+    Const PROCEDURE_NAME As String = "fncChkKouzaNoInfo"
+
+On Error GoTo ErrHandler
+    
+    Dim blnRet      As Boolean
+    Dim strKouza_no As String
+    
+    Dim strSql      As String
+    Dim vntRec()    As Variant
+    Dim lngCols     As Long
+    Dim lngRows     As Long
+    Dim strErrCd    As String
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    fncChkKouzaNoInfo = 0
+    
+    'VW_DT001D存在チェック(1件のみ存在すること)
+    strSql = ""
+    strSql = strSql & " SELECT"
+    strSql = strSql & "     PRTCD, NAME_RJ, SETTEI_DATE, CALLOFF_DATE"
+    strSql = strSql & " FROM"
+    strSql = strSql & "     VW_DT001D"
+    strSql = strSql & " WHERE"
+'------------<Modify Start azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+    strSql = strSql & "     PRTCD = '" & Format(func_ChkQuoteshon(Target, "'"), "0000000") & "'"
+'    strSql = strSql & "     PRTCD = '" & Format(Target, "0000000") & "'"
+'------------<Modify End   azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+'------------<顧問バック更改対応 2013/04/12 GUT 趙 START> ------------
+'    strSql = strSql & " AND SETTEI_KBN = '1'"
+    strSql = strSql & " AND SETTEI_KBN = '0'"
+    strSql = strSql & " AND GENGO = '0'"
+'------------<顧問バック更改対応 2013/04/12 GUT 趙 END> ------------
+    
+'''    strSql = strSql & " AND (CALLOFF_DATE = 0 OR"
+'''    strSql = strSql & "     CALLOFF_DATE > " & Trim(Kijyunbi) & ")"
+    strSql = strSql & " AND (CALLOFF_DATE IS NULL OR"
+    strSql = strSql & "     CALLOFF_DATE = '0' OR"
+    strSql = strSql & "     CALLOFF_DATE > '" & Trim(Kijyunbi) & "')"
+
+    blnRet = fncKsCmnDoExequteSql(mainmenu.gcSELECT, strSql, vntRec, lngCols, lngRows, strErrCd)
+    If blnRet = True Then
+        
+        If lngRows = 0 Then
+            '3007 該当データが存在しない
+            fncKsCmnMessageDisp MSGLVL_WARNNING, 3007, MSG1_NUMCD, , True
+            fncChkKouzaNoInfo = 3007
+            Exit Function
+        Else
+            
+            If lngRows > 1 Then
+                '3009 該当データが複数件存在します。
+                fncKsCmnMessageDisp MSGLVL_WARNNING, 3009, MSG1_NUMCD, , True
+                fncChkKouzaNoInfo = 3009
+                Exit Function
+            End If
+            
+            If IsNull(vntRec(0, 0)) Then
+                '3008 該当データが存在しない
+                fncKsCmnMessageDisp MSGLVL_WARNNING, 3008, MSG1_NUMCD, , True
+                fncChkKouzaNoInfo = 3008
+                Exit Function
+            Else
+                Kouza_name = vntRec(1, 0)
+            
+                Settei_date = vntRec(2, 0)
+                Calloff_date = vntRec(3, 0)
+            
+            End If
+        End If
+    End If
+    
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+ErrHandler:
+    fncChkKouzaNoInfo = Err.Number
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+
+'*************************************************************************
+'関数名　　：日付チェック
+'
+'引　　数　：ARG1   I   Target      String 入力テキスト
+'　　　　　：ARG2   I   Msg1        String メッセージ出力時の項目名
+'
+'戻り値　　：エラー番号
+'
+'機能説明　：YYYYMMDD形式の日付チェックを行う。
+'
+'更新履歴　：2006/07/05 SRA H.Anpo      新規作成
+'
+'*************************************************************************
+Public Function fncChkDateFormat(ByVal Target As String, _
+                            ByVal Msg1 As String) As Long
+
+    Const PROCEDURE_NAME As String = "fncChkDateFormat"
+
+On Error GoTo ErrHandler
+    
+    Dim strRet  As String
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Select Case Len(Target)
+        Case LEN_NULL
+            '3010 未入力です。
+            fncKsCmnMessageDisp MSGLVL_WARNNING, 3010, Msg1, , True
+            fncChkDateFormat = 3010
+            Exit Function
+            
+        Case LEN_DATE
+            If IsDate(Format(Target, "####/##/##")) Then
+            Else
+                '形式不正
+                '3011 日付として認識できません。YYYYMMDD形式で入力して下さい。
+                fncKsCmnMessageDisp MSGLVL_WARNNING, 3011, Msg1, , True
+                fncChkDateFormat = 3011
+                Exit Function
+            End If
+            
+        Case Else
+            '桁数不正
+            '3012 入力桁数が不正です。
+            fncKsCmnMessageDisp MSGLVL_WARNNING, 3012, Msg1, "YYYYMMDD形式で入力して下さい。", True
+            fncChkDateFormat = 3012
+            Exit Function
+    End Select
+    
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+
+ErrHandler:
+    fncChkDateFormat = Err.Number
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+
+'*************************************************************************
+'関数名　　：金額チェック
+'
+'引　　数　：ARG1   I   Target      String 入力テキスト
+'　　　　　：ARG2   I   Msg1        String メッセージ出力時の項目名
+'
+'戻り値　　：エラー番号
+'
+'機能説明　：金額のチェックを行う。
+'
+'更新履歴　：2006/07/05 SRA H.Anpo      新規作成
+'更新履歴　：2008/01/23 SRA Y.Azuma    変更     (PH4)特殊文字バグ対応
+'
+'*************************************************************************
+Public Function fncChkJikagakuFormat(ByVal Target As String, _
+                            ByVal Msg1 As String) As Long
+
+    Const PROCEDURE_NAME As String = "fncChkJikagakuFormat"
+
+On Error GoTo ErrHandler
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    fncChkJikagakuFormat = 0
+    
+    If Trim(Target) = vbNullString Then GoTo EndProcess
+    
+'------------<Modify Start azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+'    If Not IsNumeric(Target) Then
+    If Not gkyk_IsNumeric(Target) Then
+'------------<Modify End   azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+        '形式不正
+        '3013 数値で入力して下さい。
+        fncKsCmnMessageDisp MSGLVL_WARNNING, 3013, Msg1, , True
+        fncChkJikagakuFormat = 3013
+        Exit Function
+    End If
+    
+    If Len(Trim(Format(Target, "#"))) > LEN_CURRENCY Then
+        '3014 入力桁数が不正です。
+        fncKsCmnMessageDisp MSGLVL_WARNNING, 3014, Msg1, MSG2_LEN_CURRENCY, True
+        fncChkJikagakuFormat = 3014
+        Exit Function
+    End If
+    
+'==== 2006/12/18 Deleted By H.Anpo Start
+'マイナス値を入力可能にする
+'    If Target < 0 Then
+'        'マイナス金額
+'        '3021 マイナス値は入力出来ません｡
+'        fncKsCmnMessageDisp MSGLVL_WARNNING, 3021, Msg1, , True
+'        fncChkJikagakuFormat = 3021
+'        Exit Function
+'    End If
+'==== 2006/12/18 Deleted By H.Anpo End
+    
+EndProcess:
+
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+ErrHandler:
+    fncChkJikagakuFormat = Err.Number
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+
+
+'*************************************************************************
+'関数名　　：組入資産オプションボタンチェック
+'
+'引　　数　：ARG1   O   SelRow      long    選択された行番号
+'
+'戻り値　　：0:正常終了(選択あり)、0以外:エラー番号
+'
+'機能説明　：組入資産オプションボタンが選択されているかをチェックする
+'
+'更新履歴　：2006/07/05 SRA H.Anpo      新規作成
+'
+'*************************************************************************
+Public Function fncChkOptionButton(ByRef SelRow As Long) As Long
+
+    Const PROCEDURE_NAME As String = "fncChkOptionButton"
+
+On Error GoTo ErrHandler
+    
+    Dim strRet  As String
+    Dim lngRow  As Long
+    Dim RowCnt  As Long
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    fncChkOptionButton = 0
+    
+    With Sheets(SHEET_MAIN)
+        lngRow = fncKsCmnSearchDataTopRow(1)
+        
+'=== 2006/12/21 Modified By H.Anpo Start
+'        Do While .Cells(lngRow, COLN_LINKCELL) <> vbNullString
+'            If .Cells(lngRow, COLN_LINKCELL) = True Then
+'                SelRow = lngRow
+'                Exit Function
+'            End If
+'            lngRow = lngRow + 1
+'        Loop
+        If .Range(RNG_LINKCELL) > 0 Then
+            SelRow = lngRow + .Range(RNG_LINKCELL) - 1
+            Exit Function
+        End If
+'=== 2006/12/21 Modified By H.Anpo End
+    
+    End With
+        
+    '3015 資産を選択して下さい。
+    fncKsCmnMessageDisp MSGLVL_WARNNING, 3015, MSG1_KINF, , True
+    fncChkOptionButton = 3015
+        
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+
+ErrHandler:
+    fncChkOptionButton = Err.Number
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+
+'*************************************************************************
+'関数名　　：項目変更チェック
+'
+'引　　数　：ARG1   O   ErrRow      long    エラーセルの行
+'　　　　　：ARG2   O   ErrCol      long    エラーセルの列
+'
+'戻り値　　：0:正常終了(変更なし)、0以外:エラー番号
+'
+'機能説明　：最初の入力・選択値と更新実行時の値が変更されて
+'           いないかをチェックする
+'
+'更新履歴　：2006/07/05 SRA H.Anpo      新規作成
+'
+'*************************************************************************
+Public Function fncChkDataChange( _
+                    ByRef ErrRow As Long, _
+                    ByRef ErrCol As Long _
+                    ) As Long
+
+    Const PROCEDURE_NAME As String = "fncChkDataChange"
+
+On Error GoTo ErrHandler
+    
+    Dim lngRet      As Long
+    Dim lngSelRow   As Long
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    fncChkDataChange = 0
+    
+    With Sheets(SHEET_MAIN)
+        '口座番号
+        If Format(.Range(RNG_KOUZA_NO).Value, "0000000") <> .Range(RNG_SV_KOUZA_NO).Value Then
+            ErrRow = .Range(RNG_KOUZA_NO).Row
+            ErrCol = .Range(RNG_KOUZA_NO).Column
+            '3016 検索時の情報と異なります。
+            fncKsCmnMessageDisp MSGLVL_WARNNING, 3016, MSG1_NUMCD, MSG2_CNG_KOUZANO, True
+            fncChkDataChange = 3016
+            Exit Function
+        End If
+        
+        '基準日
+        If Trim(.Range(RNG_KIJYUNBI).Value) <> Trim(.Range(RNG_SV_KIJYUNBI).Value) Then
+            ErrRow = .Range(RNG_KIJYUNBI).Row
+            ErrCol = .Range(RNG_KIJYUNBI).Column
+            '3017 検索時の情報と異なります。
+            fncKsCmnMessageDisp MSGLVL_WARNNING, 3017, MSG1_KIJYUNBI, MSG2_CNG_KIJYUNBI, True
+            fncChkDataChange = 3017
+            Exit Function
+        End If
+        
+        '組入資産情報の選択行
+        lngRet = fncChkOptionButton(lngSelRow)
+        If lngSelRow <> .Range(RNG_SV_SELED_ROW).Value Then
+            ErrRow = lngSelRow
+            ErrCol = COLN_DATA_TOP
+            '3018 検索時の情報と異なります。
+            fncKsCmnMessageDisp MSGLVL_WARNNING, 3018, MSG1_KINF, MSG2_CNG_SISAN, True
+            fncChkDataChange = 3018
+            Exit Function
+        End If
+        
+    End With
+    
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+
+ErrHandler:
+    fncChkDataChange = Err.Number
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+

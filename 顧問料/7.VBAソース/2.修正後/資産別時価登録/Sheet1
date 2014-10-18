@@ -1,0 +1,96 @@
+VERSION 1.0 CLASS
+BEGIN
+  MultiUse = -1  'True
+END
+Attribute VB_Name = "Sheet1"
+Attribute VB_GlobalNameSpace = False
+Attribute VB_Creatable = False
+Attribute VB_PredeclaredId = True
+Attribute VB_Exposed = True
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：契約管理システム・信託時価データ取込処理
+'
+'オブジェクト名：Sheet2
+'
+'機能概要　：メイン画面
+'
+'更新履歴　：2006/07/04 SRA 安保       新規作成
+'
+'*************************************************************************
+Private Const MODULE_NAME As String = "Sheet1"
+    
+
+'取消ボタン(DEBUG用)
+Private Sub cmdClear_Click()
+    'シート保護解除
+    subCmnUnProtectActiveSheet
+    
+    Application.ScreenUpdating = False
+    '全フィールドクリア
+    fncKsCmnClearField 1
+    fncKsCmnClearField 2
+    Application.ScreenUpdating = True
+
+    'シート保護
+    subCmnProtectActiveSheet
+End Sub
+
+'検索ボタン
+Private Sub cmdSearch_Click()
+'MsgBox gstrODBCConn
+    'シート保護解除
+    subCmnUnProtectActiveSheet
+    
+    cmdSearch.Enabled = False
+    fncSearch
+    cmdSearch.Enabled = True
+    
+    'シート保護
+    subCmnProtectActiveSheet
+'MsgBox gstrODBCConn
+End Sub
+
+'表示ボタン
+Private Sub cmdDisp_Click()
+'MsgBox gstrODBCConn
+    'シート保護解除
+    subCmnUnProtectActiveSheet
+    
+    cmdDisp.Enabled = False
+    fncDisp
+    cmdDisp.Enabled = True
+
+    'シート保護
+    subCmnProtectActiveSheet
+'MsgBox gstrODBCConn
+End Sub
+
+'更新ボタン
+Private Sub cmdUpdate_Click()
+'MsgBox gstrODBCConn
+    'シート保護解除
+    subCmnUnProtectActiveSheet
+    
+    cmdUpdate.Enabled = False
+    fncUpdate
+    cmdUpdate.Enabled = True
+
+    'シート保護
+    subCmnProtectActiveSheet
+'MsgBox gstrODBCConn
+End Sub
+
+
+
+Private Sub Worksheet_Change(ByVal Target As Range)
+End Sub
+
+Private Sub Worksheet_SelectionChange(ByVal Target As Range)
+'''    If Range(RNG_KOUZA_NO).Value = "" Then
+'''        Range(RNG_KOUZA_NM).Value = ""
+'''    End If
+End Sub
+

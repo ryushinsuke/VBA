@@ -1,0 +1,672 @@
+Attribute VB_Name = "basSqlCom"
+'=========================================================================
+'プロジェクト　　　：国内顧問料ユーザアカウント管理
+'プログラム名　　　：SQL文生成共通モジュール
+'プログラムＩＤ　　：basSqlCom
+'機能概要　　　　　：SQL文を生成する
+'
+'日付　　　　　　　作成者　　　　　　　　　　修正内容
+'-------------------------------------------------------------------------
+'2008/05/19       K.Furuya<SRA>　　　　　　新規作成
+'
+'=========================================================================
+Option Explicit
+
+
+Const CON_PASSWORD_KEY              As String = "namnamna"  'パスワードの暗号化キー
+
+'===============================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   gstrKykLoginUsrTbl_ForSelect
+'機能            :   ログインユーザ属性取得ＳＱＬ文作成
+'
+'日付               担当　              修正内容
+'-------------------------------------------------------------------------------
+'2008/05/19         K.Furuya<SRA>      新規作成
+'===============================================================================
+Public Function gstrKykLoginUsrTbl_ForSelect() As String
+    Dim strSQL      As String
+    
+    strSQL = ""
+    strSQL = strSQL & "SELECT"
+    strSQL = strSQL & "    USER_ID,"
+    strSQL = strSQL & "    (CASE WHEN KENGEN_KBN = 'A' THEN '管理者ユーザ' WHEN KENGEN_KBN = 'U' THEN '一般ユーザ' END) AS KANRI_KBN_NM,"
+    strSQL = strSQL & "    LAST_NAME,"
+    strSQL = strSQL & "    FIRST_NAME,"
+    strSQL = strSQL & "    TO_CHAR(SAISHU_LOGIN_YMD,'YYYY/MM/DD HH24:MI:SS') AS SAISHU_LOGIN_YMD,"
+    strSQL = strSQL & "    TO_CHAR(SAISHU_PSWD_KOHSHIN_YMD,'YYYY/MM/DD HH24:MI:SS') AS SAISHU_PSWD_KOHSHIN_YMD,"
+    strSQL = strSQL & "    PSWD_MACHIGAI_CNT,"
+    strSQL = strSQL & "    (CASE WHEN LOCK_KBN = '1' THEN 'パスワード間違いによるロック' WHEN LOCK_KBN = '2' THEN 'ID無効化によるロック' END) AS LOCK_KBN_NAME,"
+    strSQL = strSQL & "    TO_CHAR(LOCK_YMD,'YYYY/MM/DD HH24:MI:SS') AS LOCK_YMD,"
+    strSQL = strSQL & "    TO_CHAR(TOHROKU_YMD,'YYYY/MM/DD HH24:MI:SS') AS TOHROKU_YMD,"
+    strSQL = strSQL & "    TO_CHAR(KOHSHIN_YMD,'YYYY/MM/DD HH24:MI:SS') AS KOHSHIN_YMD,"
+    strSQL = strSQL & "    KOHSHIN_PGM_ID,"
+    strSQL = strSQL & "    KOHSHIN_TANTOHSHA"
+    strSQL = strSQL & " FROM KYK_LOGIN_USER_ZOKUSEI"
+    strSQL = strSQL & " ORDER BY"
+    strSQL = strSQL & "    KENGEN_KBN,"
+    strSQL = strSQL & "    USER_ID"
+
+    gstrKykLoginUsrTbl_ForSelect = strSQL
+    
+End Function
+'===============================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   gstrKykUsrLogTbl_ForSelect
+'機能            :   ユーザログ管理取得ＳＱＬ文作成
+'パラメータ      ：   1.日付指定パターン、2.ユーザタイプ、3.From日付、4.To日付、5.権限区分
+'日付               担当　              修正内容
+'-------------------------------------------------------------------------------
+'2008/05/19         K.Furuya<SRA>      新規作成
+'===============================================================================
+Public Function gstrKykUsrLogTbl_ForSelect( _
+                                            ByVal intDatePtn As String, _
+                                            ByVal strUsrType As String, _
+                                            Optional ByVal txtFrom As Object = " ", _
+                                            Optional ByVal txtTo As Object = " ", _
+                                            Optional ByVal strUsr As String = " " _
+                                            ) As String
+
+
+    Dim strSQL      As String
+    Dim strFrom     As String
+    Dim strTo       As String
+    
+    Const CON_ADMINUSER     As String = "A" '管理者ユーザ
+    
+    '日付を取得する
+    strFrom = Trim(txtFrom.Text)
+    strTo = Trim(txtTo.Text)
+    
+    
+    strSQL = ""
+    strSQL = strSQL & " SELECT"
+    strSQL = strSQL & "     LOG_YMD_HMS,"
+    strSQL = strSQL & "     LOG_SEQ,"
+    strSQL = strSQL & "     SOUSA_USER_ID,"
+    strSQL = strSQL & "     LOG_MSG,"
+    strSQL = strSQL & "     KOHSHIN_PGM_ID"
+    strSQL = strSQL & " FROM KYK_USER_KANRI_LOG"
+    '管理者ユーザのログ
+    If strUsrType = CON_ADMINUSER Then
+        strSQL = strSQL & " WHERE"
+        strSQL = strSQL & "     SOUSA_USER_ID = '" & strUsr & "'"
+        Select Case intDatePtn
+            Case 1
+            '日付指定なし
+            ' //
+            Case 2
+            'From日付以上
+                strSQL = strSQL & " AND TO_CHAR(LOG_YMD_HMS,'yyyy/mm/dd') >= '" & strFrom & "'"
+            Case 3
+            'To日付以下
+                strSQL = strSQL & " AND TO_CHAR(LOG_YMD_HMS,'yyyy/mm/dd') <= '" & strTo & "'"
+            Case 4
+                strSQL = strSQL & " AND (TO_CHAR(LOG_YMD_HMS,'yyyy/mm/dd') >= '" & strFrom & "'"
+                strSQL = strSQL & " AND  TO_CHAR(LOG_YMD_HMS,'yyyy/mm/dd') <= '" & strTo & "')"
+        End Select
+    Else
+    '一般ユーザのログ
+        Select Case intDatePtn
+            Case 1
+            '日付指定なし
+            ' //
+            Case 2
+            'From日付以上
+                strSQL = strSQL & " WHERE"
+                strSQL = strSQL & " TO_CHAR(LOG_YMD_HMS,'yyyy/mm/dd') >= '" & strFrom & "'"
+            Case 3
+            'To日付以下
+                strSQL = strSQL & " WHERE"
+                strSQL = strSQL & " TO_CHAR(LOG_YMD_HMS,'yyyy/mm/dd') <= '" & strTo & "'"
+            Case 4
+                strSQL = strSQL & " WHERE"
+                strSQL = strSQL & " (TO_CHAR(LOG_YMD_HMS,'yyyy/mm/dd') >= '" & strFrom & "'"
+                strSQL = strSQL & " AND  TO_CHAR(LOG_YMD_HMS,'yyyy/mm/dd') <= '" & strTo & "')"
+        End Select
+    End If
+    strSQL = strSQL & " ORDER by"
+    strSQL = strSQL & "     TO_CHAR(LOG_YMD_HMS,'yyyy/mm/dd'),"
+    strSQL = strSQL & "     LOG_SEQ DESC"
+    
+    gstrKykUsrLogTbl_ForSelect = strSQL
+
+End Function
+'===============================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   gstrOutDate_ForSelect
+'機能            :   日付取得ＳＱＬ文作成
+'
+'日付               担当　              修正内容
+'-------------------------------------------------------------------------------
+'2008/05/19         K.Furuya<SRA>      新規作成
+'===============================================================================
+Public Function gstrOutDate_ForSelect()
+    Dim strSQL          As String
+    
+    strSQL = ""
+    strSQL = strSQL & " SELECT"
+    strSQL = strSQL & "     TO_CHAR(sysdate,'YYYYMMDD_HH24MISS') AS YMD_HMS,"
+    strSQL = strSQL & "     sysdate AS SYS_DATE"
+    strSQL = strSQL & " FROM DUAL"
+
+    gstrOutDate_ForSelect = strSQL
+    
+End Function
+
+'===============================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   gstrLogSeqNo_ForSelect
+'機能            :   ユーザログシーケンス番号取得ＳＱＬ文作成
+'
+'日付               担当　              修正内容
+'-------------------------------------------------------------------------------
+'2008/05/30         K.Furuya<SRA>      新規作成
+'===============================================================================
+Public Function gstrLogSeqNo_ForSelect() As String
+    Dim strSQL      As String
+
+    
+    strSQL = ""
+    strSQL = strSQL & " SELECT "
+    strSQL = strSQL & "     MAX(LOG_SEQ) AS LOG_SEQ"
+    strSQL = strSQL & " FROM   KYK_USER_KANRI_LOG"
+    strSQL = strSQL & " WHERE"
+    strSQL = strSQL & "     TO_CHAR(LOG_YMD_HMS,'yyyy/mm/dd') = TO_CHAR(SYSDATE,'YYYY/MM/DD')"
+    
+    gstrLogSeqNo_ForSelect = strSQL
+
+End Function
+
+
+'===============================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   gstrUserZokusei_ForInsert
+'機能            :   ユーザ属性挿入ＳＱＬ文作成
+'パラメータ      ：   1.ユーザID、2.権限区分、3.姓、4.名、5.更新プログラムID、6．更新担当者
+'日付               担当　              修正内容
+'-------------------------------------------------------------------------------
+'2008/07/15         K.Furuya<SRA>      新規作成
+'===============================================================================
+Public Function gstrUserZokusei_ForInsert(ByVal strUsrID As String, _
+                                          ByVal strKnGnKbn As String, _
+                                          ByVal strSei As String, _
+                                          ByVal strMei As String, _
+                                          ByVal strPgId As String, _
+                                          ByVal strTanto As String) As String
+                                          
+    Dim strSQL              As String
+    
+    strSQL = ""
+    strSQL = strSQL & "INSERT INTO KYK_LOGIN_USER_ZOKUSEI(USER_ID,"
+    strSQL = strSQL & "KENGEN_KBN,"
+    strSQL = strSQL & "FIRST_NAME,"
+    strSQL = strSQL & "LAST_NAME,"
+    strSQL = strSQL & "SAISHU_LOGIN_YMD,"
+    strSQL = strSQL & "SAISHU_PSWD_KOHSHIN_YMD,"
+    strSQL = strSQL & "PSWD_MACHIGAI_CNT,"
+    strSQL = strSQL & "LOCK_KBN,"
+    strSQL = strSQL & "LOCK_YMD,"
+    strSQL = strSQL & "TOHROKU_YMD,"
+    strSQL = strSQL & "KOHSHIN_YMD,"
+    strSQL = strSQL & "KOHSHIN_PGM_ID,"
+    strSQL = strSQL & "KOHSHIN_TANTOHSHA"
+    strSQL = strSQL & ")"
+    strSQL = strSQL & " VALUES("
+    strSQL = strSQL & "'" & strUsrID & "',"
+    strSQL = strSQL & "'" & strKnGnKbn & "',"
+    '姓名が未入力の場合はNULLを設定する
+    If Trim(strMei) <> "" Then
+        strSQL = strSQL & "'" & strMei & "',"
+    Else
+        strSQL = strSQL & "NULL,"
+    End If
+    If Trim(strSei) <> "" Then
+        strSQL = strSQL & "'" & strSei & "',"
+    Else
+        strSQL = strSQL & "NULL,"
+    End If
+    strSQL = strSQL & "NULL,"
+    strSQL = strSQL & "NULL,"
+    strSQL = strSQL & "0,"
+    strSQL = strSQL & "0,"
+    strSQL = strSQL & "NULL,"
+    strSQL = strSQL & "SYSDATE,"
+    strSQL = strSQL & "SYSDATE,"
+    strSQL = strSQL & "'" & strPgId & "',"
+    strSQL = strSQL & "'" & strTanto & "'"
+    strSQL = strSQL & ")"
+    
+    gstrUserZokusei_ForInsert = strSQL
+    
+End Function
+
+'===============================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   gstrUsreLog_ForInsert
+'機能            :   ユーザログインサートＳＱＬ文作成
+'パラメータ      ：   1.シーケンス番号、2.ユーザID、3.出力文言、4.プログラムID
+'
+'日付               担当　              修正内容
+'-------------------------------------------------------------------------------
+'2008/05/19         K.Furuya<SRA>      新規作成
+'===============================================================================
+Public Function gstrUsreLog_ForInsert( _
+                                       ByVal intSEQ_No As Integer, _
+                                       ByVal strUserID As String, _
+                                       ByVal strMsg As String, _
+                                       ByVal strPgmID As String _
+                                       ) As String
+    Dim strSQL      As String
+                                           
+                                           
+    strSQL = ""
+    strSQL = strSQL & " INSERT INTO KYK_USER_KANRI_LOG"
+    strSQL = strSQL & " (LOG_YMD_HMS,"
+    strSQL = strSQL & "  LOG_SEQ,"
+    strSQL = strSQL & "  SOUSA_USER_ID,"
+    strSQL = strSQL & "  LOG_MSG,"
+    strSQL = strSQL & "  KOHSHIN_PGM_ID"
+    strSQL = strSQL & " )"
+    strSQL = strSQL & " VALUES (SYSDATE,"
+    strSQL = strSQL & intSEQ_No & ","
+    strSQL = strSQL & "  '" & strUserID & "',"
+    strSQL = strSQL & "  '" & strMsg & "',"
+    strSQL = strSQL & "  '" & strPgmID & "')"
+                                       
+    gstrUsreLog_ForInsert = strSQL
+                                       
+End Function
+
+
+
+
+'===============================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   gstrUserID_ForSelect
+'機能            :   ユーザID取得ＳＱＬ文作成
+'
+'日付               担当　              修正内容
+'-------------------------------------------------------------------------------
+'2008/07/11         K.Furuya<SRA>      新規作成
+'===============================================================================
+Public Function gstrUserID_ForSelect()
+    Dim strSQL          As String
+
+    strSQL = ""
+    strSQL = strSQL & "SELECT USER_ID"
+    strSQL = strSQL & " FROM KYK_LOGIN_USER_ZOKUSEI"
+    strSQL = strSQL & " ORDER BY"
+    strSQL = strSQL & "    KENGEN_KBN,"
+    strSQL = strSQL & "    USER_ID"
+    
+    gstrUserID_ForSelect = strSQL
+
+End Function
+
+'===============================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   gstrOutDate_ForSelect
+'機能            :   選択ユーザ属性取得ＳＱＬ文作成
+'
+'日付               担当　              修正内容
+'-------------------------------------------------------------------------------
+'2008/07/11         K.Furuya<SRA>      新規作成
+'===============================================================================
+Public Function gstrUserZokusei_ForSelect(ByVal strUserID As String, _
+                                          ByVal lngParam As Long) As String
+    Dim strSQL      As String
+
+    strSQL = ""
+    strSQL = strSQL & "SELECT"
+    strSQL = strSQL & "    USER_ID,"
+    strSQL = strSQL & "    KENGEN_KBN,"
+    strSQL = strSQL & "    NVL(TO_CHAR(SAISHU_LOGIN_YMD,'yyyy/mm/dd'),' ') AS SAISHU_LOGIN_YMD,"
+    strSQL = strSQL & "    NVL(LAST_NAME,' ') AS LAST_NAME,"
+    strSQL = strSQL & "    NVL(FIRST_NAME,' ') AS FIRST_NAME,"
+    strSQL = strSQL & "    LOCK_KBN,"
+    strSQL = strSQL & "    NVL(TO_CHAR(SAISHU_PSWD_KOHSHIN_YMD,'yyyy/mm/dd'),' ') AS SAISHU_PSWD_KOHSHIN_YMD, "
+    strSQL = strSQL & "    NVL(TO_CHAR(SAISHU_PSWD_KOHSHIN_YMD + " & lngParam & ",'yyyy/mm/dd'),' ') AS PSWD_KIGEN,"
+    strSQL = strSQL & "    NVL(PSWD_MACHIGAI_CNT,0) AS PSWD_MACHIGAI_CNT"
+    strSQL = strSQL & " FROM KYK_LOGIN_USER_ZOKUSEI"
+    strSQL = strSQL & " WHERE USER_ID = '" & strUserID & "'"
+
+    gstrUserZokusei_ForSelect = strSQL
+
+End Function
+
+'===============================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   gstrUser_ForSelect
+'機能            :   ユーザ存在チェックＳＱＬ文作成
+'
+'日付               担当　              修正内容
+'-------------------------------------------------------------------------------
+'2008/07/01         K.Furuya<SRA>      新規作成
+'===============================================================================
+Public Function gstrUser_ForSelect(ByVal strUserID As String) As String
+    Dim strSQL      As String
+    
+    strSQL = ""
+    strSQL = strSQL & "SELECT USER_ID"
+    strSQL = strSQL & " FROM KYK_LOGIN_USER_ZOKUSEI"
+    strSQL = strSQL & " WHERE "
+    strSQL = strSQL & "    USER_ID = '" & strUserID & "'"
+    
+    gstrUser_ForSelect = strSQL
+    
+End Function
+
+'===============================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   gstrGetPassWord_ForSelect
+'機能            :   パスワード取得ＳＱＬ文作成
+'パラメータ      ：   1.ユーザID、2.パスワード、3.履歴番号
+'日付               担当　              修正内容
+'-------------------------------------------------------------------------------
+'2008/07/14         K.Furuya<SRA>      新規作成
+'===============================================================================
+Public Function gstrGetPassWord_ForSelect(ByVal strUsrID As String, _
+                                          ByVal strPassWord As String, _
+                                          ByVal lngRirekiNo As Long _
+                                          ) As String
+
+    Dim strSQL          As String
+    
+    strSQL = ""
+    strSQL = strSQL & "DECLARE"
+    strSQL = strSQL & "    a_user_id             VARCHAR2(64) := '" & strUsrID & "';"
+    strSQL = strSQL & "    a_sedai               NUMBER := " & lngRirekiNo & ";"
+    strSQL = strSQL & "    a_user_pswd           VARCHAR2(64) := '" & strPassWord & "';"
+    strSQL = strSQL & "    key_str               VARCHAR2(8) := '" & CON_PASSWORD_KEY & "';"
+    strSQL = strSQL & "    encrypted_str         VARCHAR2(64);"
+    strSQL = strSQL & "    val_sec_password      VARCHAR2(64);"
+    strSQL = strSQL & "    key_not_found         EXCEPTION;"
+    strSQL = strSQL & "    rec_cnt               NUMBER;"
+    strSQL = strSQL & "    err_num               NUMBER;"
+    strSQL = strSQL & "    err_msg               VARCHAR2(100);"
+    strSQL = strSQL & " BEGIN    val_sec_password := RPAD(a_user_pswd, 64, ' ');"
+    strSQL = strSQL & "    dbms_obfuscation_toolkit.DESEncrypt( input_string => val_sec_password, key_string => key_str, encrypted_string => encrypted_str );"
+    strSQL = strSQL & "    SELECT count(*) INTO rec_cnt"
+    strSQL = strSQL & "    FROM kyk_login_pswd_zokusei"
+    strSQL = strSQL & "    WHERE"
+    strSQL = strSQL & "        user_id  = a_user_id AND"
+    strSQL = strSQL & "        sedai_no = a_sedai AND"
+    strSQL = strSQL & "        pswd = encrypted_str ;"
+    strSQL = strSQL & "    IF rec_cnt = 0 THEN        RAISE key_not_found;"
+    strSQL = strSQL & "    END IF;"
+    strSQL = strSQL & " END;"
+
+    gstrGetPassWord_ForSelect = strSQL
+
+End Function
+
+'===============================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   gstrGetParam_ForSelect
+'機能            :   パラメータ履歴番号取得ＳＱＬ文作成
+'パラメータ      ：   1．パラメータコード
+'日付               担当　              修正内容
+'-------------------------------------------------------------------------------
+'2008/07/14         K.Furuya<SRA>      新規作成
+'===============================================================================
+Public Function gstrGetParam_ForSelect(ByVal strParam As String) As String
+    Dim strSQL          As String
+
+    Select Case strParam
+        Case CON_PARA_CODE_NO010
+            strSQL = ""
+            strSQL = strSQL & "SELECT NUM_PARAM"
+            strSQL = strSQL & " FROM KYK_USER_KANRI_PARAM_ZOKUSEI"
+            strSQL = strSQL & " WHERE"
+            strSQL = strSQL & "    PARAMETER_CD = '" & CON_PARA_CODE_NO010 & "'"
+        Case CON_PARA_CODE_NO020
+            strSQL = ""
+            strSQL = strSQL & "SELECT STR_PARAM"
+            strSQL = strSQL & " FROM KYK_USER_KANRI_PARAM_ZOKUSEI"
+            strSQL = strSQL & " WHERE"
+            strSQL = strSQL & "    PARAMETER_CD = '" & CON_PARA_CODE_NO020 & "'"
+        Case CON_PARA_CODE_NO030
+            strSQL = ""
+            strSQL = strSQL & "SELECT NUM_PARAM"
+            strSQL = strSQL & " FROM KYK_USER_KANRI_PARAM_ZOKUSEI"
+            strSQL = strSQL & " WHERE"
+            strSQL = strSQL & "    PARAMETER_CD = '" & CON_PARA_CODE_NO030 & "'"
+        Case CON_PARA_CODE_NO040
+            strSQL = ""
+            strSQL = strSQL & "SELECT NUM_PARAM"
+            strSQL = strSQL & " FROM KYK_USER_KANRI_PARAM_ZOKUSEI"
+            strSQL = strSQL & " WHERE"
+            strSQL = strSQL & "    PARAMETER_CD = '" & CON_PARA_CODE_NO040 & "'"
+        Case CON_PARA_CODE_NO050
+            strSQL = ""
+            strSQL = strSQL & "SELECT STR_PARAM"
+            strSQL = strSQL & " FROM KYK_USER_KANRI_PARAM_ZOKUSEI"
+            strSQL = strSQL & " WHERE"
+            strSQL = strSQL & "    PARAMETER_CD = '" & CON_PARA_CODE_NO050 & "'"
+        Case CON_PARA_CODE_NO070
+            strSQL = ""
+            strSQL = strSQL & "SELECT NUM_PARAM"
+            strSQL = strSQL & " FROM KYK_USER_KANRI_PARAM_ZOKUSEI"
+            strSQL = strSQL & " WHERE"
+            strSQL = strSQL & "    PARAMETER_CD = '" & CON_PARA_CODE_NO070 & "'"
+    End Select
+    
+    gstrGetParam_ForSelect = strSQL
+
+End Function
+
+'===============================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   gstrGetSedaiNo_ForSelect
+'機能            :   パスワード世代番号番号取得ＳＱＬ文作成
+'パラメータ      ：   1．パラメータコード
+'日付               担当　              修正内容
+'-------------------------------------------------------------------------------
+'2008/07/14         K.Furuya<SRA>      新規作成
+'===============================================================================
+Public Function gstrGetSedaiNo_ForSelect(ByVal strUsrID As String) As String
+    Dim strSQL          As String
+
+    strSQL = ""
+    strSQL = strSQL & "SELECT"
+    strSQL = strSQL & "    a.USER_ID,"
+    strSQL = strSQL & "    a.SEDAI_NO,"
+    strSQL = strSQL & "    b.SHOKI_PSWD_FLG,"
+    strSQL = strSQL & "    TO_CHAR(b.TOHROKU_YMD,'yyyy/mm/dd') AS TOHROKU_YMD"
+    strSQL = strSQL & " FROM"
+    strSQL = strSQL & "    (SELECT"
+    strSQL = strSQL & "         USER_ID,"
+    strSQL = strSQL & "         MAX(SEDAI_NO) AS SEDAI_NO"
+    strSQL = strSQL & "     FROM KYK_LOGIN_PSWD_ZOKUSEI"
+    strSQL = strSQL & "     WHERE"
+    strSQL = strSQL & "         USER_ID = '" & strUsrID & "'"
+    strSQL = strSQL & "     GROUP BY"
+    strSQL = strSQL & "         USER_ID"
+    strSQL = strSQL & "    ) a,"
+    strSQL = strSQL & "    KYK_LOGIN_PSWD_ZOKUSEI b"
+    strSQL = strSQL & " WHERE"
+    strSQL = strSQL & "    b.USER_ID = a.USER_ID AND"
+    strSQL = strSQL & "    b.SEDAI_NO = a.SEDAI_NO"
+
+    gstrGetSedaiNo_ForSelect = strSQL
+
+End Function
+
+'===============================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   gstrPwdZokusei_ForInsert
+'機能            :   パスワード属性挿入ＳＱＬ文作成
+'パラメータ      ：   1.ユーザID、2.パスワード、3.更新プログラムID、4．更新担当者、5．世代番号
+'日付               担当　              修正内容
+'-------------------------------------------------------------------------------
+'2008/07/15         K.Furuya<SRA>      新規作成
+'===============================================================================
+Public Function gstrPwdZokusei_ForInsert(ByVal strUsrID As String, _
+                                         ByVal strPassWord As String, _
+                                         ByVal strPgIg As String, _
+                                         ByVal strTanto As String, _
+                                         Optional ByVal lngSedaiNo As Long = 0) As String
+    Dim strSQL          As String
+    
+    strSQL = ""
+    strSQL = strSQL & "INSERT INTO KYK_LOGIN_PSWD_ZOKUSEI(USER_ID,"
+    strSQL = strSQL & "                                   SEDAI_NO,"
+    strSQL = strSQL & "                                   PSWD,"
+    strSQL = strSQL & "                                   SHOKI_PSWD_FLG,"
+    strSQL = strSQL & "                                   TOHROKU_YMD,"
+    strSQL = strSQL & "                                   KOHSHIN_PGM_ID,"
+    strSQL = strSQL & "                                   KOHSHIN_TANTOHSHA"
+    strSQL = strSQL & "                                  )"
+    strSQL = strSQL & "                            VALUES("
+    strSQL = strSQL & "                                   '" & strUsrID & "',"
+    strSQL = strSQL & "                                    " & lngSedaiNo & ","
+    strSQL = strSQL & "                                   '" & strPassWord & "',"
+    strSQL = strSQL & "                                   '1',"
+    strSQL = strSQL & "                                   SYSDATE,"
+    strSQL = strSQL & "                                   '" & strPgIg & "',"
+    strSQL = strSQL & "                                   '" & strTanto & "'"
+    strSQL = strSQL & "                                  )"
+    
+    gstrPwdZokusei_ForInsert = strSQL
+    
+End Function
+
+'===============================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   gstrUserZokusei_ForUpdate
+'機能            :   ユーザ属性更新ＳＱＬ文作成
+'パラメータ      ：   1．初期化フラグ("1":初期化,"2":非初期化、2.ユーザID、3.権限区分、4.姓、5.名、6.ロック区分、
+'　　　　　      ：   7.更新プログラムID、8．更新担当者
+'日付               担当　              修正内容
+'-------------------------------------------------------------------------------
+'2008/07/15         K.Furuya<SRA>      新規作成
+'===============================================================================
+Public Function gstrUserZokusei_ForUpdate(ByVal strSyokiFlg As String, _
+                                          ByVal strUsrID As String, _
+                                          ByVal strKnGnKbn As String, _
+                                          ByVal strSei As String, _
+                                          ByVal strMei As String, _
+                                          ByVal strPgId As String, _
+                                          ByVal strTanto As String, _
+                                          ByVal strLockKbn As String) As String
+    Dim strSQL          As String
+    
+    strSQL = ""
+    strSQL = strSQL & "UPDATE KYK_LOGIN_USER_ZOKUSEI"
+    strSQL = strSQL & " SET KENGEN_KBN = '" & strKnGnKbn & "',"
+    '姓名が未入力の場合はNULLを設定する
+    If Trim(strMei) <> "" Then
+        strSQL = strSQL & "     FIRST_NAME = '" & strMei & "',"
+    Else
+        strSQL = strSQL & "     FIRST_NAME = NULL,"
+    End If
+    If Trim(strSei) <> "" Then
+        strSQL = strSQL & "     LAST_NAME = '" & strSei & "',"
+    Else
+        strSQL = strSQL & "     LAST_NAME = NULL,"
+    End If
+    'パスワード初期化かロック解除の場合は間違い回数をゼロクリアする
+    If strSyokiFlg = "1" Or strLockKbn = "0" Then
+        strSQL = strSQL & "     PSWD_MACHIGAI_CNT = 0,"
+    End If
+    'ロック区分が "3"の場合はセットしない
+    If strLockKbn <> "3" Then
+        strSQL = strSQL & "     LOCK_KBN = '" & strLockKbn & "',"
+    End If
+    'ロック解除の場合はロック日付はNULLを設定。ロックの場合はシステム日付を設定する。
+    If strLockKbn = "0" Then
+        strSQL = strSQL & "     LOCK_YMD = NULL,"
+    ElseIf strLockKbn = "1" Or strLockKbn = "2" Then
+        strSQL = strSQL & "     LOCK_YMD = SYSDATE,"
+    End If
+    strSQL = strSQL & "     KOHSHIN_YMD = SYSDATE,"
+    strSQL = strSQL & "     KOHSHIN_PGM_ID = '" & strPgId & "',"
+    strSQL = strSQL & "     KOHSHIN_TANTOHSHA = '" & strTanto & "'"
+    strSQL = strSQL & " WHERE"
+    strSQL = strSQL & "    USER_ID = '" & strUsrID & "'"
+    
+    gstrUserZokusei_ForUpdate = strSQL
+
+End Function
+
+'===============================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   strPassWoed_ForUpdate
+'機能            :   パスワード暗号化ＳＱＬ文作成
+'パラメータ      ：   1.ユーザID、2.パスワード、3.世代番号
+'日付               担当　              修正内容
+'-------------------------------------------------------------------------------
+'2008/07/15         K.Furuya<SRA>      新規作成
+'===============================================================================
+Public Function strPassWoed_ForUpdate(ByVal strUsrID As String, _
+                                      Optional ByVal lngSedaiNo As Long = 0) As String
+
+    Dim strSQL      As String
+    
+    strSQL = ""
+    strSQL = strSQL & "DECLARE"
+    strSQL = strSQL & "    w_user_id           VARCHAR2(64);"
+    strSQL = strSQL & "    w_sedai             NUMBER;"
+    strSQL = strSQL & "    w_user_pswd         VARCHAR2(64);"
+    strSQL = strSQL & "    key_str             VARCHAR2(8) := '" & CON_PASSWORD_KEY & "';"
+    strSQL = strSQL & "    encrypted_str       VARCHAR2(64);"
+    strSQL = strSQL & "    error_in_update     EXCEPTION;"
+    strSQL = strSQL & " BEGIN"
+    strSQL = strSQL & "    SELECT user_id, sedai_no, pswd INTO w_user_id, w_sedai, w_user_pswd FROM kyk_login_pswd_zokusei"
+    strSQL = strSQL & "     WHERE user_id = '" & strUsrID & "'"
+    strSQL = strSQL & "       AND sedai_no  = " & lngSedaiNo & ";"
+    strSQL = strSQL & "    w_user_pswd := RPAD(w_user_pswd, 64, ' ');"
+    strSQL = strSQL & "    dbms_obfuscation_toolkit.DESEncrypt( input_string => w_user_pswd, key_string => key_str, encrypted_string => encrypted_str );"
+    strSQL = strSQL & "    UPDATE        kyk_login_pswd_zokusei"
+    strSQL = strSQL & "        SET       pswd    = encrypted_str"
+    strSQL = strSQL & "        WHERE     user_id = '" & strUsrID & "'"
+    strSQL = strSQL & "          AND     sedai_no  = " & lngSedaiNo & ";"
+    strSQL = strSQL & " END;"
+
+    strPassWoed_ForUpdate = strSQL
+    
+End Function
+
+
+
+'===============================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   gstrTBL_ForTruncate
+'機能            :   任意テーブルの表削除ＳＱＬ作成
+'パラメータ      ：   1.テーブル名
+'日付               担当　              修正内容
+'-------------------------------------------------------------------------------
+'2008/07/17         K.Furuya<SRA>      新規作成
+'===============================================================================
+Public Function gstrTBL_ForTruncate(ByVal strTblName As String) As String
+    Dim strSQL      As String
+    
+    strSQL = ""
+    strSQL = strSQL & "TRUNCATE TABLE " & strTblName
+
+    gstrTBL_ForTruncate = strSQL
+    
+End Function
+
+'===============================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   gstrParamZokusei_ForUpdate
+'機能            :   パラメータ更新ＳＱＬ文作成
+'パラメータ      ：   1.strParamCd、2.strParam、3.更新プログラムID、4.更新担当者
+'
+'日付               担当　              修正内容
+'-------------------------------------------------------------------------------
+'2008/07/17         K.Furuya<SRA>      新規作成
+'===============================================================================
+Public Function gstrParamZokusei_ForUpdate(ByVal strParamCd As String, _
+                                           ByVal strParam As String, _
+                                           ByVal strPgId As String, _
+                                           ByVal strTanto As String) As String
+    Dim strSQL      As String
+    
+    
+    strSQL = ""
+    strSQL = strSQL & "UPDATE KYK_USER_KANRI_PARAM_ZOKUSEI"
+    'パラメータがニュウメリックの場合
+    Select Case strParamCd
+        Case CON_PARA_CODE_NO010, CON_PARA_CODE_NO030, CON_PARA_CODE_NO040, CON_PARA_CODE_NO070
+            strSQL = strSQL & " SET NUM_PARAM = " & strParam & ","
+            strSQL = strSQL & "     STR_PARAM = NULL,"
+        Case CON_PARA_CODE_NO020, CON_PARA_CODE_NO050
+            strSQL = strSQL & " SET NUM_PARAM = NULL,"
+            strSQL = strSQL & "     STR_PARAM = '" & strParam & "',"
+    End Select
+    strSQL = strSQL & "     TOHROKU_YMD = SYSDATE,"
+    strSQL = strSQL & "     KOHSHIN_PGM_ID = '" & strPgId & "',"
+    strSQL = strSQL & "     KOHSHIN_TANTOHSHA = '" & strTanto & "'"
+    strSQL = strSQL & " WHERE PARAMETER_CD = '" & strParamCd & "'"
+    
+    
+    
+    gstrParamZokusei_ForUpdate = strSQL
+
+End Function

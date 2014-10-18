@@ -1,0 +1,190 @@
+VERSION 1.0 CLASS
+BEGIN
+  MultiUse = -1  'True
+END
+Attribute VB_Name = "Sheet1"
+Attribute VB_GlobalNameSpace = False
+Attribute VB_Creatable = False
+Attribute VB_PredeclaredId = True
+Attribute VB_Exposed = True
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：国内顧問料・掛目コード登録
+'
+'オブジェクト名：Sheet1
+'
+'機能概要　：メイン画面
+'
+'更新履歴　：2006/11/30 SRA 東       新規作成
+'
+'*************************************************************************
+Private Const MODULE_NAME As String = "main"
+
+
+'*************************************************************************
+'関数名　　：削除ボタン・イベントプロシージャ
+'
+'引　　数　：
+'
+'戻り値　　：
+'
+'機能説明　：削除ボタン押下時の処理
+'
+'更新履歴　：2006/11/30 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Private Sub cmdDelete_Click()
+
+On Error GoTo Error_Section
+
+    Application.ScreenUpdating = False
+    
+    '削除処理
+    Call gsub_SakujoMain(Worksheets(MAIN_SHEETNAME))
+    
+    Application.ScreenUpdating = True
+
+    Exit Sub
+
+Error_Section:
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(MODULE_NAME, "cmdDelete_Click", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Application.ScreenUpdating = True
+    
+
+End Sub
+
+'*************************************************************************
+'関数名　　：検索ボタン・イベントプロシージャ
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：検索ボタンを押下された場合の処理
+'
+'更新履歴　：2006/11/30 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Private Sub cmdSearch_Click()
+
+On Error GoTo Error_Section
+
+    
+    Application.ScreenUpdating = False
+    
+    '検索メイン
+    Call gsub_KensakuMain(Worksheets(MAIN_SHEETNAME))
+    
+    Application.ScreenUpdating = True
+
+    
+    Exit Sub
+
+Error_Section:
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(MODULE_NAME, "cmdSearch_Click", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Application.ScreenUpdating = True
+    
+    
+End Sub
+
+
+'*************************************************************************
+'関数名　　：更新ボタン・イベントプロシージャ
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：更新ボタンを押下された場合の処理
+'
+'更新履歴　：2006/11/30 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Private Sub cmdUp_Click()
+
+On Error GoTo Error_Section
+
+    Application.ScreenUpdating = False
+    
+    '検索メイン
+    Call gsub_KoushinMain(Worksheets(MAIN_SHEETNAME))
+    
+    Application.ScreenUpdating = True
+    
+    
+    Exit Sub
+Error_Section:
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(MODULE_NAME, "cmdUp_Click", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Application.ScreenUpdating = True
+    
+
+
+End Sub
+
+'*************************************************************************
+'関数名　　：セル変更処理・イベントプロシージャ
+'
+'引　　数　：
+'
+'戻り値　　：なし
+'
+'機能説明　：セル変更後の処理
+'
+'更新履歴　：2006/11/30 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Private Sub Worksheet_Change(ByVal Target As Range)
+On Error Resume Next
+
+    Dim strFugou As String
+    
+    If Target.ROW = Range("掛目コード").ROW And Target.Column = Range("掛目コード").Column Then
+        '掛目名を削除する。
+        Range("掛目名称").Value = ""
+        Call gCom01_SheetProtect(ThisWorkbook.Worksheets(MAIN_SHEETNAME), False)
+        Range("検索時更新日").Value = ""
+        Call gCom01_SheetProtect(ThisWorkbook.Worksheets(MAIN_SHEETNAME), True)
+    End If
+
+    If Target.ROW = (Range("収益率").ROW + 2) And Target.Column = Range("収益率").Column Then
+        Call gCom01_SheetProtect(ThisWorkbook.Worksheets(MAIN_SHEETNAME), False)
+        Range("収益率").Offset(1, 0).Value = Target.Value
+        Call gCom01_SheetProtect(ThisWorkbook.Worksheets(MAIN_SHEETNAME), True)
+    End If
+
+    If Target.ROW = (Range("符号").ROW + 2) And Target.Column = Range("符号").Column Then
+        Select Case Target.Text
+            Case "≦"
+                strFugou = "＞"
+            Case "＜"
+                strFugou = "≧"
+            Case Else
+                strFugou = ""
+        End Select
+        Call gCom01_SheetProtect(ThisWorkbook.Worksheets(MAIN_SHEETNAME), False)
+        Range("符号").Offset(1, 0).Value = strFugou
+        Call gCom01_SheetProtect(ThisWorkbook.Worksheets(MAIN_SHEETNAME), True)
+    End If
+
+End Sub
+

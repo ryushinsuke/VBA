@@ -1,0 +1,1133 @@
+VERSION 5.00
+Begin {C62A69F0-16DC-11CE-9E98-00AA00574A4F} frm_adminMenu 
+   Caption         =   "管理者メニュー"
+   ClientHeight    =   4515
+   ClientLeft      =   45
+   ClientTop       =   435
+   ClientWidth     =   5550
+   OleObjectBlob   =   "frm_adminMenu.frx":0000
+   StartUpPosition =   1  'オーナー フォームの中央
+End
+Attribute VB_Name = "frm_adminMenu"
+Attribute VB_GlobalNameSpace = False
+Attribute VB_Creatable = False
+Attribute VB_PredeclaredId = True
+Attribute VB_Exposed = False
+'=========================================================================
+'プロジェクト　　　：国内顧問料ユーザアカウント管理
+'プログラム名　　　：管理者メニュー画面
+'プログラムＩＤ　　：frm_adminMenu
+'機能概要　　　　　：一覧表出力及び画面遷移
+'
+'日付　　　　　　　作成者　　　　　　　　　　修正内容
+'-------------------------------------------------------------------------
+'2008/07/11       K.Furuya<SRA>　　　　　　新規作成
+'
+'=========================================================================
+Option Explicit
+
+Dim bolEntCancel            As Boolean                          'ログ出力ボタン制御
+Dim mstrFileName         As Variant '保存するエクセルファイル名(パス付き)
+Dim mstrFileNameBk       As Variant '保存するエクセルファイル名(パス付き)保存用
+
+'DB接続用変数
+Dim Conn           As New ADODB.Connection        '# Connection
+Dim RS             As New ADODB.Recordset         '# Recordset
+Dim strDBConnect   As String
+
+Const CON_PGM_ID            As String = "国内顧問料計算システム　アカウント管理者画面"    'プログラムID
+
+Const CON_TANTO_ID              As String = "管理者ユーザ"   'テーブル登録担当者名
+
+'ユーザログテーブル出力のログ出力メッセージ
+Const CON_LOGMSG_ADMINLOG       As String = "管理者ユーザログ出力"        '管理者ログの出力メッセージ
+Const CON_LOGMSG_ALLLOG         As String = "全ユーザログ出力"      '全ユーザログの出力メッセージ
+'ユーザログテーブル出力のユーザ一覧出力メッセージ
+Const CON_LOGMSG_USRLST         As String = "ユーザ一覧出力"        'ユーザ一覧の出力メッセージ
+
+
+Const CON_LOG_XLSNAME            As String = "ログ参照_"
+Const CON_USR_XLSNAME            As String = "ユーザ一覧_"
+Const CON_EXTENSION              As String = ".xls"
+
+Const CON_MAX_ROW                As Long = 65000 'エクセルの最大表示行
+
+'=====================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   fnblnUseCheck
+'機能            :   同名ファイルを保存する(上書き保存の)際に、
+'                   そのファイルが使用されていないかチェックする
+'
+'日付         担当               内容
+'------------ ----------------- --------------------------------------
+'2008/05/20   K.Furuya<SRA>     新規作成
+'=====================================================================
+Private Function fnblnUseCheck( _
+    ByVal FName As String _
+) As Boolean
+    On Error Resume Next
+    Dim strFile     As String
+    
+    '戻り値初期化
+    fnblnUseCheck = False
+    
+    'ファイルが存在するか調べる
+    strFile = Dir$(FName)
+    If Len(strFile) = 0 Then
+        'ファイルが存在しなければ問題なし
+    Else
+        'ファイルがあればファイルの名前を同じ名前で変更します。
+        Name FName As FName
+        'ファイルが使用中であればエラーが発生します
+        If Err.Number Then
+            MsgBox gfncGetMsgText(103), gfncGetMsgParam(1, 1), gfncGetMsgTitle(14)
+            'エラーが発生した場合は Err オブジェクトをクリアします。
+            Err.Clear
+            Exit Function
+        End If
+    End If
+    
+    '正常戻り値をセットする
+    fnblnUseCheck = True
+    
+End Function
+
+Private Sub cmd_adminLogOutPut_Click()
+    Dim Ret                 As Integer      'ファンクションの戻り値
+    Dim intCase             As Integer      '指定期間のパターン戻り値
+    Dim sSql                As String
+    Dim lRow                As Long
+    Dim iCol                As Integer
+    Dim strXlsName          As Variant
+    Dim strXlsNamexls       As Variant
+    Dim objXls              As Object
+    
+    Const CON_ADMINUSER     As String = "A" '管理者ユーザ
+    Const CON_FILE_FILTER   As Variant = "Microsoft EXCEL ブック (*.xls),*.xls"
+    Const CONTITLE          As Variant = "ログ参照ファイル保存"
+    
+    'マウスカーソルを砂時計にする
+    MousePointer = fmMousePointerHourGlass
+    'コマンドボタンをクリック不可にする
+    cmd_adminLogOutPut.Enabled = False
+    
+    If fncKikanFuriwake(txt_From, txt_To, intCase) = False Then
+        'コマンドボタンをクリック可にする
+        cmd_adminLogOutPut.Enabled = True
+        'フォーカスを自ボタンに戻す
+        cmd_adminLogOutPut.SetFocus
+        'マウスカーソルを通常にする
+        MousePointer = fmMousePointerDefault
+        Exit Sub
+    End If
+        
+    'ｲﾝﾃﾞｯｸｽ初期化
+    lRow = 0
+    iCol = 0
+    '日付を初期化
+    strXlsName = ""
+    
+    'DB接続文字列作成---------------------------------------------------------------------------------------------
+    Ret = DBAccessString(strDBConnect)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+        'コマンドボタンをクリック可にする
+        cmd_adminLogOutPut.Enabled = True
+        'フォーカスを自ボタンに戻す
+        cmd_adminLogOutPut.SetFocus
+        'マウスカーソルを通常にする
+        MousePointer = fmMousePointerDefault
+        Exit Sub
+    End If
+    '-------------------------------------------------------------------------------------------------------------
+    
+    'DB接続-------------------------------------------------------------------------------------------------------
+    Ret = DBOpen(strDBConnect, Conn)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+        'コマンドボタンをクリック可にする
+        cmd_adminLogOutPut.Enabled = True
+        'フォーカスを自ボタンに戻す
+        cmd_adminLogOutPut.SetFocus
+        'マウスカーソルを通常にする
+        MousePointer = fmMousePointerDefault
+        Exit Sub
+    End If
+    
+    '日付を取得する
+    sSql = gstrOutDate_ForSelect()
+    
+    'レコードセットの作成
+    If (gfncDyCreate(sSql, Conn, RS) = False) Then
+        GoTo ErrorExit
+    End If
+
+    'エクセルファイル名を取得する
+    strXlsName = CON_LOG_XLSNAME & RS("YMD_HMS").Value
+    strXlsNamexls = CON_LOG_XLSNAME & RS("YMD_HMS").Value & CON_EXTENSION
+    
+    'レコードセットクローズ
+    RS.Close
+    
+    
+'===コモンダイアログの使用を取りやめた==========
+'    'ファイル上書き確認
+'    dlgFileOut.Flags = cdlOFNOverwritePrompt + cdlOFNNoChangeDir + cdlOFNPathMustExist
+'    'キャンセル時エラーとする
+'    dlgFileOut.CancelError = True
+'    'ｺﾓﾝﾀﾞｲｱﾛｸﾞ表示
+'    'ファイル名をセットする
+'    dlgFileOut.Filename = strXlsNamexls
+'    'ファイル名を保存する
+'    dlgFileOut.ShowSave
+'    mstrFileName = dlgFileOut.Filename
+'    '拡張子をチェックしてエクセルでない場合は".xls"を付ける
+'    If Right(mstrFileName, 4) <> ".xls" And Right(mstrFileName, 4) <> ".xls" Then
+'        mstrFileName = mstrFileName & CON_EXTENSION
+'    End If
+'    mstrFileNameBk = mstrFileName
+'
+'    'エラー確認
+'    If Err.Number <> 0 Then
+'        'キャンセル時
+'        Err.Clear
+'        GoTo ErrorExit
+'    End If
+'===コモンダイアログの使用を取りやめた==========
+    
+    Set objXls = New Excel.Application
+    
+    'メッセージを非表示にする
+    Application.DisplayAlerts = False
+    'ファイル名を取得する
+'    mstrFileName = Excel.Application.GetSaveAsFilename(InitialFileName:=strXlsNamexls, _
+                                                        FileFilter:=CON_FILE_FILTER, _
+                                                        Title:=CONTITLE)
+    mstrFileName = objXls.GetSaveAsFilename(InitialFileName:=strXlsNamexls, _
+                                                        FileFilter:=CON_FILE_FILTER, _
+                                                        Title:=CONTITLE)
+                                                        
+    'キャンセル終了
+    If mstrFileName = False Then
+        Set objXls = Nothing
+        'メッセージを表示にする
+        Application.DisplayAlerts = True
+        GoTo ErrorExit
+    End If
+
+    Set objXls = Nothing
+    
+    'メッセージを表示にする
+    Application.DisplayAlerts = True
+    
+    '拡張子をチェックしてエクセルでない場合は".xls"を付ける
+    If Right(mstrFileName, 4) <> ".xls" And Right(mstrFileName, 4) <> ".xls" Then
+        mstrFileName = mstrFileName & CON_EXTENSION
+    End If
+    mstrFileNameBk = mstrFileName
+    
+    '指定したファイルの使用チェック
+    If fnblnUseCheck(mstrFileName) = False Then
+        GoTo ErrorExit
+    End If
+    
+    'SQL文作成
+    sSql = gstrKykUsrLogTbl_ForSelect(intCase, CON_ADMINUSER, txt_From, txt_To, CON_TANTO_ID)
+
+    'ﾀﾞｲﾅｾｯﾄの作成
+    If (gfncDyCreate(sSql, Conn, RS) = False) Then
+        GoTo ErrorExit
+    End If
+    
+    'レコード件数取得してゼロ件の場合は処理終了
+    If RS.EOF = True Then
+        MsgBox gfncGetMsgText(203), gfncGetMsgParam(1, 3), gfncGetMsgTitle(11)
+        GoTo ErrorExit
+    End If
+    
+    'レコード件数を取得する
+    Do Until RS.EOF
+        lRow = lRow + 1
+        'ﾀﾞｲﾅｾｯﾄ次ﾚｺｰﾄﾞへ
+        RS.MoveNext
+        '最大行数が６５０００行に達したら取込を終了する
+        If lRow = CON_MAX_ROW Then
+            Exit Do
+        End If
+    Loop
+    
+    'レコードセットを1行目に戻す
+    RS.MoveFirst
+    
+    'フィールド数を取得する
+    iCol = RS.Fields.Count
+    
+    
+    'エクセル出力
+    If gfncMakeExcelLogKnr(strXlsName, mstrFileName, lRow, iCol, RS) = False Then
+        GoTo ErrorExit
+    End If
+    
+    '正常終了
+    MsgBox gfncGetMsgText(204), gfncGetMsgParam(1, 4), gfncGetMsgTitle(11)
+    
+    'レコードセットクローズ
+    RS.Close
+    
+    'ログ出力
+    If gfncLogOutPut(CON_TANTO_ID, CON_LOGMSG_ADMINLOG, CON_PGM_ID, Conn, RS) = False Then
+        MsgBox gfncGetMsgText(105), gfncGetMsgParam(1, 1), gfncGetMsgTitle(11)
+        GoTo ErrorExit
+    End If
+    
+    'DBクローズ処理
+    Ret = DBClose(Conn, RS)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+    End If
+        
+    'コマンドボタンをクリック可にする
+    cmd_adminLogOutPut.Enabled = True
+    'フォーカスを自ボタンに戻す
+    cmd_adminLogOutPut.SetFocus
+    
+    'マウスカーソルを通常にする
+    MousePointer = fmMousePointerDefault
+    
+    Exit Sub
+ErrorExit:
+    'DBクローズ処理
+    Ret = DBClose(Conn, RS)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+    End If
+    
+    
+    'コマンドボタンをクリック可にする
+    cmd_adminLogOutPut.Enabled = True
+    'フォーカスを自ボタンに戻す
+    cmd_adminLogOutPut.SetFocus
+    'マウスカーソルを通常にする
+    MousePointer = fmMousePointerDefault
+    
+End Sub
+
+Private Sub cmd_allUserLogOutPut_Click()
+    Dim Ret                 As Integer      'ファンクションの戻り値
+    Dim intCase             As Integer      '指定期間のパターン戻り値
+    Dim sSql                As String
+    Dim lRow                As Long
+    Dim iCol                As Integer
+    Dim strXlsName          As Variant
+    Dim strXlsNamexls       As Variant
+    Dim objXls              As Object
+    
+    Const CON_ALLUSER       As String = "U" '一般ユーザ
+    Const CON_FILE_FILTER   As Variant = "Microsoft EXCEL ブック (*.xls),*.xls"
+    Const CONTITLE          As Variant = "ログ参照ファイル保存"
+    
+    'マウスカーソルを砂時計にする
+    MousePointer = fmMousePointerHourGlass
+    'コマンドボタンをクリック不可にする
+    cmd_allUserLogOutPut.Enabled = False
+    
+    If fncKikanFuriwake(txt_From, txt_To, intCase) = False Then
+        'コマンドボタンをクリック可にする
+        cmd_allUserLogOutPut.Enabled = True
+        'フォーカスを自ボタンに戻す
+        cmd_allUserLogOutPut.SetFocus
+        'マウスカーソルを通常にする
+        MousePointer = fmMousePointerDefault
+        Exit Sub
+    End If
+        
+    'ｲﾝﾃﾞｯｸｽ初期化
+    lRow = 0
+    iCol = 0
+    '日付を初期化
+    strXlsName = ""
+    
+    'DB接続文字列作成---------------------------------------------------------------------------------------------
+    Ret = DBAccessString(strDBConnect)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+        'コマンドボタンをクリック可にする
+        cmd_allUserLogOutPut.Enabled = True
+        'フォーカスを自ボタンに戻す
+        cmd_allUserLogOutPut.SetFocus
+        'マウスカーソルを通常にする
+        MousePointer = fmMousePointerDefault
+        Exit Sub
+    End If
+    '-------------------------------------------------------------------------------------------------------------
+    
+    'DB接続-------------------------------------------------------------------------------------------------------
+    Ret = DBOpen(strDBConnect, Conn)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+        'コマンドボタンをクリック可にする
+        cmd_allUserLogOutPut.Enabled = True
+        'フォーカスを自ボタンに戻す
+        cmd_allUserLogOutPut.SetFocus
+        'マウスカーソルを通常にする
+        MousePointer = fmMousePointerDefault
+        Exit Sub
+    End If
+    
+    '日付を取得する
+    sSql = gstrOutDate_ForSelect()
+    
+    'レコードセットの作成
+    If (gfncDyCreate(sSql, Conn, RS) = False) Then
+        GoTo ErrorExit
+    End If
+
+    'エクセルファイル名を取得する
+    strXlsName = CON_LOG_XLSNAME & RS("YMD_HMS").Value
+    strXlsNamexls = CON_LOG_XLSNAME & RS("YMD_HMS").Value & CON_EXTENSION
+    
+    'レコードセットクローズ
+    RS.Close
+    
+'    'ファイル上書き確認
+'    dlgFileOut.Flags = cdlOFNOverwritePrompt + cdlOFNNoChangeDir + cdlOFNPathMustExist
+'    'キャンセル時エラーとする
+'    dlgFileOut.CancelError = True
+'    'ｺﾓﾝﾀﾞｲｱﾛｸﾞ表示
+'    'ファイル名をセットする
+'    dlgFileOut.Filename = strXlsNamexls
+'    dlgFileOut.ShowSave
+'    'ファイル名を保存する
+'    mstrFileName = dlgFileOut.Filename
+'    '拡張子をチェックしてエクセルでない場合は".xls"を付ける
+'    If Right(mstrFileName, 4) <> ".xls" And Right(mstrFileName, 4) <> ".xls" Then
+'        mstrFileName = mstrFileName & CON_EXTENSION
+'    End If
+'    mstrFileNameBk = mstrFileName
+'
+'    'エラー確認
+'    If Err.Number <> 0 Then
+'        'キャンセル時
+'        Err.Clear
+'        GoTo ErrorExit
+'    End If
+'
+    Set objXls = New Excel.Application
+    'メッセージを非表示にする
+    Application.DisplayAlerts = False
+    
+    'ファイル名を取得する
+'    mstrFileName = Excel.Application.GetSaveAsFilename(InitialFileName:=strXlsNamexls, _
+                                                        FileFilter:=CON_FILE_FILTER, _
+                                                        Title:=CONTITLE)
+
+    mstrFileName = objXls.GetSaveAsFilename(InitialFileName:=strXlsNamexls, _
+                                                        FileFilter:=CON_FILE_FILTER, _
+                                                        Title:=CONTITLE)
+    
+    'キャンセル終了
+    If mstrFileName = False Then
+        Set objXls = Nothing
+        'メッセージを表示にする
+        Application.DisplayAlerts = True
+        GoTo ErrorExit
+    End If
+
+    Set objXls = Nothing
+
+    'メッセージを表示にする
+    Application.DisplayAlerts = True
+
+    '拡張子をチェックしてエクセルでない場合は".xls"を付ける
+    If Right(mstrFileName, 4) <> ".xls" And Right(mstrFileName, 4) <> ".xls" Then
+        mstrFileName = mstrFileName & CON_EXTENSION
+    End If
+    mstrFileNameBk = mstrFileName
+    
+    '指定したファイルの使用チェック
+    If fnblnUseCheck(mstrFileName) = False Then
+        GoTo ErrorExit
+    End If
+    
+    'SQL文作成
+    sSql = gstrKykUsrLogTbl_ForSelect(intCase, CON_ALLUSER, txt_From, txt_To)
+
+    'レコードセットの作成
+    If (gfncDyCreate(sSql, Conn, RS) = False) Then
+        GoTo ErrorExit
+    End If
+    
+    'レコード件数取得してゼロ件の場合は処理終了
+    If RS.EOF = True Then
+        MsgBox gfncGetMsgText(203), gfncGetMsgParam(1, 3), gfncGetMsgTitle(11)
+        GoTo ErrorExit
+    End If
+    
+    'レコード件数を取得する
+    Do Until RS.EOF
+        lRow = lRow + 1
+        'ﾀﾞｲﾅｾｯﾄ次ﾚｺｰﾄﾞへ
+        RS.MoveNext
+        '最大行数が６５０００行に達したら取込を終了する
+        If lRow = CON_MAX_ROW Then
+            Exit Do
+        End If
+    Loop
+    
+    'レコードセットを1行目に戻す
+    RS.MoveFirst
+    
+    'フィールド数を取得する
+    iCol = RS.Fields.Count
+    
+    'エクセル出力
+    If gfncMakeExcelLogKnr(strXlsName, mstrFileName, lRow, iCol, RS) = False Then
+        GoTo ErrorExit
+    End If
+    
+        '正常終了
+    MsgBox gfncGetMsgText(204), gfncGetMsgParam(1, 4), gfncGetMsgTitle(11)
+    
+    'レコードセットを閉じる
+    RS.Close
+        
+    'ログを出力
+    If gfncLogOutPut(CON_TANTO_ID, CON_LOGMSG_ALLLOG, CON_PGM_ID, Conn, RS) = False Then
+        MsgBox gfncGetMsgText(105), gfncGetMsgParam(1, 1), gfncGetMsgTitle(11)
+        GoTo ErrorExit
+    End If
+    
+    
+    'DBクローズ処理
+    Ret = DBClose(Conn, RS)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+    End If
+
+
+
+    'コマンドボタンをクリック可にする
+    cmd_allUserLogOutPut.Enabled = True
+    'フォーカスを自ボタンに戻す
+    cmd_allUserLogOutPut.SetFocus
+    'マウスカーソルを通常にする
+    MousePointer = fmMousePointerDefault
+    
+    Exit Sub
+ErrorExit:
+    'DBクローズ処理
+    Ret = DBClose(Conn, RS)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+    End If
+    
+    'コマンドボタンをクリック可にする
+    cmd_allUserLogOutPut.Enabled = True
+    'フォーカスを自ボタンに戻す
+    cmd_allUserLogOutPut.SetFocus
+    'マウスカーソルを通常にする
+    MousePointer = fmMousePointerDefault
+
+End Sub
+
+Private Sub cmd_ParamKnrOpen_Click()
+    frm_ParamSet.Show 1
+    
+    
+End Sub
+
+Private Sub cmd_UserKnrOpen_Click()
+    frm_adminKnr.Show 1
+    
+End Sub
+
+Private Sub cmd_UsrxlsOutPut_Click()
+    Dim sSql                As String
+    Dim lRow                As Long
+    Dim iCol                As Integer
+    Dim strXlsName          As Variant
+    Dim strXlsNamexls       As Variant
+    Dim Ret                 As Integer
+    Const CON_FILE_FILTER   As Variant = "Microsoft EXCEL ブック (*.xls),*.xls"
+    Const CONTITLE          As Variant = "ユーザ一覧ファイル保存"
+    Dim objXls              As Object
+        
+    'マウスカーソルを砂時計にする
+    MousePointer = fmMousePointerHourGlass
+    'コマンドボタンをクリック不可にする
+    cmd_UsrxlsOutPut.Enabled = False
+    
+    'ｲﾝﾃﾞｯｸｽ初期化
+    lRow = 0
+    iCol = 0
+    '日付を初期化
+    strXlsName = ""
+    
+    'DB接続文字列作成---------------------------------------------------------------------------------------------
+    Ret = DBAccessString(strDBConnect)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+        'コマンドボタンをクリック可にする
+        cmd_UsrxlsOutPut.Enabled = True
+        'フォーカスを自ボタンに戻す
+        cmd_UsrxlsOutPut.SetFocus
+        'マウスカーソルを通常にする
+        MousePointer = fmMousePointerDefault
+        Exit Sub
+    End If
+    '-------------------------------------------------------------------------------------------------------------
+    
+    'DB接続-------------------------------------------------------------------------------------------------------
+    Ret = DBOpen(strDBConnect, Conn)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+        'コマンドボタンをクリック可にする
+        cmd_UsrxlsOutPut.Enabled = True
+        'フォーカスを自ボタンに戻す
+        cmd_UsrxlsOutPut.SetFocus
+        'マウスカーソルを通常にする
+        MousePointer = fmMousePointerDefault
+        Exit Sub
+    End If
+    
+    '日付を取得する
+    sSql = gstrOutDate_ForSelect()
+    
+    'レコードセットの作成
+    If (gfncDyCreate(sSql, Conn, RS) = False) Then
+        GoTo ErrorExit
+    End If
+
+    'エクセルファイル名を取得する
+    strXlsName = CON_USR_XLSNAME & RS("YMD_HMS").Value
+    strXlsNamexls = CON_USR_XLSNAME & RS("YMD_HMS").Value & CON_EXTENSION
+    
+    'レコードセットクローズ
+    RS.Close
+    
+    
+    
+'    'ファイル上書き確認
+'    dlgFileOut.Flags = cdlOFNOverwritePrompt + cdlOFNNoChangeDir + cdlOFNPathMustExist
+'    'ダイアログタイトル
+'    dlgFileOut.DialogTitle = "ユーザ一覧ファイル保存"
+'    'キャンセル時エラーとする
+'    dlgFileOut.CancelError = True
+'    'ｺﾓﾝﾀﾞｲｱﾛｸﾞ表示
+'    'ファイル名をセットする
+'    dlgFileOut.Filename = strXlsNamexls
+'    dlgFileOut.ShowSave
+'    'ファイル名を保存する
+'    mstrFileName = dlgFileOut.Filename
+'    '拡張子をチェックしてエクセルでない場合は".xls"を付ける
+'    If Right(mstrFileName, 4) <> ".xls" And Right(mstrFileName, 4) <> ".xls" Then
+'        mstrFileName = mstrFileName & CON_EXTENSION
+'    End If
+'    mstrFileNameBk = mstrFileName
+'
+'    'エラー確認
+'    If Err.Number <> 0 Then
+'        'キャンセル時
+'        Err.Clear
+'        GoTo ErrorExit
+'    End If
+    
+    Set objXls = New Excel.Application
+    
+    'メッセージを非表示にする
+    Application.DisplayAlerts = False
+    
+    'ファイル名を取得する
+'    mstrFileName = Excel.Application.GetSaveAsFilename(InitialFileName:=strXlsNamexls, _
+                                                        FileFilter:=CON_FILE_FILTER, _
+                                                        Title:=CONTITLE)
+    mstrFileName = objXls.GetSaveAsFilename(InitialFileName:=strXlsNamexls, _
+                                                        FileFilter:=CON_FILE_FILTER, _
+                                                        Title:=CONTITLE)
+    'キャンセル終了
+    If mstrFileName = False Then
+        Set objXls = Nothing
+        'メッセージを表示にする
+        Application.DisplayAlerts = True
+        GoTo ErrorExit
+    End If
+
+    Set objXls = Nothing
+
+    'メッセージを表示にする
+    Application.DisplayAlerts = True
+    
+    '拡張子をチェックしてエクセルでない場合は".xls"を付ける
+    If Right(mstrFileName, 4) <> ".xls" And Right(mstrFileName, 4) <> ".xls" Then
+        mstrFileName = mstrFileName & CON_EXTENSION
+    End If
+    mstrFileNameBk = mstrFileName
+    
+    '指定したファイルの使用チェック
+    If fnblnUseCheck(mstrFileName) = False Then
+        GoTo ErrorExit
+    End If
+    
+    'SQL文作成
+    sSql = gstrKykLoginUsrTbl_ForSelect()
+
+    'レコードセットの作成
+    If (gfncDyCreate(sSql, Conn, RS) = False) Then
+        GoTo ErrorExit
+    End If
+    
+    'レコード件数取得してゼロ件の場合は処理終了
+    If RS.EOF = True Then
+        MsgBox gfncGetMsgText(206), gfncGetMsgParam(1, 1), gfncGetMsgTitle(11)
+        GoTo ErrorExit
+    End If
+    
+
+    'レコード件数を取得する
+    Do Until RS.EOF
+        lRow = lRow + 1
+        'ﾀﾞｲﾅｾｯﾄ次ﾚｺｰﾄﾞへ
+        RS.MoveNext
+        '最大行数が６５０００行に達したら取込を終了する
+        If lRow = CON_MAX_ROW Then
+            Exit Do
+        End If
+    Loop
+    
+    'レコードセットを1行目に戻す
+    RS.MoveFirst
+    
+    'フィールド数を取得する
+    iCol = RS.Fields.Count
+    
+    'エクセル出力
+    If gfncMakeExcelUsrKnr(strXlsName, mstrFileName, lRow, iCol, RS) = False Then
+        GoTo ErrorExit
+    End If
+        
+    '正常終了
+    MsgBox gfncGetMsgText(207), gfncGetMsgParam(1, 4), gfncGetMsgTitle(11)
+    
+    'レコードセットクローズ
+    RS.Close
+    
+    
+    'ログを出力
+    If gfncLogOutPut(CON_TANTO_ID, CON_LOGMSG_USRLST, CON_PGM_ID, Conn, RS) = False Then
+        MsgBox gfncGetMsgText(105), gfncGetMsgParam(1, 1), gfncGetMsgTitle(11)
+        GoTo ErrorExit
+    End If
+
+    'DBクローズ処理
+    Ret = DBClose(Conn, RS)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+    End If
+    
+    
+    'コマンドボタンをクリック可にする
+    cmd_UsrxlsOutPut.Enabled = True
+    'フォーカスを自ボタンに戻す
+    cmd_UsrxlsOutPut.Enabled = True
+    'マウスカーソルを通常にする
+    MousePointer = fmMousePointerDefault
+    
+    Exit Sub
+ErrorExit:
+    'DBクローズ処理
+    Ret = DBClose(Conn, RS)
+    If Ret = False Then
+        Set Conn = Nothing
+        Set RS = Nothing
+    End If
+
+    'コマンドボタンをクリック可にする
+    cmd_UsrxlsOutPut.Enabled = True
+    'フォーカスを自ボタンに戻す
+    cmd_UsrxlsOutPut.Enabled = True
+    'マウスカーソルを通常にする
+    MousePointer = fmMousePointerDefault
+End Sub
+
+'=====================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   fncKikanFuriwake
+'機能            :   From日付とTo日付の整合性をチェック
+'
+'引数            :   From日付,To日付
+'
+'戻り値          :   intCase = 1:期間指定無し
+'　　　          :   intCase = 2:From日付以上
+'　　　          :   intCase = 3:To日付以下
+'　　　          :   intCase = 1:From日付からTo日付
+'
+'日付         担当               内容
+'------------ ----------------- --------------------------------------
+'2008/05/20   K.Furuya<SRA>     新規作成
+'=====================================================================
+Private Function fncKikanFuriwake(objTxtBoxFrom As Object, _
+                                objTxtBoxTo As Object, _
+                                intCase As Integer _
+                                ) As Integer
+    Dim strFromYMD          As Variant   '期間指定From
+    Dim strToYMD            As Variant   '期間指定To
+    Dim Ret                 As Variant
+    Dim Ret2                As Variant
+    Dim intCnt              As Integer
+    Const CON_YMD           As Integer = 8
+    
+    fncKikanFuriwake = -1
+    
+    '期間指定日を変数に代入する
+    strFromYMD = Trim(objTxtBoxFrom.Text)
+    strToYMD = Trim(objTxtBoxTo.Text)
+    
+    Ret = ""
+    
+    '期間指定のパターンを振分ける
+    If strFromYMD = "" And strToYMD = "" Then            '全期間
+        intCase = 1
+    ElseIf strFromYMD <> "" And strToYMD = "" Then       'From日付以上
+        '日付の整合性をチェックする
+        If IsDate(strFromYMD) = False Then
+            MsgBox gfncGetMsgText(201), gfncGetMsgParam(1, 1), gfncGetMsgTitle(11)
+            MsgBox "日付の誤り"
+            
+            'エラー項目をドラッグ状態にする
+            txt_From.SelStart = 0
+            txt_From.SelLength = Len(txt_From.Text)
+            txt_From.SetFocus
+            
+            fncKikanFuriwake = 0
+            Exit Function
+        End If
+        '日付文字列からスラを除き桁数が８桁でない場合はエラーとする
+        Ret = Replace(strFromYMD, "/", "")
+        If Len(Ret) <> 8 Then
+            MsgBox gfncGetMsgText(201), gfncGetMsgParam(1, 1), gfncGetMsgTitle(11)
+            
+            txt_From.SelStart = 0
+            txt_From.SelLength = Len(txt_From.Text)
+            txt_From.SetFocus
+            
+            fncKikanFuriwake = 0
+            Exit Function
+        End If
+        Ret = ""
+        '最初のスラまでの先頭が年４桁でない場合はエラーとする
+        For intCnt = 1 To CON_YMD
+            Ret2 = Mid(strFromYMD, intCnt, 1)
+            If Ret2 = "/" Then
+                Exit For
+            End If
+            Ret = Ret & Ret2
+        Next intCnt
+        If Len(Ret) <> 4 Then
+            MsgBox gfncGetMsgText(201), gfncGetMsgParam(1, 1), gfncGetMsgTitle(11)
+            
+            txt_From.SelStart = 0
+            txt_From.SelLength = Len(txt_From.Text)
+            txt_From.SetFocus
+            
+            fncKikanFuriwake = 0
+            Exit Function
+        End If
+        intCase = 2
+    ElseIf strFromYMD = "" And strToYMD <> "" Then       'To日付以下
+        '日付の整合性をチェックする
+        If IsDate(strToYMD) = False Then
+            MsgBox gfncGetMsgText(201), gfncGetMsgParam(1, 1), gfncGetMsgTitle(11)
+            
+            txt_To.SelStart = 0
+            txt_To.SelLength = Len(txt_To.Text)
+            txt_To.SetFocus
+            
+            fncKikanFuriwake = 0
+            Exit Function
+        End If
+        '日付文字列からスラを除き桁数が８桁でない場合はエラーとする
+        Ret = Replace(strToYMD, "/", "")
+        If Len(Ret) <> 8 Then
+            MsgBox gfncGetMsgText(201), gfncGetMsgParam(1, 1), gfncGetMsgTitle(11)
+            
+            txt_To.SelStart = 0
+            txt_To.SelLength = Len(txt_To.Text)
+            txt_To.SetFocus
+            
+            fncKikanFuriwake = 0
+            Exit Function
+        End If
+        Ret = ""
+        '最初のスラまでの先頭が年４桁でない場合はエラーとする
+        For intCnt = 1 To CON_YMD
+            Ret2 = Mid(strToYMD, intCnt, 1)
+            If Ret2 = "/" Then
+                Exit For
+            End If
+            Ret = Ret & Ret2
+        Next intCnt
+        If Len(Ret) <> 4 Then
+            MsgBox gfncGetMsgText(201), gfncGetMsgParam(1, 1), gfncGetMsgTitle(11)
+            
+            txt_To.SelStart = 0
+            txt_To.SelLength = Len(txt_To.Text)
+            txt_To.SetFocus
+            
+            fncKikanFuriwake = 0
+            Exit Function
+        End If
+        intCase = 3
+    ElseIf strFromYMD <> "" And strToYMD <> "" Then      'From日付からTo日付まで
+        '日付の整合性をチェックする
+        If IsDate(strFromYMD) = False Then
+            MsgBox gfncGetMsgText(201), gfncGetMsgParam(1, 1), gfncGetMsgTitle(11)
+            
+            txt_From.SelStart = 0
+            txt_From.SelLength = Len(txt_From.Text)
+            txt_From.SetFocus
+            
+            fncKikanFuriwake = 0
+            Exit Function
+        End If
+        '日付文字列からスラを除き桁数が８桁でない場合はエラーとする
+        Ret = Replace(strFromYMD, "/", "")
+        If Len(Ret) <> 8 Then
+            MsgBox gfncGetMsgText(201), gfncGetMsgParam(1, 1), gfncGetMsgTitle(11)
+            
+            txt_From.SelStart = 0
+            txt_From.SelLength = Len(txt_From.Text)
+            txt_From.SetFocus
+            
+            fncKikanFuriwake = 0
+            Exit Function
+        End If
+        Ret = ""
+        '最初のスラまでの先頭が年４桁でない場合はエラーとする
+        For intCnt = 1 To CON_YMD
+            Ret2 = Mid(strFromYMD, intCnt, 1)
+            If Ret2 = "/" Then
+                Exit For
+            End If
+            Ret = Ret & Ret2
+        Next intCnt
+        If Len(Ret) <> 4 Then
+            MsgBox gfncGetMsgText(201), gfncGetMsgParam(1, 1), gfncGetMsgTitle(11)
+            
+            txt_From.SelStart = 0
+            txt_From.SelLength = Len(txt_From.Text)
+            txt_From.SetFocus
+            
+            fncKikanFuriwake = 0
+            Exit Function
+        End If
+        '日付の整合性をチェックする
+        If IsDate(strToYMD) = False Then
+            MsgBox gfncGetMsgText(201), gfncGetMsgParam(1, 1), gfncGetMsgTitle(11)
+            
+            txt_To.SelStart = 0
+            txt_To.SelLength = Len(txt_To.Text)
+            txt_To.SetFocus
+            
+            fncKikanFuriwake = 0
+            Exit Function
+        End If
+        '日付文字列からスラを除き桁数が８桁でない場合はエラーとする
+        Ret = Replace(strToYMD, "/", "")
+        If Len(Ret) <> 8 Then
+            MsgBox gfncGetMsgText(201), gfncGetMsgParam(1, 1), gfncGetMsgTitle(11)
+            
+            txt_To.SelStart = 0
+            txt_To.SelLength = Len(txt_To.Text)
+            txt_To.SetFocus
+            
+            fncKikanFuriwake = 0
+            Exit Function
+        End If
+        Ret = ""
+        '最初のスラまでの先頭が年４桁でない場合はエラーとする
+        For intCnt = 1 To CON_YMD
+            Ret2 = Mid(strToYMD, intCnt, 1)
+            If Ret2 = "/" Then
+                Exit For
+            End If
+            Ret = Ret & Ret2
+        Next intCnt
+        If Len(Ret) <> 4 Then
+            MsgBox gfncGetMsgText(201), gfncGetMsgParam(1, 1), gfncGetMsgTitle(11)
+            
+            txt_To.SelStart = 0
+            txt_To.SelLength = Len(txt_To.Text)
+            txt_To.SetFocus
+            
+            fncKikanFuriwake = 0
+            Exit Function
+        End If
+        'From Toの範囲指定の整合性をチェックする
+        If strFromYMD > strToYMD Then
+            MsgBox gfncGetMsgText(202), gfncGetMsgParam(1, 1), gfncGetMsgTitle(11)
+            
+            txt_To.SelStart = 0
+            txt_To.SelLength = Len(txt_To.Text)
+            txt_To.SetFocus
+            
+            fncKikanFuriwake = 0
+            Exit Function
+        End If
+        intCase = 4
+    End If
+
+End Function
+
+Private Sub dlgFileOut_Enter()
+
+End Sub
+
+Private Sub txt_From_AfterUpdate()
+    Dim strFrom         As String
+    Dim intCnt          As Integer
+    Dim txtChar         As String
+    Dim Ret             As String
+    
+    bolEntCancel = False
+    
+    '入力がない場合はノーチェックで抜ける
+    If Len(Trim(txt_From.Text)) = 0 Then
+        Exit Sub
+    End If
+    '文字列のスラッシュを取除く
+    strFrom = Replace(Trim(txt_From.Text), "/", "")
+    '文字数が８文字かチェックし８文字でない場合は何もしない
+    If Len(strFrom) <> 8 Then
+        MsgBox gfncGetMsgText(201), gfncGetMsgParam(1, 1), gfncGetMsgTitle(11)
+        'エラー項目をドラッグ状態にする
+        txt_From.SelStart = 0
+        txt_From.SelLength = Len(txt_From.Text)
+        txt_From.SetFocus
+        bolEntCancel = True
+        Exit Sub
+    End If
+    '文字列に数字以外が含まれるかチェックし数字以外が含まれる場合は何もしない
+    For intCnt = 1 To Len(strFrom)
+        Select Case Mid(strFrom, intCnt, 1)
+            Case "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"
+            Case Else
+                MsgBox gfncGetMsgText(201), gfncGetMsgParam(1, 1), gfncGetMsgTitle(11)
+                'エラー項目をドラッグ状態にする
+                txt_From.SelStart = 0
+                txt_From.SelLength = Len(txt_From.Text)
+                txt_From.SetFocus
+                bolEntCancel = True
+                Exit Sub
+        End Select
+    Next intCnt
+    '数字８文字の場合はデートフォーマットを実行する
+    Ret = gstrDateFormat(strFrom, 1)
+    '日付チェック
+    If IsDate(Ret) = False Then
+        MsgBox gfncGetMsgText(201), gfncGetMsgParam(1, 1), gfncGetMsgTitle(11)
+        'エラー項目をドラッグ状態にする
+        txt_From.SelStart = 0
+        txt_From.SelLength = Len(txt_From.Text)
+        txt_From.SetFocus
+        bolEntCancel = True
+        Exit Sub
+    End If
+    'スラッシュでフォーマットした日付をテキストボックスに再設定する
+    txt_From.Text = Ret
+End Sub
+
+Private Sub txt_From_Exit(ByVal Cancel As MSForms.ReturnBoolean)
+    '入力エラーの場合フォーカスを移動させない
+    If bolEntCancel = True Then
+       Cancel = True
+    End If
+End Sub
+
+
+Private Sub txt_To_AfterUpdate()
+    Dim strTo           As String
+    Dim intCnt          As Integer
+    Dim txtChar         As String
+    Dim Ret             As String
+    
+    bolEntCancel = False
+    
+    '入力がない場合はノーチェックで抜ける
+    If Len(Trim(txt_To.Text)) = 0 Then
+        Exit Sub
+    End If
+    '文字列のスラッシュを取除く
+    strTo = Replace(Trim(txt_To.Text), "/", "")
+    '文字数が８文字かチェックし８文字でない場合は何もしない
+    If Len(strTo) <> 8 Then
+        MsgBox gfncGetMsgText(201), gfncGetMsgParam(1, 1), gfncGetMsgTitle(11)
+        'エラー項目をドラッグ状態にする
+        txt_To.SelStart = 0
+        txt_To.SelLength = Len(txt_To.Text)
+        txt_To.SetFocus
+        bolEntCancel = True
+        Exit Sub
+    End If
+    '文字列に数字以外が含まれるかチェックし数字以外が含まれる場合は何もしない
+    For intCnt = 1 To Len(strTo)
+        Select Case Mid(strTo, intCnt, 1)
+            Case "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"
+            Case Else
+                MsgBox gfncGetMsgText(201), gfncGetMsgParam(1, 1), gfncGetMsgTitle(11)
+                'エラー項目をドラッグ状態にする
+                txt_To.SelStart = 0
+                txt_To.SelLength = Len(txt_To.Text)
+                txt_To.SetFocus
+                bolEntCancel = True
+                Exit Sub
+        End Select
+    Next intCnt
+    '数字８文字の場合はデートフォーマットを実行する
+    Ret = gstrDateFormat(strTo, 1)
+    '日付チェック
+    If IsDate(Ret) = False Then
+        MsgBox gfncGetMsgText(201), gfncGetMsgParam(1, 1), gfncGetMsgTitle(11)
+        'エラー項目をドラッグ状態にする
+        txt_To.SelStart = 0
+        txt_To.SelLength = Len(txt_To.Text)
+        txt_To.SetFocus
+        bolEntCancel = True
+        Exit Sub
+    End If
+    'スラッシュでフォーマットした日付をテキストボックスに再設定する
+    txt_To.Text = Ret
+
+End Sub
+
+Private Sub txt_To_Exit(ByVal Cancel As MSForms.ReturnBoolean)
+    '入力エラーの場合フォーカスを移動させない
+    If bolEntCancel = True Then
+       Cancel = True
+    End If
+End Sub
+
+Private Sub UserForm_Initialize()
+    'テキストボックスのIMEモードを半角入力専用に設定する
+    txt_From.IMEMode = fmIMEModeDisable
+    txt_To.IMEMode = fmIMEModeDisable
+End Sub
+
+Private Sub UserForm_QueryClose(Cancel As Integer, CloseMode As Integer)
+    'コントロールボックスの右上×ボタンが押下されたらエクセルを終了する
+    If CloseMode = 0 Then
+        'メニューを閉じる
+''''''        Workbooks("xlsMenu.xls").Close SaveChanges:=False
+        gsubExlClose
+    End If
+End Sub
+
+

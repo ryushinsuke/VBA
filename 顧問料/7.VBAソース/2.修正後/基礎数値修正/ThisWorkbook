@@ -1,0 +1,68 @@
+VERSION 1.0 CLASS
+BEGIN
+  MultiUse = -1  'True
+END
+Attribute VB_Name = "ThisWorkbook"
+Attribute VB_GlobalNameSpace = False
+Attribute VB_Creatable = False
+Attribute VB_PredeclaredId = True
+Attribute VB_Exposed = True
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：契約管理システム・基礎数値修正画面
+'
+'オブジェクト名：ThisWorkbook
+'
+'機能概要　：
+'
+'更新履歴　：2007/03/19 SRA T.Ichikawa  新規作成
+'
+'
+'*************************************************************************
+Private Const MODULE_NAME As String = "Module1"
+
+'*************************************************************************
+'関数名　　：ワークブック起動処理
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：スタートアップモジュール
+'
+'更新履歴　：2007/03/19 SRA T.Ichikawa  新規作成
+'
+'*************************************************************************
+Private Sub Workbook_Open()
+
+    Const PROCEDURE_NAME As String = "Workbook_Open"
+    
+    On Error GoTo ErrHandler
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    subInit
+    
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Sub
+ErrHandler:
+     
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Sub
+
+'ブッククローズ処理
+Private Sub Workbook_BeforeClose(Cancel As Boolean)
+    
+    'ブックの保護
+    Call gCom01_BookProtect(ThisWorkbook, True)
+
+    '強制終了
+    If Me.Saved = False Then
+        Application.DisplayAlerts = False
+        ThisWorkbook.Saved = True
+    End If
+
+End Sub
+

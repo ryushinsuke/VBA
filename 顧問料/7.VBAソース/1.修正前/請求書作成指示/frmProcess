@@ -1,0 +1,1562 @@
+VERSION 5.00
+Begin {C62A69F0-16DC-11CE-9E98-00AA00574A4F} frmProcess 
+   Caption         =   "請求書作成指示"
+   ClientHeight    =   1980
+   ClientLeft      =   45
+   ClientTop       =   330
+   ClientWidth     =   4710
+   OleObjectBlob   =   "frmProcess.frx":0000
+   StartUpPosition =   1  'オーナー フォームの中央
+End
+Attribute VB_Name = "frmProcess"
+Attribute VB_GlobalNameSpace = False
+Attribute VB_Creatable = False
+Attribute VB_PredeclaredId = True
+Attribute VB_Exposed = False
+Const MODULE_NAME = "frmProcess"
+    
+    
+
+Dim mblnFlag            As Boolean      '実行中フラグ
+
+'*************************************************************************
+'関数名　　：フォームアクティブ・イベントプロシージャ
+'
+'引　　数　：
+'
+'戻り値　　：
+'
+'機能説明　：進捗画面のフォームアクティブ処理
+'
+'更新履歴　：2006/07/27 SRA Y.Azuma    新規作成
+'更新履歴　：2006/10/20 SRA Y.Azuma    変更     料率データ無しエラー対応(単No.219)
+'
+'*************************************************************************
+Private Sub UserForm_Activate()
+
+On Error GoTo ErrHandler
+    
+    Const PROCEDURE_NAME = "UserForm_Activate"
+
+    If mblnFlag = False Then
+    
+        Dim lngLoopCnt      As Long             '取込～印刷までの処理カウンタ
+        Dim lngLoopEnd      As Long             '取込～印刷までの処理ステップ数
+        Dim blnRet          As Boolean          'CALL関数復帰値
+        Dim lngKohzaCnt     As Long             'カウンタ
+        
+        Dim blnKeisan       As Boolean          '(mainシート項目)計算
+        Dim blnPrint        As Boolean          '(mainシート項目)印刷
+        Dim strKbn          As String           '(mainシート項目)本仮区分
+        Dim strKohzaNo      As String           '(mainシート項目)口座番号
+        Dim strKikan        As String           '(mainシート項目)請求日
+        Dim strSintaku      As String           '(mainシート項目)信託銀行コード
+        Dim strOutputDir    As String           '(mainシート項目)保存フォルダ
+        Dim strFileName     As String           '出力ファイル名
+        Dim typTorikomi     As TorikomiOutput   'データ取込処理の結果(請求書作成の入力値)
+        
+        Dim strOutFileName  As String           '帳票出力ファイル名
+        
+        
+        Dim lngKoyzaMax     As Long             '処理対象口座数
+        Dim strKohzaList()  As String           '処理対象口座情報
+        
+        Dim strNamInfo()    As String           'NAM情報格納配列
+        
+        Dim lngPrgVal       As Long             'プログレスバー値
+        Dim strDate         As String           'システム日付
+        Dim strTime         As String           'システム時間
+        Dim strKbnKj        As String           '計算区分漢字
+        Dim typKohzaList()  As typKohzaMain     '処理対象口座の構造体(合算対応)
+        Dim strCalcTime     As String
+        
+        Dim lngErrorCnt                 As Long     'エラーカウンタ
+        
+    
+        'フォームアクティブ毎に実行されないためのフラグ
+        mblnFlag = True
+        
+        Me.MousePointer = fmMousePointerHourGlass
+        
+        '初期化
+        Erase strKohzaList
+        Erase strNamInfo
+        
+        strCalcTime = ""
+        
+        '***************************
+        '①**** 画面の項目を取得 ****
+        '***************************
+        Call sub_GetMainItem(blnKeisan _
+                           , blnPrint _
+                           , strKbn _
+                           , strKohzaNo _
+                           , strKikan _
+                           , strSintaku _
+                           , strOutputDir)
+        
+        
+        lngLoopEnd = 2
+        
+        If blnPrint Then
+            lngLoopEnd = lngLoopEnd + 1
+        End If
+        
+        Call subBeginProcess("", vbCrLf & _
+        "↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓請求書作成　開始↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓")
+
+        Call subBeginProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME & "," & _
+                                          blnKeisan & "," & _
+                                          blnPrint & "," & _
+                                          strKbn & "," & _
+                                          strKohzaNo & "," & _
+                                          strKikan & "," & _
+                                          strSintaku)
+        
+'------------<Modify Start azuma 2006/12/27 > -----------------------
+Dim lngRow  As Long
+Dim lngStatusMax    As Long
+
+'(★★★JAVAでチェックが追加されるまでの暫定処置★★★)
+        '口座入力の場合、入金済みのチェック
+        If blnKeisan And Trim(strKohzaNo) <> "" Then
+            blnRet = func_GetSeikyuKanriStatus(strKohzaNo, strKikan, lngRow, lngStatusMax)
+            
+            If blnRet = False Then
+            'ステータス取得処理失敗
+                MsgBox "システムエラーが発生しました。管理者に報告して下さい。"
+                GoTo NormalError
+            Else
+                If lngRow = 0 Then
+                '処理対象がない
+                    MsgBox "請求書作成対象データがありませんでした。"
+                    GoTo NormalError
+                Else
+                    If lngStatusMax > 1 Then
+                    '入金済みのため計算処理続行不可
+                        MsgBox "この口座は入金済みのため計算処理を行えません。"
+                        GoTo NormalError
+                    End If
+                End If
+            End If
+            
+        End If
+'------------<Modify End   azuma 2006/12/27 > -----------------------
+        '*******************
+        '②**** 計算処理 ****
+        '*******************
+        If blnKeisan Then
+        '計算チェックボックス＝TRUEの場合のみ実行
+        
+        
+            
+        
+        
+        
+            strCalcTime = "計算中" & vbCrLf & "開始時刻 ： " & Now
+            lblStatus.Caption = strCalcTime
+            ProgressBar1.Value = 70
+            DoEvents
+            
+            '計算バッチ起動関数呼出
+            blnRet = func_CallCalcProcess(strKbn _
+                                        , strKohzaNo _
+                                        , strKikan _
+                                        , strSintaku)
+                                            
+            strCalcTime = strCalcTime & vbCrLf & "終了時刻 ： " & Now
+            If blnRet = False Then
+                '計算処理失敗　6000
+                Call gfunc_ErrorMsg(3, 6005, "", strCalcTime)
+                GoTo NormalError
+            End If
+            
+            lblStatus.Caption = strCalcTime
+            ProgressBar1.Value = 100
+            DoEvents
+        End If
+        
+        blnRet = False
+
+        '******************************
+        '③**** 処理対象口座一覧取得 ****
+        '******************************
+        lblStatus.Caption = "請求書作成　前処理中"
+        ProgressBar1.Value = 10
+        DoEvents
+        
+        '契約管理、顧問料請求期間、口座属性(全項目)(VW_DT001D)から対象件数取得
+        blnRet = func_GetKohzaList(strKohzaNo _
+                                 , strKikan _
+                                 , strSintaku _
+                                 , blnKeisan _
+                                 , lngKoyzaMax _
+                                 , strKohzaList _
+                                 , typKohzaList)
+        If blnRet = False Then
+            'MsgBox "顧問料請求期間テーブル・該当データなし①"
+            Call gfunc_ErrorMsg(3, 6006, "顧問料請求期間テーブル", "")
+            GoTo NormalError
+        Else
+            
+            '関数正常で取得件数０件の場合
+            If lngKoyzaMax = 0 Then
+                'MsgBox "顧問料請求期間テーブル・該当データなし②"
+                Call gfunc_ErrorMsg(3, 6007, "顧問料請求期間テーブル", "計算処理が行われていない可能性があります。")
+                GoTo NormalError
+            
+            End If
+        End If
+            
+        
+        
+        '*********************
+        '④**** 請求書作成 ****
+        '*********************
+        
+        ThisWorkbook.Application.ScreenUpdating = False
+
+        blnRet = False
+        'NAM情報の読み込み
+        blnRet = func_ReadNamInfo(1, strNamInfo())
+        If blnRet = False Then
+'            MsgBox "NAM情報読み込み中にエラーが発生しました。"
+            Call gfunc_ErrorMsg(3, 6002, "", "")
+            GoTo NormalError
+        End If
+        
+        
+        
+        '処理口座回数分実行する。
+        For lngKohzaCnt = 0 To lngKoyzaMax - 1
+        
+            ThisWorkbook.Application.ScreenUpdating = False
+        
+            lngErrorCnt = 0
+        
+            blnRet = False
+            
+            Me.Caption = "請求書作成指示(" & typKohzaList(lngKohzaCnt).strOyaKohzaNo & ")"
+            ProgressBar1.Value = 20
+            lblCount.Caption = lngKohzaCnt + 1 & "/" & lngKoyzaMax
+            lblStatus.Caption = "テンプレートのコピー中"
+            DoEvents
+            
+            'テンプレートファイルのコピー
+            blnRet = func_TemplateCopy(lngKohzaCnt, typKohzaList, strOutputDir, strFileName)
+            If blnRet = False Then
+                Call gfunc_ErrorMsg(3, 6003, "", "")
+                GoTo NormalError
+            End If
+            
+            
+            '帳票出力ファイル名作成
+            '　口座番号(請求日)システム日付_システム時刻_本仮区分.xls
+            'システム日付の取得
+            Call gfunc_GetSvDateTime(strDate, strTime)
+            
+            '本仮計算区分の変換
+'------------<Modify Start azuma 2006/12/07 > -----------------------
+            If Trim(typKohzaList(lngKohzaCnt).strKohzaList(0, KOHZALIST_KARI_KEISAN_FLG)) <> "" Then
+                '顧問料合計テーブルから取得した仮計算フラグを元に
+                'ファイルの本、仮を設定する。
+                If typKohzaList(lngKohzaCnt).strKohzaList(0, KOHZALIST_KARI_KEISAN_FLG) = "0" Then
+                    strKbnKj = "本"
+                Else
+                    strKbnKj = "仮"
+                End If
+            Else
+                If strKbn = "0" Then
+                    strKbnKj = "本"
+                Else
+                    strKbnKj = "仮"
+                End If
+            End If
+'            If strKbn = "0" Then
+'                strKbnKj = "本"
+'            Else
+'                strKbnKj = "仮"
+'            End If
+'------------<Modify End   azuma 2006/12/07 > -----------------------
+            
+            strOutFileName = typKohzaList(lngKohzaCnt).strOyaKohzaNo & _
+                             "(" & strKikan & ")" & _
+                             strDate & "_" & strTime & "_" & _
+                             strKbnKj & ".xls"
+
+        
+            
+        
+            'データ取込～印刷
+            For lngLoopCnt = 1 To lngLoopEnd
+            
+                ThisWorkbook.Application.ScreenUpdating = False
+            
+                
+'                blnRet = False
+                
+                lblCount.Caption = lngKohzaCnt + 1 & "/" & lngKoyzaMax
+    
+                Select Case lngLoopCnt
+                Case 1
+                    blnRet = False 'True
+                '④-1**** データ取込 ****
+                    lblStatus.Caption = "データ取込中"
+'                    lblStatus.Caption = "(1/" & lngLoopEnd & ")　データ取込"
+                    ProgressBar1.Value = 40
+                    DoEvents
+                    blnRet = func_TorikomiMain(lngKohzaCnt _
+                                             , typKohzaList _
+                                             , strOutputDir _
+                                             , strFileName _
+                                             , strNamInfo() _
+                                             , typTorikomi _
+                                             , lngErrorCnt)
+                Case 2
+                '④-2**** 請求書EXCEL作成 ****
+                    lblStatus.Caption = "請求書作成中"
+'                    lblStatus.Caption = "(2/" & lngLoopEnd & ")　請求書作成"
+                    ProgressBar1.Value = 70
+                    DoEvents
+                    blnRet = False
+                    blnRet = func_SeikyushoMain(lngKohzaCnt _
+                                             , typKohzaList(lngKohzaCnt).strKohzaList _
+                                             , strOutputDir _
+                                             , strFileName _
+                                             , strOutFileName _
+                                             , strNamInfo() _
+                                             , typTorikomi)
+                Case 3
+                '④-3**** 請求書印刷 ****
+                    If blnPrint And blnRet And lngErrorCnt = 0 Then
+                        lblStatus.Caption = "印刷中"
+'                        lblStatus.Caption = "(3/" & lngLoopEnd & ")　印刷"
+                        ProgressBar1.Value = 90
+                        DoEvents
+                        blnRet = True
+                        
+                        
+                        Call SeikyushoPrint(strOutFileName)
+                        
+                    End If
+                End Select
+            
+            
+                
+                If blnRet = False Then
+
+                    'エラー情報構造体セット
+                    With gusrErr
+                        .ModuleId = MODULE_NAME         'モージュールID
+                        .Procedure = PROCEDURE_NAME     'プロシージャID
+                        .MsgCode = ERR_MSGCD_VB         'メッセージ区分
+                        .ErrNum = Err.Number            'システムエラーコード
+                        .ErrDescript = Err.Description  'システムエラー内容
+                        .KohzaNo = typKohzaList(lngKohzaCnt).strOyaKohzaNo
+                        .MsgNaiyou = "請求書作成中にエラー発生"        'メッセージ内容
+                        .MsgSyousai = "当該口座番号の請求書作成中にエラーが発生しています。" & vbCrLf & _
+                                      "計算チェックＯＮで再実行を行ってもこのエラーが発生する場合は、" & vbCrLf & _
+                                      "システム管理者に連絡して下さい。" & vbCrLf & _
+                                      "ファイル名　　：" & strFileName & vbCrLf & _
+                                      "口座番号　　　：" & typKohzaList(lngKohzaCnt).strOyaKohzaNo & vbCrLf & _
+                                      "エラー発生処理：" & lblStatus.Caption       'メッセージ詳細
+                        
+                        'エラーシート書き込み
+                        
+                        Call fncWriteErrSheet(ERROR_SHEETNAME)
+                    End With
+                    
+'------------<Modify Start azuma 2006/10/20 単No.219> -----------------------
+                    'データファイルのクローズ
+                    On Error Resume Next
+                    ThisWorkbook.Application.DisplayAlerts = False
+                    Workbooks(strFileName).Close savechanges:=True
+                    ThisWorkbook.Application.DisplayAlerts = True
+                    On Error GoTo ErrHandler
+'------------<Modify End   azuma 2006/10/20 単No.219> -----------------------
+                    
+                    Exit For
+    
+                End If
+            
+            Next lngLoopCnt
+            
+            ProgressBar1.Value = 100
+            DoEvents
+            
+            ThisWorkbook.Application.DisplayAlerts = False
+            
+            '請求書ファイルのクローズ
+            On Error Resume Next
+            Workbooks(strOutFileName).Close savechanges:=True
+            On Error GoTo ErrHandler
+            
+            ThisWorkbook.Application.DisplayAlerts = True
+            
+            ThisWorkbook.Application.ScreenUpdating = True
+        
+        Next lngKohzaCnt
+        
+        Me.MousePointer = fmMousePointerAppStarting
+    
+        Unload Me
+    
+    End If
+    
+    Me.MousePointer = fmMousePointerAppStarting
+    
+    ThisWorkbook.Application.ScreenUpdating = True
+    
+    Erase strKohzaList
+
+    Call subEndProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME & vbCrLf & _
+    "↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑請求書作成　終了↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑" & vbCrLf)
+    
+    Exit Sub
+    
+NormalError:
+    
+    On Error Resume Next
+    ThisWorkbook.Application.DisplayAlerts = False
+    Workbooks(strFileName).Close
+    ThisWorkbook.Application.Workbooks(strOutFileName).Close
+    
+    Erase strKohzaList
+    Erase strNamInfo
+    Me.MousePointer = fmMousePointerAppStarting
+    ThisWorkbook.Application.ScreenUpdating = True
+    ThisWorkbook.Application.DisplayAlerts = True
+    Unload Me
+    
+    Call subEndProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME & vbCrLf & _
+    "↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑請求書作成　終了(NormalError)↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑" & vbCrLf)
+    
+    Exit Sub
+
+ErrHandler:
+    Me.MousePointer = fmMousePointerAppStarting
+'Resume
+    ThisWorkbook.Application.ScreenUpdating = True
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "モジュールネーム", Err.Number, Err.Description)
+    On Error GoTo 0
+    Erase strKohzaList
+    Erase strNamInfo
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+    Call subEndProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME & vbCrLf & _
+    "↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑請求書作成　終了(OnError)↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑" & vbCrLf)
+    Unload Me
+
+
+End Sub
+
+Private Sub UserForm_Initialize()
+    
+    lblStatus.Caption = ""
+    lblCount.Caption = ""
+    ProgressBar1.Min = 0
+    ProgressBar1.Max = 100
+
+End Sub
+
+Private Sub UserForm_QueryClose(Cancel As Integer, CloseMode As Integer)
+    
+    'フォームの×ボタンでフォームを閉じさせない
+    If CloseMode = vbFormControlMenu Then
+        Cancel = True   'Unloadをキャンセル
+        Exit Sub
+    End If
+
+End Sub
+
+
+
+'*************************************************************************
+'関数名　　：Main画面の入力情報取得関数
+'
+'引　　数　：
+'           blnKeisan       I       計算チェックボックス
+'           blnPrint        I       印刷チェックボックス
+'           strKbn          I       本計算仮計算区分
+'           strKohzaNo      I       口座番号
+'           strKikan        I       請求日
+'           strSintaku      I       信託銀行コード
+'           strOutputDir    I       保存フォルダ
+'
+'戻り値　　：
+'
+'機能説明　：口座番号、請求日、信託銀行コードから
+'           請求書作成の対象データ一覧を取得する。
+'
+'更新履歴　：2006/07/28 SRA Y.Azuma    新規作成
+'更新履歴　：2007/01/17 SRA Y.Azuma    変更     (仕変)総No.185 信託銀行リストのコード入力対応
+'
+'*************************************************************************
+Private Sub sub_GetMainItem(ByRef blnKeisan As Boolean _
+                          , ByRef blnPrint As Boolean _
+                          , ByRef strKbn As String _
+                          , ByRef strKohzaNo As String _
+                          , ByRef strKikan As String _
+                          , ByRef strSintaku As String _
+                          , ByRef strOutputDir As String)
+
+        With ThisWorkbook.Worksheets(MAIN_SHEETNAME)
+            
+            '計算
+            blnKeisan = .chkCalc.Value
+            
+            '印刷
+            blnPrint = .chkPrint.Value
+            
+            '本仮計算区分
+            If .optCalKbn1.Value = True Then
+            '本計算
+                strKbn = "0"
+            Else
+            '仮計算
+                strKbn = "1"
+            End If
+            
+            '口座番号
+            If IsNull(.Range("口座番号").Value) = True Or Trim(.Range("口座番号").Value) = "" Then
+                strKohzaNo = ""
+            Else
+                strKohzaNo = Format(.Range("口座番号").Value, "0000000")
+            End If
+            
+            '請求日
+            strKikan = .Range("請求日").Value
+            
+            '信託銀行コード
+            If IsNull(.Range("信託銀行コード").Value) = True Or Trim(.Range("信託銀行コード").Value) = "" Then
+                strSintaku = ""
+            Else
+'------------<Modify Start azuma 2007/01/17 > -----------------------
+                Dim lngPoint    As Long
+                
+                lngPoint = InStr(1, .Range("信託銀行コード").Text, LIST_SEPARATER)
+                If lngPoint = 0 Then
+                    strSintaku = .Range("信託銀行コード").Text
+                Else
+                    strSintaku = Mid(.Range("信託銀行コード").Text, 1, lngPoint - 1)
+                    strSintaku = Left(strSintaku & String(6, " "), 6)
+                End If
+                
+'                strSintaku = Mid(.Range("信託銀行コード").Value, 1, 3)
+'------------<Modify End   azuma 2007/01/17 > -----------------------
+            End If
+            
+            '保存フォルダ
+            strOutputDir = .Range("保存フォルダ").Value
+        End With
+        
+        
+        
+End Sub
+
+
+
+'*************************************************************************
+'関数名　　：請求書作成の口座一覧取得関数
+'
+'引　　数　：
+'           strKohzaNo          I       口座番号
+'           strSeikyuYmd        I       請求日
+'           strSintaku          I       信託銀行コード
+'           blnKeisan           I       計算フラグ(True:計算あり,False:なし)
+'           lngCount            O       検索該当数
+'           strKohzaList()      O       検索結果(処理対象口座配列)
+'
+'戻り値　　：
+'
+'機能説明　：口座番号、請求日、信託銀行コードから
+'           請求書作成の対象データ一覧を取得する。
+'
+'更新履歴　：2006/07/28 SRA Y.Azuma    新規作成
+'更新履歴　：2006/10/19 SRA Y.Azuma    変更     口座属性未登録対応(単No.224)
+'更新履歴　：2006/11/01 SRA Y.Azuma    変更     親口座の請求書期間取得方法変更(連No.69)
+'更新履歴　：2006/11/30 SRA Y.Azuma    変更     親口座の請求期間IDは子口座の請求期間IDの
+'                                              最大最小が設定される。
+'更新履歴　：2006/12/07 SRA Y.Azuma    変更     仮計算フラグの取得
+'更新履歴　：2006/12/08 SRA Y.Azuma    変更     (仕変)請求管理テーブルのステータス判定変更
+'更新履歴　：2007/03/29 SRA Y.Azuma    変更     (PH3)PH3請求書作成の対応
+'更新履歴　：2007/06/07 SRA Y.Azuma    変更     (PH3)連結　断面合算の期中追加対応　障害49
+'更新履歴　：2008/01/21 SRA Y.Azuma    変更     (PH4)特殊文字バグ対応
+'
+'*************************************************************************
+Private Function func_GetKohzaList(ByVal strKohzaNo As String _
+                                 , ByVal strSeikyuYmd As String _
+                                 , ByVal strSintaku As String _
+                                 , ByVal blnKeisan As Boolean _
+                                 , ByRef lngCount As Long _
+                                 , ByRef strKohzaList() As String _
+                                 , ByRef typKohzaList() As typKohzaMain) As Boolean
+
+On Error GoTo ErrHandler
+
+    Const PROCEDURE_NAME = "func_GetKohzaList"
+
+    Dim strSql              As String
+    Dim vdata()             As Variant
+    Dim lngCol              As Long
+    Dim lngRow              As Long
+    Dim lngRowCnt           As Long
+    Dim lngColCnt           As Long
+    Dim strOyaKohza         As String
+    Dim lngOyaKohza         As Long
+    Dim lngRCnt             As Long
+    Dim lngCCnt             As Long
+    Dim blnRet              As Boolean
+    Dim strSeikyuKikanId    As String
+    
+    Dim strSeikyuShoKikanFrom   As String
+    Dim strSeikyuShoKikanTo     As String
+
+'------------<Modify Start azuma 2006/12/07 > -----------------------
+    Dim strKariKeisanFlg        As String
+'------------<Modify End   azuma 2006/12/07 > -----------------------
+    
+'------------<Modify Start azuma 2006/11/30 > -----------------------
+    Dim strSeikyuKikanFrom  As String
+    Dim strSeikyuKikanTo    As String
+'------------<Modify End   azuma 2006/11/30 > -----------------------
+    
+'------------<Modify Start azuma 2007/06/07 (PH3)> -----------------------
+    Dim strHeizanDanmenKbn  As String       '平残断面区分(1:平残、2:断面)
+'------------<Modify End   azuma 2007/06/07 (PH3)> -----------------------
+    
+    
+    Const ItemCnt = 13       'DB取得項目添え字最大値
+    
+    
+
+    func_GetKohzaList = False
+
+    strOyaKohza = ""
+    lngCount = 0
+    lngOyaKohza = -1
+    Erase strKohzaList
+    lngRCnt = 1
+    
+    strSeikyuShoKikanFrom = "99999999"
+    strSeikyuShoKikanTo = "00000000"
+
+'------------<Modify Start azuma 2006/11/30 > -----------------------
+    strSeikyuKikanFrom = "99999999"
+    strSeikyuKikanTo = "00000000"
+'------------<Modify End   azuma 2006/11/30 > -----------------------
+
+'*******************************************************
+'* 関数開始　                                        　*
+'*******************************************************
+
+    'SQL作成
+    strSql = ""
+    strSql = strSql & " SELECT"
+    strSql = strSql & "     KNR.KOHZA_NO"               ' 0:口座番号
+    strSql = strSql & "    ,KNR.HIZUKE_SHURUI"          ' 1:日付種類
+    strSql = strSql & "    ,KNR.SEIKYU_YMD"             ' 2:請求日
+    strSql = strSql & "    ,KNR.SEIKYUSHO_KIKAN_FROM"   ' 3:請求書期間From
+    strSql = strSql & "    ,KNR.SEIKYUSHO_KIKAN_TO"     ' 4:請求書期間To
+    strSql = strSql & "    ,KSK.SEIKYU_KIKAN_ID"        ' 5:請求期間ID
+'------------<Modify Start azuma 2006/10/19 単No.224> -----------------------
+    strSql = strSql & "    ,DECODE(KKZ.GASSAN_TAISHOH_KBN,NULL,'0',KKZ.GASSAN_TAISHOH_KBN)"
+                                                        ' 6:合算対象区分
+'    strSql = strSql & "    ,KKZ.GASSAN_TAISHOH_KBN"     ' 6:合算対象区分
+'------------<Modify End   azuma 2006/10/19 単No.224> -----------------------
+    strSql = strSql & "    ,CASE"
+    strSql = strSql & "        WHEN KKZ.GASSAN_TAISHOH_KBN = '0' THEN  KNR.KOHZA_NO    "
+    strSql = strSql & "        WHEN KKZ.GASSAN_TAISHOH_KBN = '1' THEN  KGK.GASSAN_OYA_KOHZA_NO"
+'------------<Modify Start azuma 2006/10/19 単No.224> -----------------------
+    strSql = strSql & "        ELSE KNR.KOHZA_NO    "
+'------------<Modify End   azuma 2006/10/19 単No.224> -----------------------
+    strSql = strSql & "     END AS OYA_KOHZA_NO"        ' 7:親口座番号
+    strSql = strSql & "    ,KSK.SEIKYU_KIKAN_FROM"      ' 8:請求期間From
+    strSql = strSql & "    ,KSK.SEIKYU_KIKAN_TO"        ' 9:請求期間To
+
+'------------<Modify Start azuma 2006/12/07 > -----------------------
+    strSql = strSql & "    ,KSU.KARI_KEISAN_FLG"        '10:仮計算フラグ
+'------------<Modify End   azuma 2006/12/07 > -----------------------
+
+'------------<Modify Start azuma 2007/03/29 (PH3)> -----------------------
+    strSql = strSql & "    ,KSK.HEIZAN_DANMEN_KBN"      '11:平残断面区分
+    strSql = strSql & "    ,KSK.MAE_ATO_BARAI_KBN"      '12:前払後払区分
+    strSql = strSql & "    ,KSK.ZEROEN_SEIKYUSHO_KBN"   '13:ゼロ円請求区分
+'------------<Modify End   azuma 2007/03/29 (PH3)> -----------------------
+    
+    strSql = strSql & " FROM"
+    strSql = strSql & "     KYK_SEIKYU_KIKAN  KSK"
+    strSql = strSql & "    ,KYK_SEIKYU_KANRI  KNR"
+    strSql = strSql & "    ,VW_DT001D         VDT"
+    strSql = strSql & "    ,KYK_KOHZA_ZOKUSEI KKZ"
+    strSql = strSql & "    ,KYK_GASSAN_KOHZA  KGK"
+'------------<Modify Start azuma 2006/12/07 > -----------------------
+    strSql = strSql & "    ,KYK_KOMONRYOH_SUM KSU"
+'------------<Modify End   azuma 2006/12/07 > -----------------------
+    strSql = strSql & " WHERE"
+    strSql = strSql & "     KSK.KOHZA_NO          =  KNR.KOHZA_NO"
+    strSql = strSql & " AND KSK.SEIKYU_KIKAN_ID   =  KNR.SEIKYU_KIKAN_ID"
+    strSql = strSql & " AND KNR.SEIKYU_YMD        =  " & strSeikyuYmd
+'------------<Modify Start azuma 2006/12/08 > -----------------------
+'    If blnKeisan Then
+'    '計算あり
+'------------<Modify Start azuma 2006/12/19 > -----------------------
+''      印刷時はステータスを見ない
+''        strSql = strSql & " AND KNR.STATUS            =  '1'"          '請求済みのみ
+'------------<Modify End   azuma 2006/12/19 > -----------------------
+'    Else
+'    '計算なし
+'        strSql = strSql & " AND KNR.STATUS            =  '1'"          '請求済みのみ
+'    End If
+''    strSql = strSql & " AND KNR.STATUS            <>  '2'"          '入金済み以外
+'------------<Modify End   azuma 2006/12/08 > -----------------------
+
+
+    strSql = strSql & " AND KNR.SAKUJO_FLG        =  '0'"
+    strSql = strSql & " AND KSK.KOHZA_NO          =  VDT.PRTCD "
+    strSql = strSql & " AND KSK.SAKUJO_FLG        =  '0'"
+'------------<Modify Start azuma 2006/10/19 単No.224> -----------------------
+    strSql = strSql & " AND KSK.KOHZA_NO          =  KKZ.KOHZA_NO(+)  "
+'    strSql = strSql & " AND KSK.KOHZA_NO          =  KKZ.KOHZA_NO  "
+'------------<Modify End   azuma 2006/10/19 単No.224> -----------------------
+    strSql = strSql & " AND KSK.KOHZA_NO          =  KGK.GASSAN_KO_KOHZA_NO(+)  "
+    
+    
+'------------<Modify Start azuma 2006/12/07 > -----------------------
+    strSql = strSql & " AND KNR.KOHZA_NO          =  KSU.KOHZA_NO"
+    strSql = strSql & " AND KNR.SEIKYU_KIKAN_ID   =  KSU.SEIKYU_KIKAN_ID"
+    strSql = strSql & " AND KNR.HIZUKE_SHURUI     =  KSU.HIZUKE_SHURUI"
+    strSql = strSql & " AND KNR.SEIKYUSHO_KIKAN_TO = KSU.KEISAN_TO_YMD"
+'------------<Modify End   azuma 2006/12/07 > -----------------------
+
+'------------<Modify Start azuma 2007/03/29 (PH3)> -----------------------
+    strSql = strSql & " AND KNR.SEIKYUSHO_KIKAN_FROM = KSU.KEISAN_FROM_YMD"
+'------------<Modify End   azuma 2007/03/29 (PH3)> -----------------------
+    
+    
+    '口座番号の指定がある場合追加
+    If Trim(strKohzaNo) <> "" Then
+        If CStr(Left(strKohzaNo, 1)) <> "G" Then
+        '親無し
+            strSql = strSql & " AND KNR.KOHZA_NO            =  '" & strKohzaNo & "'"
+'------------<Modify Start azuma 2006/10/19 単No.224> -----------------------
+            strSql = strSql & " AND (  KKZ.GASSAN_TAISHOH_KBN = '0'"
+            strSql = strSql & "     OR KKZ.GASSAN_TAISHOH_KBN IS NULL)"
+'            strSql = strSql & " AND KKZ.GASSAN_TAISHOH_KBN = '0'"
+'------------<Modify End   azuma 2006/10/19 単No.224> -----------------------
+        Else
+        '合算
+            strSql = strSql & " AND KGK.GASSAN_OYA_KOHZA_NO =  '" & strKohzaNo & "'"
+            strSql = strSql & " AND KKZ.GASSAN_TAISHOH_KBN = '1'"
+        End If
+    Else
+    'ない場合
+            '親無しのみを処理対象とする。
+'------------<Modify Start azuma 2006/10/19 単No.224> -----------------------
+            strSql = strSql & " AND (  KKZ.GASSAN_TAISHOH_KBN = '0'"
+            strSql = strSql & "     OR KKZ.GASSAN_TAISHOH_KBN IS NULL)"
+'            strSql = strSql & " AND KKZ.GASSAN_TAISHOH_KBN = '0'"
+'------------<Modify End   azuma 2006/10/19 単No.224> -----------------------
+    End If
+    
+    '信託銀行コードの指定がある場合追加
+    If Trim(strSintaku) <> "" Then
+'------------<Modify Start azuma 2008/01/21 (PH4)> ★★★☆-----------------------
+        strSql = strSql & " AND VDT.SINTAKU_BANK_CD   =  '" & func_ChkQuoteshon(strSintaku, "'") & "'"
+'        strSql = strSql & " AND VDT.SINTAKU_BANK_CD   =  '" & strSintaku & "'"
+'------------<Modify End   azuma 2008/01/21 (PH4)> ★★★☆-----------------------
+    End If
+    
+    strSql = strSql & " ORDER BY"
+    strSql = strSql & "     OYA_KOHZA_NO,KSK.KOHZA_NO"
+'    strSql = strSql & "     KKZ.GASSAN_TAISHOH_KBN"
+'    strSql = strSql & "    ,KSK.KOHZA_NO"
+
+    'データ取得
+    Call gclsDB.DoExequteSql(gcSELECT, strSql, vdata, lngCol, lngRow)
+    
+'Err.Raise 1
+    '取得データを設定
+    If lngRow > 0 Then
+        
+        For lngRowCnt = 0 To lngRow - 1
+        
+            If strOyaKohza <> CStr(vdata(7, lngRowCnt)) Then
+                
+                If lngRCnt > 1 Then
+                    
+                    With typKohzaList(lngOyaKohza)
+                        ReDim .strKohzaList(lngRCnt - 1, ItemCnt)
+                        
+                        For lngRCnt = 1 To UBound(.strKohzaList, 1)
+                            
+                            For lngCCnt = 0 To ItemCnt
+'                                .strKohzaList(lngRCnt, lngCCnt) = strKohzaList(lngCCnt, lngRowCnt - 1)
+                                .strKohzaList(lngRCnt, lngCCnt) = strKohzaList(lngCCnt, lngRCnt)
+                            Next lngCCnt
+                            
+                            '親口座情報（インデックス：０固定）
+'------------<Modify Start azuma 2007/10/22 (PH3.5)> ★★★☆-----------------------
+                            If .GassanTaishohKbn = "1" Then
+                                .strKohzaList(0, KOHZALIST_KOHZA_NO) = CStr(vdata(7, 0))         '口座番号
+                            Else
+                                .strKohzaList(0, KOHZALIST_KOHZA_NO) = CStr(vdata(7, lngRowCnt - 1))       '口座番号
+                            End If
+                            
+''''                            .strKohzaList(0, KOHZALIST_KOHZA_NO) = CStr(vdata(7, 0))         '口座番号
+'------------<Modify End   azuma 2007/10/22 (PH3.5)> ★★★☆-----------------------
+                            .strKohzaList(0, KOHZALIST_HIZUKE_SHURUI) = .strKohzaList(lngRCnt, KOHZALIST_HIZUKE_SHURUI)                 '日付種類
+                            .strKohzaList(0, KOHZALIST_SEIKYU_YMD) = .strKohzaList(lngRCnt, KOHZALIST_SEIKYU_YMD)                       '請求日
+                            .strKohzaList(0, KOHZALIST_SEIKYUSHO_KIKAN_FROM) = .strKohzaList(lngRCnt, KOHZALIST_SEIKYUSHO_KIKAN_FROM)   '請求書期間From
+                            .strKohzaList(0, KOHZALIST_SEIKYUSHO_KIKAN_TO) = .strKohzaList(lngRCnt, KOHZALIST_SEIKYUSHO_KIKAN_TO)       '請求書期間To
+                            .strKohzaList(0, KOHZALIST_KARI_KEISAN_FLG) = .strKohzaList(lngRCnt, KOHZALIST_KARI_KEISAN_FLG)             '仮計算フラグ
+'------------<Modify Start azuma 2007/03/29 (PH3)> -----------------------
+                            .strKohzaList(0, KOHZALIST_HEIZAN_DANMEN_KBN) = .strKohzaList(lngRCnt, KOHZALIST_HEIZAN_DANMEN_KBN)         '平残断面区分
+                            .strKohzaList(0, KOHZALIST_MAE_ATO_BARAI_KBN) = .strKohzaList(lngRCnt, KOHZALIST_MAE_ATO_BARAI_KBN)         '前払後払区分
+                            .strKohzaList(0, KOHZALIST_ZEROEN_SEIKYU_KBN) = .strKohzaList(lngRCnt, KOHZALIST_ZEROEN_SEIKYU_KBN)         'ゼロ円請求区分
+'------------<Modify End   azuma 2007/03/29 (PH3)> -----------------------
+
+'------------<Modify Start azuma 2007/06/07 (PH3)> -----------------------
+                            strHeizanDanmenKbn = .strKohzaList(lngRCnt, KOHZALIST_HEIZAN_DANMEN_KBN)         '平残断面区分
+'------------<Modify End   azuma 2007/06/07 (PH3)> -----------------------
+
+                        Next lngRCnt
+                        
+                        '親口座の請求期間ID取得
+                        If Trim(strKohzaNo) <> "" Then
+                            If CStr(Left(strKohzaNo, 1)) = "G" Then
+                                
+'------------<Modify Start azuma 2007/06/07 (PH3)> -----------------------
+                                blnRet = func_GetOyaKozaInfo(strKohzaNo _
+                                                           , vdata(8, lngRowCnt - 1) _
+                                                           , vdata(9, lngRowCnt - 1) _
+                                                           , .strKohzaList(lngRCnt, 2) _
+                                                           , strSeikyuKikanId _
+                                                           , strKariKeisanFlg _
+                                                           , strHeizanDanmenKbn)
+''------------<Modify Start azuma 2006/12/07 > -----------------------
+'                                    blnRet = func_GetOyaKozaInfo(strKohzaNo _
+'                                                               , vdata(8, lngRowCnt - 1) _
+'                                                               , vdata(9, lngRowCnt - 1) _
+'                                                               , .strKohzaList(lngRCnt, 2) _
+'                                                               , strSeikyuKikanId _
+'                                                               , strKariKeisanFlg)
+''                                    blnRet = func_GetOyaKozaInfo(strKohzaNo _
+''                                                               , vData(8, lngRowCnt - 1) _
+''                                                               , vData(9, lngRowCnt - 1) _
+''                                                               , strSeikyuKikanId)
+''------------<Modify End   azuma 2006/12/07 > -----------------------
+'------------<Modify End   azuma 2007/06/07 (PH3)> -----------------------
+                                If blnRet = False Then
+                                    'エラー情報構造体セット
+                                    With gusrErr
+                                        .ModuleId = MODULE_NAME         'モージュールID
+                                        .Procedure = PROCEDURE_NAME     'プロシージャID
+                                        .MsgCode = ERR_MSGCD_VB         'メッセージ区分
+                                        .ErrNum = Err.Number            'システムエラーコード
+                                        .ErrDescript = Err.Description  'システムエラー内容
+                                        .KohzaNo = strKohzaNo
+                                        .MsgNaiyou = "合算親口座の請求期間ID取得失敗"   'メッセージ内容(ブックファイル名)
+                                        .MsgSyousai = "合算親口座番号の請求期間ID取得に失敗しました。①" & vbCrLf & _
+                                                      "システム管理者に連絡して下さい。" & vbCrLf & _
+                                                      "テーブル　　　　　：KYK_SEIKYU_KIKAN" & vbCrLf & _
+                                                      "口座番号　　　　　：" & strKohzaNo & vbCrLf & _
+                                                      "請求期間ID　　　　：strSeikyuKikanId" & vbCrLf & _
+                                                      "請求書期間ＦＲＯＭ：" & vdata(8, lngRowCnt - 1) & vbCrLf & _
+                                                      "請求書期間ＴＯ　　：" & vdata(9, lngRowCnt - 1) & vbCrLf  'メッセージ詳細
+                                        
+                                        'エラーシート書き込み
+                                        
+                                        Call fncWriteErrSheet(ERROR_SHEETNAME)
+                                    End With
+                                    Exit Function
+                                Else
+                                    .strKohzaList(0, KOHZALIST_SEIKYU_KIKAN_ID) = strSeikyuKikanId
+'------------<Modify Start azuma 2006/12/07 > -----------------------
+                                    .strKohzaList(0, KOHZALIST_KARI_KEISAN_FLG) = strKariKeisanFlg
+'------------<Modify End   azuma 2006/12/07 > -----------------------
+                                End If
+                                
+                            End If
+                        End If
+                    End With
+                    Erase strKohzaList
+                    lngRCnt = 1
+                End If
+                
+                lngOyaKohza = lngOyaKohza + 1
+                ReDim Preserve typKohzaList(lngOyaKohza)
+                lngCount = lngOyaKohza + 1
+                typKohzaList(lngOyaKohza).GassanTaishohKbn = vdata(6, lngRowCnt)    '合算対象区分
+                typKohzaList(lngOyaKohza).strOyaKohzaNo = vdata(7, lngRowCnt)       '親口座番号
+                
+            End If
+            
+            strOyaKohza = CStr(vdata(7, lngRowCnt))
+            
+            ReDim Preserve strKohzaList(ItemCnt, lngRCnt)
+            For lngCCnt = 0 To ItemCnt
+                strKohzaList(lngCCnt, lngRCnt) = vdata(lngCCnt, lngRowCnt)
+            Next lngCCnt
+            lngRCnt = lngRCnt + 1
+            
+            
+        Next lngRowCnt
+        
+    
+        If lngRCnt > 1 Then
+            With typKohzaList(lngOyaKohza)
+                ReDim .strKohzaList(lngRCnt - 1, ItemCnt)
+                For lngRCnt = 0 To UBound(.strKohzaList, 1)
+                    For lngCCnt = 0 To ItemCnt
+                        .strKohzaList(lngRCnt, lngCCnt) = strKohzaList(lngCCnt, lngRCnt)
+                    Next lngCCnt
+'------------<Modify Start azuma 2006/11/01 連No.69> -----------------------
+                    If strSeikyuShoKikanFrom > .strKohzaList(lngRCnt, KOHZALIST_SEIKYUSHO_KIKAN_FROM) And Trim(.strKohzaList(lngRCnt, KOHZALIST_SEIKYUSHO_KIKAN_FROM)) <> "" Then
+                       strSeikyuShoKikanFrom = .strKohzaList(lngRCnt, KOHZALIST_SEIKYUSHO_KIKAN_FROM)
+                    End If
+                    
+                    If strSeikyuShoKikanTo < .strKohzaList(lngRCnt, KOHZALIST_SEIKYUSHO_KIKAN_TO) And Trim(.strKohzaList(lngRCnt, KOHZALIST_SEIKYUSHO_KIKAN_TO)) <> "" Then
+                       strSeikyuShoKikanTo = .strKohzaList(lngRCnt, KOHZALIST_SEIKYUSHO_KIKAN_TO)
+                    End If
+'------------<Modify Start azuma 2006/11/30 > -----------------------
+                    If strSeikyuKikanFrom > .strKohzaList(lngRCnt, KOHZALIST_SEIKYU_KIKAN_FROM) And Trim(.strKohzaList(lngRCnt, KOHZALIST_SEIKYU_KIKAN_FROM)) <> "" Then
+                       strSeikyuKikanFrom = .strKohzaList(lngRCnt, KOHZALIST_SEIKYU_KIKAN_FROM)
+                    End If
+                    
+                    If strSeikyuKikanTo < .strKohzaList(lngRCnt, KOHZALIST_SEIKYU_KIKAN_TO) And Trim(.strKohzaList(lngRCnt, KOHZALIST_SEIKYU_KIKAN_TO)) <> "" Then
+                       strSeikyuKikanTo = .strKohzaList(lngRCnt, KOHZALIST_SEIKYU_KIKAN_TO)
+                    End If
+'------------<Modify End   azuma 2006/11/30 > -----------------------
+                    
+                    '親口座情報（インデックス：０固定）
+'------------<Modify Start azuma 2007/10/22 (PH3.5)> ★★★☆-----------------------
+                    If .GassanTaishohKbn = "1" Then
+                        .strKohzaList(0, KOHZALIST_KOHZA_NO) = CStr(vdata(7, 0))         '口座番号
+                    Else
+                        .strKohzaList(0, KOHZALIST_KOHZA_NO) = CStr(vdata(7, lngRowCnt - 1))       '口座番号
+                    End If
+'''                    .strKohzaList(0, KOHZALIST_KOHZA_NO) = CStr(vdata(7, 0))                    '口座番号
+'------------<Modify End   azuma 2007/10/22 (PH3.5)> ★★★☆-----------------------
+                    .strKohzaList(0, KOHZALIST_HIZUKE_SHURUI) = .strKohzaList(lngRCnt, KOHZALIST_HIZUKE_SHURUI) '日付種類
+                    .strKohzaList(0, KOHZALIST_SEIKYU_YMD) = .strKohzaList(lngRCnt, KOHZALIST_SEIKYU_YMD)       '請求日
+                    .strKohzaList(0, KOHZALIST_SEIKYUSHO_KIKAN_FROM) = strSeikyuShoKikanFrom    '請求書期間From
+                    .strKohzaList(0, KOHZALIST_SEIKYUSHO_KIKAN_TO) = strSeikyuShoKikanTo        '請求書期間To
+                    .strKohzaList(0, KOHZALIST_GASSAN_TAISHOH_KBN) = "1"                        '合算対象区分
+'------------<Modify Start azuma 2007/10/22 (PH3.5)> ★★★☆-----------------------
+                    If .GassanTaishohKbn = "1" Then
+                        .strKohzaList(0, KOHZALIST_OYA_KOHZA_NO) = CStr(vdata(7, 0))                '親口座番号
+                    Else
+                        .strKohzaList(0, KOHZALIST_OYA_KOHZA_NO) = CStr(vdata(7, lngRowCnt - 1))                '親口座番号
+                    End If
+'                    .strKohzaList(0, KOHZALIST_OYA_KOHZA_NO) = CStr(vdata(7, 0))                '親口座番号
+'------------<Modify End   azuma 2007/10/22 (PH3.5)> ★★★☆-----------------------
+'------------<Modify Start azuma 2006/11/30 > -----------------------
+                    .strKohzaList(0, KOHZALIST_SEIKYU_KIKAN_FROM) = strSeikyuKikanFrom          '請求期間From
+                    .strKohzaList(0, KOHZALIST_SEIKYU_KIKAN_TO) = strSeikyuKikanTo              '請求期間To
+'------------<Modify End   azuma 2006/11/30 > -----------------------
+'                        '親口座情報（インデックス：０固定）
+'                        .strKohzaList(0, 0) = CStr(vData(7, 0))         '口座番号
+'                        .strKohzaList(0, 1) = .strKohzaList(lngRCnt, 1) '日付種類
+'                        .strKohzaList(0, 2) = .strKohzaList(lngRCnt, 2) '請求日
+'                        .strKohzaList(0, 3) = .strKohzaList(lngRCnt, 3) '請求書期間From
+'                        .strKohzaList(0, 4) = .strKohzaList(lngRCnt, 4) '請求書期間To
+'                        .strKohzaList(0, 6) = "1"                       '合算対象区分
+'                        .strKohzaList(0, 7) = CStr(vData(7, 0))         '親口座番号
+'------------<Modify End   azuma 2006/11/01 連No.69> -----------------------
+                    
+                    
+'------------<Modify Start azuma 2007/10/22 (PH3.5)> ★★★☆-----------------------
+                    If .GassanTaishohKbn = "1" Then
+                        .strKohzaList(0, KOHZALIST_KARI_KEISAN_FLG) = CStr(vdata(10, 0))         '仮計算フラグ
+                        .strKohzaList(0, KOHZALIST_HEIZAN_DANMEN_KBN) = CStr(vdata(11, 0)) '平残断面区分
+                        .strKohzaList(0, KOHZALIST_MAE_ATO_BARAI_KBN) = CStr(vdata(12, 0)) '前払後払区分
+                        .strKohzaList(0, KOHZALIST_ZEROEN_SEIKYU_KBN) = CStr(vdata(13, 0)) 'ゼロ円請求区分
+                        strHeizanDanmenKbn = CStr(vdata(11, 0))         '平残断面区分
+                    Else
+                        .strKohzaList(0, KOHZALIST_KARI_KEISAN_FLG) = CStr(vdata(10, lngRowCnt - 1))         '仮計算フラグ
+                        .strKohzaList(0, KOHZALIST_HEIZAN_DANMEN_KBN) = CStr(vdata(11, lngRowCnt - 1)) '平残断面区分
+                        .strKohzaList(0, KOHZALIST_MAE_ATO_BARAI_KBN) = CStr(vdata(12, lngRowCnt - 1)) '前払後払区分
+                        .strKohzaList(0, KOHZALIST_ZEROEN_SEIKYU_KBN) = CStr(vdata(13, lngRowCnt - 1)) 'ゼロ円請求区分
+                        strHeizanDanmenKbn = CStr(vdata(11, lngRowCnt - 1))         '平残断面区分
+                    End If
+''------------<Modify Start azuma 2006/12/07 > -----------------------
+'                    .strKohzaList(0, KOHZALIST_KARI_KEISAN_FLG) = CStr(vdata(10, 0))         '仮計算フラグ
+''------------<Modify End   azuma 2006/12/07 > -----------------------
+'
+'
+''------------<Modify Start azuma 2007/03/29 (PH3)> -----------------------
+'                    .strKohzaList(0, KOHZALIST_HEIZAN_DANMEN_KBN) = CStr(vdata(11, 0)) '平残断面区分
+'                    .strKohzaList(0, KOHZALIST_MAE_ATO_BARAI_KBN) = CStr(vdata(12, 0)) '前払後払区分
+'                    .strKohzaList(0, KOHZALIST_ZEROEN_SEIKYU_KBN) = CStr(vdata(13, 0)) 'ゼロ円請求区分
+''------------<Modify End   azuma 2007/03/29 (PH3)> -----------------------
+'
+''------------<Modify Start azuma 2007/06/07 (PH3)> -----------------------
+'                    strHeizanDanmenKbn = CStr(vdata(11, 0))         '平残断面区分
+''------------<Modify End   azuma 2007/06/07 (PH3)> -----------------------
+'------------<Modify End   azuma 2007/10/22 (PH3.5)> ★★★☆-----------------------
+                Next lngRCnt
+                
+                '親口座の請求期間ID取得
+                If Trim(strKohzaNo) <> "" Then
+                    If CStr(Left(strKohzaNo, 1)) = "G" Then
+                        
+'------------<Modify Start azuma 2007/06/07 (PH3)> -----------------------
+                        blnRet = func_GetOyaKozaInfo(strKohzaNo _
+                                                   , strSeikyuKikanFrom _
+                                                   , strSeikyuKikanTo _
+                                                   , .strKohzaList(0, 2) _
+                                                   , strSeikyuKikanId _
+                                                   , strKariKeisanFlg _
+                                                   , strHeizanDanmenKbn)
+''------------<Modify Start azuma 2006/12/07 > -----------------------
+'                            blnRet = func_GetOyaKozaInfo(strKohzaNo _
+'                                                       , strSeikyuKikanFrom _
+'                                                       , strSeikyuKikanTo _
+'                                                       , .strKohzaList(0, 2) _
+'                                                       , strSeikyuKikanId _
+'                                                       , strKariKeisanFlg)
+'''------------<Modify Start azuma 2006/11/30 > -----------------------
+''                            blnRet = func_GetOyaKozaInfo(strKohzaNo _
+''                                                       , strSeikyuKikanFrom _
+''                                                       , strSeikyuKikanTo _
+''                                                       , strSeikyuKikanId)
+'''                            blnRet = func_GetOyaKozaInfo(strKohzaNo _
+'''                                                       , strSeikyuShoKikanFrom _
+'''                                                       , strSeikyuShoKikanTo _
+'''                                                       , strSeikyuKikanId)
+'''------------<Modify End   azuma 2006/11/30 > -----------------------
+''------------<Modify End   azuma 2006/12/07 > -----------------------
+''                            blnRet = func_GetOyaKozaInfo(strKohzaNo _
+''                                                       , vData(8, lngRowCnt - 1) _
+''                                                       , vData(9, lngRowCnt - 1) _
+''                                                       , strSeikyuKikanId)
+'------------<Modify End   azuma 2007/06/07 (PH3)> -----------------------
+                        If blnRet = False Then
+                            'エラー情報構造体セット
+                            With gusrErr
+                                .ModuleId = MODULE_NAME         'モージュールID
+                                .Procedure = PROCEDURE_NAME     'プロシージャID
+                                .MsgCode = ERR_MSGCD_VB         'メッセージ区分
+                                .ErrNum = Err.Number            'システムエラーコード
+                                .ErrDescript = Err.Description  'システムエラー内容
+                                .KohzaNo = strKohzaNo
+                                .MsgNaiyou = "合算親口座の請求期間ID取得失敗"   'メッセージ内容(ブックファイル名)
+                                .MsgSyousai = "合算親口座番号の請求期間ID取得に失敗しました。②" & vbCrLf & _
+                                              "システム管理者に連絡して下さい。" & vbCrLf & _
+                                              "テーブル　　　　　：KYK_SEIKYU_KIKAN" & vbCrLf & _
+                                              "口座番号　　　　　：" & strKohzaNo & vbCrLf & _
+                                              "請求期間ID　　　　：strSeikyuKikanId" & vbCrLf & _
+                                              "請求書期間ＦＲＯＭ：" & vdata(8, lngRowCnt - 1) & vbCrLf & _
+                                              "請求書期間ＴＯ　　：" & vdata(9, lngRowCnt - 1) & vbCrLf  'メッセージ詳細
+                                        
+                                
+                                'エラーシート書き込み
+                                
+                                Call fncWriteErrSheet(ERROR_SHEETNAME)
+                            End With
+                            Exit Function
+                        Else
+                            .strKohzaList(0, KOHZALIST_SEIKYU_KIKAN_ID) = strSeikyuKikanId
+'------------<Modify Start azuma 2006/12/07 > -----------------------
+                            .strKohzaList(0, KOHZALIST_KARI_KEISAN_FLG) = strKariKeisanFlg
+'------------<Modify End   azuma 2006/12/07 > -----------------------
+                        End If
+                        
+                    End If
+                End If
+            End With
+            Erase strKohzaList
+            lngRCnt = 0
+        End If
+        
+                        
+    End If
+    
+    Erase vdata
+
+    func_GetKohzaList = True
+    Exit Function
+    
+ErrHandler:
+
+    func_GetKohzaList = False
+'Resume
+'Debug.Print strSql
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_GetKohzaList", Err.Number, Err.Description)
+    On Error GoTo 0
+    Erase vdata
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：請求書作成の口座一覧取得関数
+'
+'引　　数　：
+'           strKohzaNo          I       口座番号
+'           strKikanFrom        I       請求期間From
+'           strKikanTo          I       請求期間To
+'           strSeikyuYmd        I       請求日
+'           strSeikyuKikanId    O       請求期間ID
+'           strKariKeisanFlg    O       仮計算フラグ
+'           strHeizanDanmenKbn  I       平残断面区分(1:平残、2:断面)
+'
+'戻り値　　：
+'
+'機能説明　：口座番号、請求期間From、請求期間Toから
+'           請求期間IDを取得する。
+'
+'更新履歴　：2006/10/02 SRA Y.Azuma    新規作成
+'更新履歴　：2006/12/07 SRA Y.Azuma    変更     仮計算フラグの取得
+'更新履歴　：2006/12/08 SRA Y.Azuma    変更     (仕変)請求管理テーブルのステータス判定変更
+'更新履歴　：2007/03/29 SRA Y.Azuma    変更     (PH3)PH3請求書作成の対応
+'更新履歴　：2007/06/07 SRA Y.Azuma    変更     (PH3)連結　断面合算の期中追加対応　障害51
+'
+'*************************************************************************
+Private Function func_GetOyaKozaInfo(ByVal strKohzaNo As String _
+                                 , ByVal strKikanFrom As String _
+                                 , ByVal strKikanTo As String _
+                                 , ByVal strSeikyuYmd As String _
+                                 , ByRef strSeikyuKikanId As String _
+                                 , ByRef strKariKeisanFlg As String _
+                                 , ByVal strHeizanDanmenKbn As String _
+                                 ) As Boolean
+'Private Function func_GetOyaKozaInfo(ByVal strKohzaNo As String _
+'                                 , ByVal strKikanFrom As String _
+'                                 , ByVal strKikanTo As String _
+'                                 , ByRef strSeikyuKikanId As String) As Boolean
+
+On Error GoTo ErrHandler
+
+
+    Dim strSql              As String
+    Dim vdata()             As Variant
+    Dim lngCol              As Long
+    Dim lngRow              As Long
+    
+
+    func_GetOyaKozaInfo = False
+
+'*******************************************************
+'* 関数開始　                                        　*
+'*******************************************************
+
+    'SQL作成
+'------------<Modify Start azuma 2006/12/07 > -----------------------
+    strSql = ""
+    strSql = strSql & " SELECT"
+    strSql = strSql & "     KSK.SEIKYU_KIKAN_ID"
+    strSql = strSql & "    ,KSU.KARI_KEISAN_FLG"
+'    strSql = strSql & "    ,KNR.HIZUKE_SHURUI"
+    strSql = strSql & " FROM"
+    strSql = strSql & "     KYK_SEIKYU_KANRI  KNR    "
+    strSql = strSql & "    ,KYK_KOMONRYOH_SUM KSU"
+    strSql = strSql & "    ,(SELECT"
+    strSql = strSql & "         KOHZA_NO"
+'------------<Modify Start azuma 2007/06/07 (PH3)> -----------------------
+    strSql = strSql & "        ,SEIKYU_KIKAN_ID"
+'    strSql = strSql & "        ,MAX(SEIKYU_KIKAN_ID) SEIKYU_KIKAN_ID"
+'------------<Modify End   azuma 2007/06/07 (PH3)> -----------------------
+    strSql = strSql & "     FROM"
+    strSql = strSql & "         KYK_SEIKYU_KIKAN"
+    strSql = strSql & "     WHERE"
+    strSql = strSql & "         KOHZA_NO          =  '" & strKohzaNo & "'  AND"
+'------------<Modify Start azuma 2007/06/07 (PH3)> -----------------------
+    '断面の場合は請求期間FROMを親口座請求期間ID検索の条件から外す
+    If strHeizanDanmenKbn <> DANMEN Then
+        strSql = strSql & "         SEIKYU_KIKAN_FROM =  " & strKikanFrom & "   AND"
+    End If
+'    strSql = strSql & "         SEIKYU_KIKAN_FROM =  " & strKikanFrom & "   AND"
+'------------<Modify End   azuma 2007/06/07 (PH3)> -----------------------
+    strSql = strSql & "         SEIKYU_KIKAN_TO   =  " & strKikanTo & "   AND"
+    strSql = strSql & "         SAKUJO_FLG        =  '0'"
+'------------<Modify Start azuma 2007/06/07 (PH3)> -----------------------
+    strSql = strSql & "         )     KSK"
+'    strSql = strSql & "     GROUP BY"
+'    strSql = strSql & "         KOHZA_NO)     KSK"
+'------------<Modify End   azuma 2007/06/07 (PH3)> -----------------------
+    strSql = strSql & " WHERE"
+    strSql = strSql & "     KSK.KOHZA_NO          =  KNR.KOHZA_NO"
+    strSql = strSql & " AND KSK.SEIKYU_KIKAN_ID   =  KNR.SEIKYU_KIKAN_ID"
+    strSql = strSql & " AND KNR.SEIKYU_YMD        =  " & strSeikyuYmd
+'------------<Modify Start azuma 2006/12/08 > -----------------------
+
+'------------<Modify Start azuma 2006/12/19 > -----------------------
+'       ステータスを見ない
+''    strSql = strSql & " AND KNR.STATUS            = '1'"
+'------------<Modify End   azuma 2006/12/19 > -----------------------
+
+'    strSql = strSql & " AND KNR.STATUS            <> '2'"
+'------------<Modify End   azuma 2006/12/08 > -----------------------
+    strSql = strSql & " AND KNR.SAKUJO_FLG        =  '0'"
+    strSql = strSql & " AND KNR.KOHZA_NO          =  KSU.KOHZA_NO"
+    strSql = strSql & " AND KNR.SEIKYU_KIKAN_ID   =  KSU.SEIKYU_KIKAN_ID"
+    strSql = strSql & " AND KNR.HIZUKE_SHURUI     =  KSU.HIZUKE_SHURUI"
+    strSql = strSql & " AND KNR.SEIKYUSHO_KIKAN_TO = KSU.KEISAN_TO_YMD"
+    
+'------------<Modify Start azuma 2007/03/29 (PH3)> -----------------------
+    strSql = strSql & " AND KNR.SEIKYUSHO_KIKAN_FROM = KSU.KEISAN_FROM_YMD"
+'------------<Modify End   azuma 2007/03/29 (PH3)> -----------------------
+    
+'    strSql = ""
+'    strSql = strSql & " SELECT"
+'    strSql = strSql & "     KSK.SEIKYU_KIKAN_ID    "
+'    strSql = strSql & " FROM"
+'    strSql = strSql & "     KYK_SEIKYU_KIKAN  KSK    "
+'    strSql = strSql & " WHERE"
+'    strSql = strSql & "     KSK.KOHZA_NO          =  '" & strKohzaNo & "' AND"
+'    strSql = strSql & "     KSK.SEIKYU_KIKAN_FROM =  " & strKikanFrom & " AND "
+'    strSql = strSql & "     KSK.SEIKYU_KIKAN_TO   =  " & strKikanTo & "   AND "
+'    strSql = strSql & "     KSK.SAKUJO_FLG        =  '0' "
+'    strSql = strSql & " ORDER BY KSK.SEIKYU_KIKAN_ID DESC "
+'------------<Modify End   azuma 2006/12/07 > -----------------------
+
+    'データ取得
+    Call gclsDB.DoExequteSql(gcSELECT, strSql, vdata, lngCol, lngRow)
+    
+    
+    '取得データをセルに設定
+    If lngRow > 0 Then
+        strSeikyuKikanId = vdata(0, 0)
+'------------<Modify Start azuma 2006/12/07 > -----------------------
+        strKariKeisanFlg = vdata(1, 0)
+'------------<Modify End   azuma 2006/12/07 > -----------------------
+    Else
+        Exit Function
+    End If
+                        
+    Erase vdata
+
+    func_GetOyaKozaInfo = True
+    Exit Function
+    
+ErrHandler:
+
+    func_GetOyaKozaInfo = False
+'Resume
+'Debug.Print strSql
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_GetOyaKozaInfo", Err.Number, Err.Description)
+    On Error GoTo 0
+    Erase vdata
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：テンプレートファイルコピー関数
+'
+'引　　数　：
+'           lngKohzaCnt     I       処理対象配列番号
+'           strKohzaList    I       処理対象口座配列
+'           strOutputDir    I       出力先フォルダ
+'           strFileName     O       コピー先ファイル名(Pathなし)
+'
+'戻り値　　：
+'
+'機能説明　：
+'
+'更新履歴　：2006/07/28 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Private Function func_TemplateCopy(ByVal lngKohzaCnt As Long _
+                                 , ByRef typKohzaList() As typKohzaMain _
+                                 , ByVal strOutputDir As String _
+                                 , ByRef strFileName As String) As Boolean
+
+On Error GoTo ErrHandler
+
+    Dim valSrcFileName  As Variant      'コピー元フィル名
+    Dim valNewFileName  As Variant      '新規ファイル名
+    Dim lngSheetNum     As Long
+    
+    Dim wbNewBook       As Workbook
+
+    func_TemplateCopy = False
+    
+    'コピー元ファイル設定
+    valSrcFileName = ThisWorkbook.Path & "\" & TEMPLATE_FOLDER & "\" & TEMPLATE_FILENAME
+    
+    '新ファイル名作成(請求日_口座番号.xls)
+    strFileName = typKohzaList(lngKohzaCnt).strKohzaList(1, KOHZALIST_SEIKYU_YMD) & "_" _
+                & typKohzaList(lngKohzaCnt).strOyaKohzaNo & ".xls"
+    
+    If Right(strOutputDir, 1) = "\" Then
+        valNewFileName = strOutputDir
+    Else
+        valNewFileName = strOutputDir & "\"
+    End If
+    
+    'データシートファイル名作成
+    valNewFileName = valNewFileName & strFileName
+    
+    ThisWorkbook.Application.SheetsInNewWorkbook = 1
+'------------<Modify Start azuma 2006/12/14 総No.35> -----------------------
+    Set wbNewBook = ThisWorkbook.Application.Workbooks.Add(valSrcFileName)
+'Debug.Print "テンポラリーコピー"
+'    Application.Workbooks.Add (valSrcFileName)
+'------------<Modify End   azuma 2006/12/14 総No.35> -----------------------
+    ThisWorkbook.Application.DisplayAlerts = False
+    
+    
+    'ファイルの保存
+'------------<Modify Start azuma 2006/12/14 総No.35> -----------------------
+    wbNewBook.Application.ActiveWorkbook.SaveAs Filename:=valNewFileName
+'Debug.Print "ファイル保存"
+'    ActiveWorkbook.SaveAs Filename:=valNewFileName
+'------------<Modify End   azuma 2006/12/14 総No.35> -----------------------
+    
+    ThisWorkbook.Application.DisplayAlerts = True
+    
+    Set wbNewBook = Nothing
+
+    func_TemplateCopy = True
+
+    Exit Function
+ErrHandler:
+
+    func_TemplateCopy = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_TemplateCopy", Err.Number, Err.Description)
+    On Error GoTo 0
+    
+    On Error Resume Next
+    
+    Set wbNewBook = Nothing
+    
+    ThisWorkbook.Application.DisplayAlerts = False
+'    Application.Workbooks(Application.ActiveWorkbook.Name).Close
+    
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：NAM情報取得関数
+'
+'引　　数　：
+'           lngSheetNo      I       対象シート
+'           strNamInfo      O       NAM情報格納配列
+'
+'戻り値　　：Boolean
+'
+'機能説明　：NAM情報のExcelファイルからNAM情報を取得する。
+'
+'更新履歴　：2006/08/04 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Private Function func_ReadNamInfo(ByRef lngSheetNo As Long, ByRef strNamInfo() As String) As Boolean
+On Error GoTo ErrHandler
+
+    Dim exl_ap      As Excel.Application             'ファイルオープン用
+    Dim exl_wb      As Excel.Workbook                'ファイルオープン用
+    Dim lngRowNo    As Long
+    Dim lngMaxRow   As Long
+
+    func_ReadNamInfo = False
+
+
+'*******************************************************
+'* 関数開始　                                        　*
+'*******************************************************
+    
+    
+    Set exl_ap = CreateObject("Excel.Application")
+    
+    '
+    Set exl_wb = exl_ap.Workbooks.Open(ThisWorkbook.Path & "\" & NAM_INFO_FILENAME)
+    
+    exl_wb.Application.Visible = False
+    
+    
+    '行数
+    lngMaxRow = exl_wb.Worksheets(lngSheetNo).Range("A65536").End(xlUp).Row
+    
+    ReDim strNamInfo(lngMaxRow, 1)
+    
+    With exl_wb.Sheets(lngSheetNo)
+        For lngRowNo = 1 To lngMaxRow
+            strNamInfo(lngRowNo, 0) = gfunc_ChangeNull(.Range("A" & lngRowNo).Value, "")   'カラム名
+            strNamInfo(lngRowNo, 1) = gfunc_ChangeNull(.Range("B" & lngRowNo).Value, "")    '値
+        Next lngRowNo
+    End With
+    
+    exl_ap.Application.DisplayAlerts = False
+    exl_ap.Workbooks(NAM_INFO_FILENAME).Close
+    exl_ap.Quit
+    exl_ap.Application.DisplayAlerts = True
+    
+    Set exl_wb = Nothing
+    Set exl_ap = Nothing
+
+    func_ReadNamInfo = True
+    Exit Function
+
+ErrHandler:
+
+    func_ReadNamInfo = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_ReadNamInfo", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Set exl_wb = Nothing
+    Set exl_ap = Nothing
+
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：請求管理ステータス取得関数
+'
+'引　　数　：
+'           strKohzaNo      I       口座番号
+'           strKikan        I       請求日
+'           lngRow          O       取得件数
+'           lngStatusMax    O       取得ステータスの最大値
+'
+'戻り値　　：Boolean
+'
+'機能説明　：指定された口座番号(親、親なし)と請求日から請求管理テーブルの
+'            ステータス最大値と該当件数を取得する。
+'
+'更新履歴　：2006/12/27 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Private Function func_GetSeikyuKanriStatus(ByVal strKohzaNo As String _
+                                         , ByVal strKikan As String _
+                                         , ByRef lngRow As Long _
+                                         , ByRef lngStatusMax As Long) As Boolean
+On Error GoTo ErrHandler
+
+
+    Dim strSql              As String
+    Dim vdata()             As Variant
+    Dim lngCol              As Long
+    Dim lngCnt              As Long
+    Dim strErrCode          As String
+
+
+    func_GetSeikyuKanriStatus = False
+
+    lngRow = 0
+    lngStatusMax = 0
+    strErrCode = ""
+    
+'*******************************************************
+'* 関数開始　                                        　*
+'*******************************************************
+
+    strSql = ""
+    strSql = strSql & " SELECT"
+    strSql = strSql & "     NVL(STATUS,0)"
+    strSql = strSql & "    ,KOHZA_NO"
+    strSql = strSql & "    ,SEIKYU_KIKAN_ID"
+    strSql = strSql & " FROM"
+    strSql = strSql & "     KYK_SEIKYU_KANRI"
+    strSql = strSql & " WHERE"
+    strSql = strSql & "     KOHZA_NO         = '" & strKohzaNo & "' "
+    strSql = strSql & " AND SEIKYU_YMD       = " & strKikan
+    strSql = strSql & " AND SAKUJO_FLG       = '0' "
+    strSql = strSql & " AND SEIKYU_KIKAN_ID  =(SELECT"
+    strSql = strSql & "                            MAX(SEIKYU_KIKAN_ID)"
+    strSql = strSql & "                        FROM"
+    strSql = strSql & "                            KYK_SEIKYU_KANRI"
+    strSql = strSql & "                        WHERE"
+    strSql = strSql & "                            KOHZA_NO   = '" & strKohzaNo & "' "
+    strSql = strSql & "                        AND SEIKYU_YMD = " & strKikan
+    strSql = strSql & "                        AND SAKUJO_FLG = '0'"
+    strSql = strSql & "                       )"
+    strSql = strSql & " AND NOT EXISTS (SELECT"
+    strSql = strSql & "                     GASSAN_KO_KOHZA_NO"
+    strSql = strSql & "                 FROM"
+    strSql = strSql & "                     KYK_GASSAN_KOHZA"
+    strSql = strSql & "                 WHERE"
+    strSql = strSql & "                     GASSAN_OYA_KOHZA_NO ='" & strKohzaNo & "' "
+    strSql = strSql & "                 AND SAKUJO_FLG='0'"
+    strSql = strSql & "                )"
+    strSql = strSql & " UNION ALL"
+    strSql = strSql & " SELECT"
+    strSql = strSql & "     A.STATUS"
+    strSql = strSql & "    ,A.KOHZA_NO"
+    strSql = strSql & "    ,MAX(A.SEIKYU_KIKAN_ID)"
+    strSql = strSql & " FROM"
+    strSql = strSql & "     KYK_SEIKYU_KANRI A    "
+    strSql = strSql & "    ,KYK_GASSAN_KOHZA B"
+    strSql = strSql & " WHERE"
+    strSql = strSql & "     B.GASSAN_KO_KOHZA_NO  = A.KOHZA_NO "
+    strSql = strSql & " AND B.GASSAN_OYA_KOHZA_NO = '" & strKohzaNo & "' "
+    strSql = strSql & " AND B.SAKUJO_FLG          = '0' "
+    strSql = strSql & " AND A.SEIKYU_YMD          = " & strKikan
+    strSql = strSql & " AND A.SAKUJO_FLG          = '0'"
+    strSql = strSql & " GROUP BY"
+    strSql = strSql & "     A.STATUS"
+    strSql = strSql & "    ,A.KOHZA_NO"
+
+    'データ取得
+    Call gclsDB.DoExequteSql(gcSELECT, strSql, vdata, lngCol, lngRow, strErrCode)
+    
+    
+    '取得データを判定
+    If Trim(strErrCode) = "" Then
+        If lngRow > 0 Then
+            
+            'ステータスの最大値を求める
+            For lngCnt = 0 To lngRow - 1
+                If lngStatusMax < CLng(vdata(0, lngCnt)) Then
+                    lngStatusMax = CLng(vdata(0, lngCnt))
+                End If
+            Next lngCnt
+            
+        End If
+    Else
+    'システムエラー
+        Erase vdata
+        Exit Function
+    End If
+                        
+    Erase vdata
+
+    func_GetSeikyuKanriStatus = True
+
+    Exit Function
+
+ErrHandler:
+
+    func_GetSeikyuKanriStatus = False
+    
+'Debug.Print strSql
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_GetSeikyuKanriStatus", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Erase vdata
+
+End Function
+
+

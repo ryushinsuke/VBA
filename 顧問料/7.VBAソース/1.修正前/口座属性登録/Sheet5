@@ -1,0 +1,158 @@
+VERSION 1.0 CLASS
+BEGIN
+  MultiUse = -1  'True
+END
+Attribute VB_Name = "Sheet5"
+Attribute VB_GlobalNameSpace = False
+Attribute VB_Creatable = False
+Attribute VB_PredeclaredId = True
+Attribute VB_Exposed = True
+
+
+'*************************************************************************
+'関数名　　：セル変更処理・イベントプロシージャ
+'
+'引　　数　：
+'
+'戻り値　　：なし
+'
+'機能説明　：セル変更後の書式設定
+'
+'更新履歴　：2007/11/09 SRA Y.Azuma     新規     (PH4)
+'
+'*************************************************************************
+Private Sub Worksheet_Change(ByVal Target As Range)
+On Error Resume Next
+    
+    If blnKensaku = True Then
+        Exit Sub
+    End If
+    
+    If Target = Range("カウント対象FROM") Or Target = Range("カウント対象TO") Then
+        '日付のフォーマット
+        '　　※セルを日付型(YYYYMMDD)にすると"/"区切りで入力しないと####となる為の対策
+        If IsDate(Target.Value) = True Then
+            Target.Value = CStr(Format(Target.Value, "YYYYMMDD"))
+        End If
+    End If
+
+End Sub
+
+'*************************************************************************
+'関数名　　：検索ボタン・イベントプロシージャ
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：検索ボタンを押下された場合の処理
+'
+'更新履歴　：2007/11/09 SRA Y.Azuma     新規     (PH4)
+'
+'*************************************************************************
+Private Sub cmdSearch_Click()
+
+On Error GoTo Error_Section
+
+    blnKensaku = True
+
+    '検索メイン
+    Application.ScreenUpdating = False
+    Call g_subButtonInitialize
+    Call gsub_KensakuMain(Worksheets(MAIN_SHEETNAME2))
+    Application.ScreenUpdating = True
+    
+    blnKensaku = False
+    
+    Exit Sub
+
+Error_Section:
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "cmdSearch_Click", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Application.ScreenUpdating = True
+    
+    '更新ボタンの無効化
+    CmdUpdate.Enabled = True
+    
+    blnKensaku = False
+    
+End Sub
+
+'*************************************************************************
+'関数名　　：更新ボタン・イベントプロシージャ
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：更新ボタンを押下された場合の処理
+'
+'更新履歴　：2007/11/09 SRA Y.Azuma     新規     (PH4)
+'
+'*************************************************************************
+Private Sub cmdUpdate_Click()
+
+On Error GoTo Error_Section
+
+    Dim blnRet      As Boolean
+    Dim strMsg      As String
+    Dim lngRet      As Long
+    
+    blnRet = False
+    
+    Application.ScreenUpdating = False
+    
+    '入力チェック処理(更新時)
+    blnRet = gfuncKohza_UpdInputCheck2(Worksheets(MAIN_SHEETNAME2))
+    
+    If blnRet = False Then
+        Application.ScreenUpdating = True
+        Exit Sub
+    End If
+    
+    '最終処理確認
+    strMsg = gfunc_ErrorMsg(2, 1600, "", "", False)
+    lngRet = MsgBox(strMsg, vbQuestion + vbOKCancel, Application.ActiveWorkbook.Name)
+    If lngRet = vbCancel Then
+        Exit Sub
+    End If
+    
+    blnRet = False
+    
+    '更新処理
+    blnRet = gfuncKohza_DoUpdate2(Worksheets(MAIN_SHEETNAME2))
+    
+    If blnRet = False Then
+        '更新エラー
+        Call gfunc_ErrorMsg(1, 1601, "", "", True)
+        Application.ScreenUpdating = True
+        Exit Sub
+    Else
+        '更新成功
+         Application.ScreenUpdating = True
+        'メッセージ
+        Call gfunc_ErrorMsg(1, 1602, "", "", True)
+    End If
+    
+    Application.ScreenUpdating = True
+    
+    Exit Sub
+Error_Section:
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "cmdUp_Click", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Application.ScreenUpdating = True
+
+End Sub
+
+
+

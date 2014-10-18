@@ -1,0 +1,251 @@
+VERSION 1.0 CLASS
+BEGIN
+  MultiUse = -1  'True
+END
+Attribute VB_Name = "Sheet9"
+Attribute VB_GlobalNameSpace = False
+Attribute VB_Creatable = False
+Attribute VB_PredeclaredId = True
+Attribute VB_Exposed = True
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：国内顧問料・資産登録
+'
+'オブジェクト名：Sheet9
+'
+'機能概要　：メイン画面
+'
+'更新履歴　：2008/02/22 SRA 東       新規作成
+'
+'*************************************************************************
+Private Const MODULE_NAME As String = "main"
+
+
+'*************************************************************************
+'関数名　　：検索ボタン・イベントプロシージャ
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：検索ボタンを押下された場合の処理
+'
+'更新履歴　：2008/02/22 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Private Sub cmdSearch_Click()
+
+On Error GoTo Error_Section
+
+    
+    Application.ScreenUpdating = False
+    blnProcessing = True
+    '検索メイン
+    Call gCom01_SheetProtect(Worksheets(MAIN_SHEETNAME), False)
+    Call gsub_KensakuMain(Worksheets(MAIN_SHEETNAME))
+    Call gCom01_SheetProtect(Worksheets(MAIN_SHEETNAME), True)
+    blnProcessing = False
+    Application.ScreenUpdating = True
+
+    
+    Exit Sub
+
+Error_Section:
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "cmdSearch_Click", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    blnProcessing = False
+    Application.ScreenUpdating = True
+    
+    
+End Sub
+
+
+'*************************************************************************
+'関数名　　：更新ボタン・イベントプロシージャ
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：更新ボタンを押下された場合の処理
+'
+'更新履歴　：2008/02/22 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Private Sub cmdUp_Click()
+
+On Error GoTo Error_Section
+
+    Application.ScreenUpdating = False
+    
+    '更新メイン
+    Call gsub_KoushinMain(Worksheets(MAIN_SHEETNAME))
+    
+    Application.ScreenUpdating = True
+    
+    
+    Exit Sub
+Error_Section:
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "cmdUp_Click", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Application.ScreenUpdating = True
+    
+End Sub
+
+
+'****************************************************************************************
+'関数名　　：削除ボタン・イベントプロシージャ
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：削除ボタンが押下された時の処理
+'
+'更新履歴　：2009/10/15 SRA T.Mizutani  新規作成(資産登録画面における資産コード削除対応)
+'
+'****************************************************************************************
+Private Sub cmdDel_Click()
+
+On Error GoTo Error_Section
+
+    Application.ScreenUpdating = False
+    
+    '削除メイン処理
+    Call gsub_SakujoMain(Worksheets(MAIN_SHEETNAME))
+    
+    Application.ScreenUpdating = True
+    
+    Exit Sub
+    
+Error_Section:
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "cmdDel_Click", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Application.ScreenUpdating = True
+    
+End Sub
+
+
+'*************************************************************************
+'関数名　　：セル変更処理・イベントプロシージャ
+'
+'引　　数　：
+'
+'戻り値　　：なし
+'
+'機能説明　：セル変更後の処理
+'
+'更新履歴　：2008/02/22 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Private Sub Worksheet_Change(ByVal Target As Range)
+On Error Resume Next
+
+    Dim lngRow  As Long
+    Dim lngCol  As Long
+    Dim strText As String
+    Dim strBuff As String
+    
+    Static stRow As Long
+    Static stCol As Long
+    Static stText As String
+
+    strBuff = ""
+
+    If blnProcessing = False Then
+    
+        With ThisWorkbook.Worksheets(MAIN_SHEETNAME)
+        
+            '合成資産の子資産コード以外は以下の処理を行わない
+            If Not (((Target.Row >= .Range("合成子資産コード1").Row And _
+                      Target.Row <= .Range("合成子資産コード6").Row) And _
+                     Target.Column = .Range("合成子資産コード").Column _
+                    ) Or _
+                    (Target.Row = .Range("資産名").Row And _
+                     Target.Column = .Range("資産名").Column)) Then
+               Exit Sub
+            End If
+        
+        End With
+        
+        '変更されたセルの行、列番号を取得
+        lngRow = Target.Row
+        lngCol = Target.Column
+        
+        If IsNull(Target.Item(1)) Then
+            strText = ""
+        Else
+            strText = Target.Item(1)
+        End If
+        
+        If Trim(strText) = "" Then
+            blnProcessing = True
+            '子資産名をクリア
+            ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range("H" & lngRow).Value = ""
+            blnProcessing = False
+        Else
+            'nothing
+        End If
+        
+        '前回変更行、列と異なる場合のみ以下の処理を行う
+        If lngRow <> stRow Or lngCol <> stCol Or strText <> stText Then
+            stRow = Target.Row
+            stCol = Target.Column
+            If IsNull(Target.Text) Then
+                stText = ""
+            Else
+                stText = Target.Text
+            End If
+            
+            With ThisWorkbook.Worksheets(MAIN_SHEETNAME)
+                If ((Target.Row >= .Range("合成子資産コード1").Row And Target.Row <= .Range("合成子資産コード6").Row) And Target.Column = .Range("合成子資産コード").Column) Then
+                    
+                    '5桁以外の場合検索をせずに名称クリアする。
+                    If Len(strText) <> 5 Then
+                        strBuff = ""
+                    Else
+                        '子資産名称の取得
+                        strBuff = func_GetKoShisaName(Mid(Target.Value, 1, 1), Mid(Target.Value, 2, 4))
+                    End If
+                            
+                    '子資産名の設定
+                    blnProcessing = True
+                    ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range("H" & lngRow).Value = strBuff
+                    blnProcessing = False
+                
+                ElseIf (Target.Row = .Range("資産名").Row And Target.Column = .Range("資産名").Column) Then
+                    If Trim(.Range("帳票資産名").Value) = "" Then
+                        .Range("帳票資産名").Value = .Range("資産名").Value
+                    Else
+                        'nothing
+                    End If
+                End If
+            End With
+        End If
+    
+    End If
+
+End Sub
+
+
+
+
+
+

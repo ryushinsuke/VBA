@@ -1,0 +1,593 @@
+Attribute VB_Name = "bas20Kensaku"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：国内顧問料・コード登録
+'
+'オブジェクト名：bas20Kensaku
+'
+'機能概要　：検索ボタン処理
+'
+'更新履歴　：2007/11/26 SRA 東       新規作成
+'
+'*************************************************************************
+
+Const MODULE_NAME = "bas20Kensaku"
+
+
+
+'*************************************************************************
+'関数名　　：検索処理メイン処理
+'
+'引　　数　：
+'           objTarget        I           対象のシート
+'
+'戻り値　　：
+'
+'機能説明　：
+'
+'更新履歴　：2007/11/26 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Sub gsub_KensakuMain(ByRef objTarget As Object)
+
+On Error GoTo ErrorSection
+
+    Dim blnRet As Boolean
+    
+    blnRet = False
+    
+    
+    With objTarget
+    
+        '明細部の初期化
+        Call g_subCodeIniScreenD(objTarget)   '明細部
+        
+        '入力チェック処理(検索時)
+        blnRet = gfuncCodeInputCheck(objTarget)
+        
+        If blnRet = False Then
+            Call g_subCodeIniScreenD(objTarget)   '明細部
+            Exit Sub
+        End If
+        
+        blnRet = False
+        
+        '検索処理とデータ設定
+        blnRet = gfuncCode_DoSearch(objTarget)
+        
+        If blnRet = False Then
+            
+            'システムエラー
+            Call gfunc_ErrorMsg(4, 15023, "", "")
+            
+            .cmdUp.Enabled = False
+
+            Call g_subCodeIniScreenD(objTarget)   '明細部
+            Exit Sub
+        End If
+        ActiveWindow.ScrollRow = Range("対象").Row
+        .Range("コード名称").Select
+    End With
+    
+    Exit Sub
+    
+ErrorSection:
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gsub_KensakuMain", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Call g_subRateCodeIniScreenH(objTarget)   'ヘッダー部
+    Call g_subCodeIniScreenD(objTarget)   '明細部
+
+End Sub
+
+
+'*************************************************************************
+'関数名　　：入力チェック処理
+'
+'引　　数　：
+'           TargetSheets        I           チェック対象のシート
+'
+'戻り値　　：
+'
+'機能説明　：
+'
+'更新履歴　：2007/11/26 SRA Y.Azuma    新規作成
+'更新履歴　：2007/12/18 SRA Y.Azuma    変更     連結バグ対応
+'更新履歴　：2008/01/21 SRA Y.Azuma    変更     (PH4)特殊文字バグ対応
+'
+'*************************************************************************
+Public Function gfuncCodeInputCheck(ByRef TargetSheets As Object) As Boolean
+
+On Error GoTo ErrorSection
+    Dim strCode     As String
+    
+    gfuncCodeInputCheck = False
+    strCode = ""
+    
+'１．【コードNOコード】
+'------------<Modify Start azuma 2007/12/18 (PH4)> ★★★☆-----------------------
+    strCode = Trim(TargetSheets.Range("コードNO"))
+'''    strCode = CCur(Trim(TargetSheets.Range("コードNO")))
+'------------<Modify End   azuma 2007/12/18 (PH4)> ★★★☆-----------------------
+
+    '①入力ﾁｪｯｸ
+      If Trim(strCode) = "" Then
+        '"コードNO：コードNOが未入力です。"
+            Call gfunc_ErrorMsg(3, 15004, "コードNO", "")
+            TargetSheets.Range("コードNO").Select
+        Exit Function
+      End If
+    
+    '②桁数ﾁｪｯｸ
+    If Len(strCode) > 10 Then
+        '"コードNO：入力に誤りがあります。"
+            Call gfunc_ErrorMsg(3, 15005, "コードNO", "10桁以下で入力して下さい。")
+            TargetSheets.Range("コードNO").Select
+        Exit Function
+    End If
+    
+    '③数値チェック
+'------------<Modify Start azuma 2008/01/21 (PH4)> ★★★☆-----------------------
+'    If IsNumeric(strCode) = False Then
+    If gkyk_IsNumeric(strCode) = False Then
+'------------<Modify End   azuma 2008/01/21 (PH4)> ★★★☆-----------------------
+        '"コードNO：入力に誤りがあります。"
+            Call gfunc_ErrorMsg(3, 15006, "コードNO", "")
+            TargetSheets.Range("コードNO").Select
+        Exit Function
+    End If
+'------------<Modify Start azuma 2007/12/18 (PH4)> ★★★☆-----------------------
+    strCode = CCur(strCode)
+'------------<Modify End   azuma 2007/12/18 (PH4)> ★★★☆-----------------------
+    
+    
+    '④符号チェック
+    If Mid(strCode, 1, 1) = "-" Then
+        '"コードNO：入力に誤りがあります。"
+            Call gfunc_ErrorMsg(3, 15024, "コードNO", "")
+            TargetSheets.Range("コードNO").Select
+        Exit Function
+    End If
+    
+    '⑤整数チェック
+    If InStr(1, strCode, ".") <> 0 Then
+        '"コードNO：入力に誤りがあります。"
+            Call gfunc_ErrorMsg(3, 15025, "コードNO", "整数で入力して下さい。")
+            TargetSheets.Range("コードNO").Select
+        Exit Function
+    End If
+    
+    '⑥最大値チェック
+    If CCur(strCode) > 9999998999# Then
+        '"コードNO：入力に誤りがあります。"
+            Call gfunc_ErrorMsg(3, 15026, "コードNO", "値が大きすぎます。")
+            TargetSheets.Range("コードNO").Select
+        Exit Function
+    End If
+    
+    '⑦最小値チェック
+    If CCur(strCode) < 1 Then
+        '"コードNO：入力に誤りがあります。"
+            Call gfunc_ErrorMsg(3, 15026, "コードNO", "１以上の値を入力して下さい。")
+            TargetSheets.Range("コードNO").Select
+        Exit Function
+    End If
+    
+    
+    gfuncCodeInputCheck = True
+
+
+    Exit Function
+    
+ErrorSection:
+
+    gfuncCodeInputCheck = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gfuncCodeInputCheck", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+
+End Function
+
+    
+
+    
+    
+
+'*************************************************************************
+'関数名　　：コード検索処理
+'
+'引　　数　：
+'           TargetSheets       I       シート
+'
+'戻り値　　：
+'
+'機能説明　：
+'
+'更新履歴　：2007/11/26 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Function gfuncCode_DoSearch(ByRef TargetSheets As Object) As Boolean
+On Error GoTo Error_Section
+    
+    Dim blnRet              As Boolean
+    Dim strCode             As String
+    Dim vDatCode()          As Variant  'コードテーブル取得データ
+    Dim lngCodeCnt          As Long     'コードテーブル取得データ数
+    Dim vDatCodeValue()     As Variant  'コード値テーブル取得データ
+    Dim lngCodeValueCnt     As Long     'コード値テーブル取得データ数
+    Dim lngAddRow           As Long     '追加開始行番号
+    
+    Erase vDatCode
+    
+    gfuncCode_DoSearch = False
+
+'*******************************************************
+'* 関数開始　                                        　*
+'*******************************************************
+
+    '検索キー情報取得
+    strCode = CStr(CCur(TargetSheets.Range("コードNO")) + 1000)
+
+    'コードテーブル検索
+    lngCodeCnt = 0
+    blnRet = func_GetCodeInfo(strCode, vDatCode, lngCodeCnt)
+                                   
+    If blnRet = False Then
+        Erase vDatCode
+        Exit Function
+    End If
+        
+    
+    'コード値テーブル検索
+    lngCodeValueCnt = 0
+    blnRet = func_GetCodeValueInfo(strCode, vDatCodeValue, lngCodeValueCnt)
+                                   
+    If blnRet = False Then
+        Erase vDatCodeValue
+        Exit Function
+    End If
+    
+    
+    '取得データの表示
+    '情報の画面設定
+    blnRet = func_SetCodeInfo(TargetSheets, vDatCode, lngCodeCnt)
+    
+    If blnRet = False Then
+        With TargetSheets
+            .cmdUp.Enabled = False
+        End With
+        Erase vDatCode
+        Exit Function
+    End If
+    
+    '取得データの表示
+    '情報の画面設定
+    blnRet = func_SetCodeValueInfo(TargetSheets, vDatCodeValue, lngCodeValueCnt)
+    
+    If blnRet = False Then
+        With TargetSheets
+            .cmdUp.Enabled = False
+        End With
+        Erase vDatCode
+        Exit Function
+    End If
+    
+    
+    If lngCodeCnt > 0 Then
+        With TargetSheets
+            .cmdUp.Enabled = True
+        End With
+    Else
+        With TargetSheets
+            .cmdUp.Enabled = True
+            '追加行番号取得
+            lngAddRow = fncKsCmnSearchNewRow(TargetSheets)
+            
+            '行追加
+            Call gCom01_SheetProtect(TargetSheets, False)
+            Call gKsC_fncKsCmnInsRow(ThisWorkbook.Worksheets(MAIN_SHEETNAME), lngAddRow, LIST_COPY_ROW)
+            Call gCom01_SheetProtect(TargetSheets, True)
+            
+        End With
+    End If
+    
+    '取得データをメモリーから破棄
+    Erase vDatCode
+    Erase vDatCodeValue
+    
+    gfuncCode_DoSearch = True
+
+    Exit Function
+
+Error_Section:
+
+    gfuncCode_DoSearch = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gfuncCode_DoSearch", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+    TargetSheets.cmdUp.Enabled = False       '更新ボタン
+    Erase vDatCode
+    Erase vDatCodeValue
+
+End Function
+
+
+
+'*************************************************************************
+'関数名　　：コードテーブル情報取得処理
+'
+'引　　数　：
+'           strCode     I       コードNO
+'           vdata()         O       取得結果
+'           lngRow          O       取得件数
+'
+'戻り値　　：Boolean
+'
+'機能説明　：コードテーブル情報を取得する
+'
+'更新履歴　：2007/11/26 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Function func_GetCodeInfo(ByVal strCode As String _
+                               , ByRef vData() As Variant _
+                               , ByRef lngRow As Long) As Boolean
+On Error GoTo ErrHandler
+    Dim strSql      As String
+    Dim lngCol      As Long
+    Dim lngCnt      As Long
+    Dim strErrCode  As String
+    
+    func_GetCodeInfo = False
+
+    strSql = ""
+    strSql = strSql & " SELECT CODE_NAME"
+    strSql = strSql & "       ,CODE_NAME_E"
+    strSql = strSql & "       ,ACTIVE_FLG"
+    strSql = strSql & "       ,KOKUNAI_KAIGAI_KBN"
+    strSql = strSql & "       ,BIKOH"
+    strSql = strSql & "   FROM " & TBL_CODE
+    strSql = strSql & "  WHERE CODE_NO = '" & strCode & "'"
+    strSql = strSql & " "
+    
+    'データ取得
+    Call gclsdb.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow, strErrCode)
+    
+    If Trim(strErrCode) <> "" Then
+        lngRow = 0
+        Exit Function
+    End If
+    
+    func_GetCodeInfo = True
+    
+    Exit Function
+
+ErrHandler:
+    func_GetCodeInfo = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_GetCodeInfo", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+'    Erase vData
+    lngRow = 0
+
+
+End Function
+
+'*************************************************************************
+'関数名　　：コード値テーブル情報取得処理
+'
+'引　　数　：
+'           strCode     I       コードNO
+'           vdata()         O       取得結果
+'           lngRow          O       取得件数
+'
+'戻り値　　：Boolean
+'
+'機能説明　：コード値テーブル情報を取得する
+'
+'更新履歴　：2007/11/26 SRA Y.Azuma    新規作成
+'更新履歴　：2007/12/18 SRA Y.Azuma    変更     (PH4)連結バグ対応
+'
+'*************************************************************************
+Public Function func_GetCodeValueInfo(ByVal strCode As String _
+                               , ByRef vData() As Variant _
+                               , ByRef lngRow As Long) As Boolean
+On Error GoTo ErrHandler
+    Dim strSql      As String
+    Dim lngCol      As Long
+    Dim lngCnt      As Long
+    Dim strErrCode  As String
+    
+    func_GetCodeValueInfo = False
+
+    strSql = ""
+    strSql = strSql & "   SELECT CODE_VALUE"
+    strSql = strSql & "         ,VALUE_NAME"
+    strSql = strSql & "         ,VALUE_NAME_E"
+    strSql = strSql & "     FROM " & TBL_CODE_VALUE
+    strSql = strSql & "    WHERE CODE_NO    = '" & strCode & "'"
+    strSql = strSql & "      AND SAKUJO_FLG = '0'"
+'------------<Modify Start azuma 2007/12/18 (PH4)> ★★★☆-----------------------
+'    strSql = strSql & " ORDER BY CODE_VALUE"
+    strSql = strSql & " ORDER BY SUBSTR('000000000'||CODE_VALUE,LENGTH('000000000'||CODE_VALUE)-9,10)"
+ '------------<Modify End   azuma 2007/12/18 (PH4)> ★★★☆-----------------------
+   
+    'データ取得
+    Call gclsdb.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow, strErrCode)
+    
+    If Trim(strErrCode) <> "" Then
+        lngRow = 0
+        Exit Function
+    End If
+    
+    func_GetCodeValueInfo = True
+    
+    Exit Function
+
+ErrHandler:
+    func_GetCodeValueInfo = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_GetCodeValueInfo", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+'    Erase vData
+    lngRow = 0
+
+
+End Function
+
+
+
+'*************************************************************************
+'関数名　　：ワークシートに取得情報を設定する
+'
+'引　　数　：
+'           TargetSheets    O       処理対象ワークシート
+'           vdata()         I       設定データ
+'           lngRow          I       設定データ件数
+'
+'戻り値　　：Boolean
+'
+'機能説明　：処理対象ワークシートにデータを設定する。
+'
+'更新履歴　：2007/11/26 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Private Function func_SetCodeInfo(ByRef TargetSheets As Object _
+                                   , ByVal vData As Variant _
+                                   , ByVal lngRow As Long) As Boolean
+On Error GoTo ErrHandler
+
+    
+    func_SetCodeInfo = False
+    
+    If lngRow > 0 Then
+        ThisWorkbook.Worksheets(DATA_SHEETNAME).Range("検索時コードNO") = TargetSheets.Range("コードNO")
+        With TargetSheets
+            .Range("コード名称") = CStr(Trim(vData(EmGetCodeInfo.CODE_NAME, 0)))
+            .Range("コード名称英字") = CStr(Trim(vData(EmGetCodeInfo.CODE_NAME_E, 0)))
+            .Range("アクティブフラグ") = func_SearchComboItem(ThisWorkbook.Worksheets(DATA_SHEETNAME), CStr(Trim(vData(EmGetCodeInfo.ACTIVE_FLG, 0))), ACTIVE_FLG_LIST)
+            .Range("国内海外区分") = func_SearchComboItem(ThisWorkbook.Worksheets(DATA_SHEETNAME), CStr(Trim(vData(EmGetCodeInfo.KOKUNAI_KAIGAI_KBN, 0))), KOKUNA_KAIGAI_KBN_LIST)
+            .Range("摘要") = CStr(Trim(vData(EmGetCodeInfo.BIKOH, 0)))
+        End With
+    Else
+        Call g_subCodeIniScreenD(TargetSheets)
+    End If
+
+    func_SetCodeInfo = True
+
+    Exit Function
+
+ErrHandler:
+    func_SetCodeInfo = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_SetCodeInfo", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+'    MsgBox "Error:func_SetCodeInfo" & vbCrLf & Err.Description
+
+End Function
+
+
+
+'*************************************************************************
+'関数名　　：ワークシートに取得情報を設定する
+'
+'引　　数　：
+'           TargetSheets    O       処理対象ワークシート
+'           vdata()         I       設定データ
+'           lngRow          I       設定データ件数
+'
+'戻り値　　：Boolean
+'
+'機能説明　：処理対象ワークシートにデータを設定する。
+'
+'更新履歴　：2007/11/26 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Private Function func_SetCodeValueInfo(ByRef TargetSheets As Object _
+                                   , ByVal vData As Variant _
+                                   , ByVal lngRow As Long) As Boolean
+On Error GoTo ErrHandler
+
+    Dim lngCnt      As Long
+    Dim lngDankai   As Long
+    Dim lngAddRow   As Long
+    
+
+
+    func_SetCodeValueInfo = False
+    
+    If lngRow > 0 Then
+        
+        For lngCnt = 0 To lngRow - 1
+            
+            '行追加
+            '追加行番号取得
+            lngAddRow = fncKsCmnSearchNewRow(ThisWorkbook.Worksheets(MAIN_SHEETNAME))
+            
+            '行追加
+            Call gKsC_fncKsCmnInsRow(ThisWorkbook.Worksheets(MAIN_SHEETNAME), lngAddRow, LIST_COPY_ROW)
+            
+            With TargetSheets
+            
+                lngDankai = lngAddRow - .Range("対象").Row
+            
+                .Range("コード値").Offset(lngDankai, 0) = CStr(vData(EmGetCodeValueInfo.CODE_VALUE, lngCnt - 0))
+                .Range("コード内容").Offset(lngDankai, 0) = CStr(vData(EmGetCodeValueInfo.VALUE_NAME, lngCnt - 0))
+                .Range("コード内容英字").Offset(lngDankai, 0) = CStr(vData(EmGetCodeValueInfo.VALUE_NAME_E, lngCnt - 0))
+            
+            End With
+            
+        Next lngCnt
+    Else
+    End If
+
+    func_SetCodeValueInfo = True
+
+    Exit Function
+
+ErrHandler:
+    func_SetCodeValueInfo = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_SetCodeValueInfo", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+

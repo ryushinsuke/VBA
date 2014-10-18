@@ -1,0 +1,1339 @@
+Attribute VB_Name = "basKsCommon"
+Option Explicit
+
+Const MODULE_NAME = "basKsCommon"
+
+
+Public Const MAIN_SHEETNAME = "main"
+Public Const TEMPLATE_SHEETNAME = "Template"
+Public Const DATA_SHEETNAME = "Data"
+
+'*** 2007/03/14 PH3対応 Added By H.Anpo Start
+Public Const CHECK_SHEETNAME = "項目関連チェック"
+'*** 2007/03/14 PH3対応 Added By H.Anpo End
+
+
+Private Const mCELLNAME = "B"           'チェックボックスの表示位置
+
+'*** 2007/03/14 PH3対応 Added By H.Anpo Start
+'Public Const mLINKCELLNAME = "AJ"      'チェックボックスリンクセルの位置(チェックボックスの値を格納)
+'Public Const mN7_SHISAN_WARIAI = "AK"   'N7型の資産割合を保持するセル位置
+Public Const mLINKCELLNAME = "AQ"      'チェックボックスリンクセルの位置(チェックボックスの値を格納)
+Public Const mN7_SHISAN_WARIAI = "AR"   'N7型の資産割合を保持するセル位置
+'*** 2007/03/14 PH3対応 Added By H.Anpo End
+
+Public Const mPX_SHINTAKU_KBN = "S"     '基礎数値種類のセル位置
+
+'Public Const NENKAN_NISSU_LIST = "年間日数リスト"
+'Public Const SHISAN_LIST = "資産リスト"
+'Public Const RATE_CODE_LIST = "料率コードリスト"
+'Public Const PX_SHINTAKU_LIST = "基礎数値種類リスト"
+'Public Const KISO_SUCHI_KH_LIST = "基礎数値計算方法リスト"
+'Public Const KEISAN_HOHHOH_LIST = "顧問料計算方法リスト"
+'Public Const SHOKAI_SAISHU_LIST = "初回最終区分リスト"
+    
+'*** 2007/03/14 PH3対応 Added By H.Anpo Start
+Public Const mSEIKYUSHO_SHURUI = "AU"     '請求書種類のセル位置
+'*** 2007/03/14 PH3対応 Added By H.Anpo End
+
+
+
+
+'
+'*************************************************************************
+'関数名　　：明細行追加メイン処理
+'
+'引　　数　：
+'           iInsRow       I       追加対象ROW
+'           iSrcRow       I       複写元ROW
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：指定された明細行の追加を行う。
+'
+'更新履歴　：2006/07/05 SRA T.Azuma    新規作成
+'
+'*************************************************************************
+Public Function gKsC_fncKsCmnInsRow(TargetSheets As Object, iInsRow As Long, iSrcRow As Long) As Long
+    
+On Error GoTo ErrorHandler
+
+    gKsC_fncKsCmnInsRow = 0
+    
+'    Application.ScreenUpdating = False
+    
+    ThisWorkbook.Sheets(TEMPLATE_SHEETNAME).Rows(iSrcRow & ":" & iSrcRow).Copy
+    
+    'Sheets("メイン画面").Select
+    ThisWorkbook.Sheets(MAIN_SHEETNAME).Select
+    ThisWorkbook.Sheets(MAIN_SHEETNAME).Rows(iInsRow & ":" & iInsRow).Select
+    ThisWorkbook.Sheets(MAIN_SHEETNAME).Rows(iInsRow & ":" & iInsRow).Insert Shift:=xlDown
+'    Selection.Insert Shift:=xlDown
+    ThisWorkbook.Application.CutCopyMode = False
+
+    'チェックボックスの追加
+    Call fncCmnSetCheckBox(TargetSheets, mCELLNAME & iInsRow, mLINKCELLNAME & iInsRow)
+'    Call fncCmnSetCheckBox(TargetSheets, "B" & iInsRow)
+    
+    TargetSheets.Cells(iInsRow, 3).Select
+    
+'    Application.ScreenUpdating = True
+    Exit Function
+
+ErrorHandler:
+'    MsgBox Err.Description
+    gKsC_fncKsCmnInsRow = Err.Number
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gKsC_fncKsCmnInsRow", Err.Number, Err.Description)
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    On Error GoTo 0
+    
+End Function
+
+
+'*************************************************************************
+'関数名　　：明細行削除メイン処理
+'
+'引　　数　：
+'           iKind       I       削除対象(1:一般資産、2:月末顧問料調整資産、3:T21調整資産)
+'           AllDel      I       全削除フラグ(初期値:False)　True:全削除
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：明細行の削除を行う。
+'
+'更新履歴　：2006/07/05 SRA T.Azuma    新規作成
+'
+'*************************************************************************
+Public Function gKsC_fncKsCmnCheckRowDelete(TargetSheets As Object, iKind As Long, Optional AllDel As Boolean = False) As Long
+    Dim lngCnt As Long
+
+On Error GoTo ErrorHandler
+
+    gKsC_fncKsCmnCheckRowDelete = 0
+    
+    Select Case iKind
+        Case 1:     '一般資産
+                lngCnt = fncKsCmnSearchDataTopRow(TargetSheets, 1)
+    
+        Case 2:     '月末顧問料調整資産
+                lngCnt = fncKsCmnSearchDataTopRow(TargetSheets, 2)
+        
+        Case 3:     'Ｔ２１調整資産
+                lngCnt = fncKsCmnSearchDataTopRow(TargetSheets, 3)
+        Case Else:
+                Call gfunc_ErrorMsg(4, 1, "", "")
+                Exit Function
+    End Select
+        
+'    Application.ScreenUpdating = False
+    With TargetSheets
+'        Do While (.Cells(lngCnt, 2) <> vbNullString)
+        Do While (.Range(mLINKCELLNAME & lngCnt) <> vbNullString)
+            If AllDel = False Then
+            '選択削除
+'                If .Cells(lngCnt, 2) Then
+                If .Range(mLINKCELLNAME & lngCnt) Then
+                    Call fncKsCmnDeleteRow(TargetSheets, lngCnt)
+                Else
+                    lngCnt = lngCnt + 1
+                End If
+            Else
+            '全削除
+                Call fncKsCmnDeleteRow(TargetSheets, lngCnt)
+            End If
+        Loop
+    End With
+'    Application.ScreenUpdating = True
+    
+    Exit Function
+
+ErrorHandler:
+'    MsgBox Err.Description
+    gKsC_fncKsCmnCheckRowDelete = Err.Number
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gKsC_fncKsCmnCheckRowDelete", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+
+
+'*************************************************************************
+'関数名　　：明細行削除処理
+'
+'引　　数　：
+'           iDelRow       I       削除対象ROW
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：指定された明細行の削除を行う。
+'
+'更新履歴　：2006/07/05 SRA T.Azuma    新規作成
+'
+'*************************************************************************
+Private Function fncKsCmnDeleteRow(TargetSheets As Object, iDelRow As Long) As Long
+On Error GoTo ErrorHandler
+
+    fncKsCmnDeleteRow = 0
+    
+'    If TargetSheets.Cells(iDelRow, 2) = "" Then
+    If TargetSheets.Range(mLINKCELLNAME & iDelRow) = "" Then
+'        MsgBox "消す行がない！！", vbExclamation
+        Exit Function
+    End If
+    
+    'チェックボックスの削除処理
+    Call fncCmnDelCheckBox(TargetSheets, mLINKCELLNAME & iDelRow)
+'    Call fncCmnDelCheckBox(TargetSheets, mCELLNAME & iDelRow)
+'    Call fncCmnDelCheckBox(TargetSheets, "B" & iDelRow)
+    
+    '明細行の削除処理
+'    Application.ScreenUpdating = False
+    TargetSheets.Rows(iDelRow & ":" & iDelRow).Select
+    ThisWorkbook.Application.CutCopyMode = False
+    Selection.Delete Shift:=xlUp
+
+    TargetSheets.Cells(iDelRow, 2).Select
+'    Application.ScreenUpdating = True
+
+    Exit Function
+
+ErrorHandler:
+'    MsgBox Err.Description
+    fncKsCmnDeleteRow = Err.Number
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "fncKsCmnDeleteRow", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+
+
+
+'*************************************************************************
+'関数名　　：明細行追加位置取得処理
+'
+'引　　数　：
+'           iKind       I       削除対象(1:一般資産、2:月末顧問料調整資産、3:T21調整資産)
+'
+'戻り値　　：明細行の追加行番号
+'
+'機能説明　：明細行の追加行番号を返す
+'
+'更新履歴　：2006/07/05 SRA T.Azuma    新規作成
+'
+'*************************************************************************
+Public Function fncKsCmnSearchNewRow(TargetSheets As Object, iKind As Long) As Long
+    Dim lngKindCnt As Long
+    Dim lngCnt As Long
+
+On Error GoTo ErrorHandler
+
+    fncKsCmnSearchNewRow = 0
+    
+    If iKind < 1 Or iKind > 3 Then
+        Exit Function
+    End If
+    
+    lngCnt = 18
+    lngKindCnt = 0
+    
+    With TargetSheets
+        Do While (1)
+            If .Cells(lngCnt, 2) = "対象" Then
+                lngKindCnt = lngKindCnt + 1
+                lngCnt = lngCnt + 2
+            End If
+            
+'            If lngKindCnt = iKind And .Cells(lngCnt, 2) = vbNullString Then
+            If lngKindCnt = iKind And .Range(mLINKCELLNAME & lngCnt) = vbNullString Then
+                fncKsCmnSearchNewRow = lngCnt
+                Exit Function
+            End If
+            
+            lngCnt = lngCnt + 1
+        Loop
+    End With
+    
+    Exit Function
+
+ErrorHandler:
+'    MsgBox Err.Description
+    fncKsCmnSearchNewRow = Err.Number
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "fncKsCmnSearchNewRow", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+'*************************************************************************
+'関数名　　：明細行位置取得処理
+'
+'引　　数　：
+'           iKind       I       削除対象(1:一般資産、2:月末顧問料調整資産、3:T21調整資産)
+'
+'戻り値　　：明細行の開始行番号
+'
+'機能説明　：明細行の開始行番号を返す
+'
+'更新履歴　：2006/07/05 SRA T.Azuma    新規作成
+'
+'*************************************************************************
+Public Function fncKsCmnSearchDataTopRow(TargetSheets As Object, iKind As Long) As Long
+    Dim lngKindCnt As Long
+    Dim lngCnt As Long
+
+On Error GoTo ErrorHandler
+
+    fncKsCmnSearchDataTopRow = 0
+    
+    lngCnt = 18
+    lngKindCnt = 0
+    
+    With TargetSheets
+        Do While (1)
+            If .Cells(lngCnt, 2) = "対象" Then
+                lngKindCnt = lngKindCnt + 1
+                If lngKindCnt = iKind Then
+                    fncKsCmnSearchDataTopRow = lngCnt + 2
+                    Exit Function
+                End If
+            End If
+            lngCnt = lngCnt + 1
+        Loop
+    End With
+    
+    Exit Function
+
+ErrorHandler:
+'    MsgBox Err.Description
+    fncKsCmnSearchDataTopRow = Err.Number
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "fncKsCmnSearchDataTopRow", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+'チェックボックスの作成
+'*************************************************************************
+'関数名　　：チェックボックスの作成
+'
+'引　　数　：
+'           CellName       I       作成対象セル
+'
+'戻り値　　：
+'
+'機能説明　：
+'
+'更新履歴　：2006/07/07 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Function fncCmnSetCheckBox(ByRef objTarget As Object _
+                                , ByVal CellName As String _
+                                , ByVal LinkCellName As String) As Long
+    
+On Error GoTo ErrorHandler
+    fncCmnSetCheckBox = 0
+    
+    Dim lngZoom As Long
+    
+    lngZoom = ThisWorkbook.Application.ActiveWindow.Zoom
+    ThisWorkbook.Application.ActiveWindow.Zoom = 100
+    
+    With objTarget.Range(CellName)
+        ThisWorkbook.Worksheets(MAIN_SHEETNAME).OLEObjects.Add( _
+            ClassType:="Forms.CheckBox.1", _
+            Link:=False, _
+            DisplayAsIcon:=False, _
+            Left:=.Left + 6, _
+            Top:=.Top + 2.2, _
+            Width:=10.5, _
+            Height:=10). _
+        Select
+        Selection.LinkedCell = LinkCellName
+'        Selection.LinkedCell = CellName
+'        .Value = False
+        ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range(LinkCellName).Value = False
+    End With
+
+    ThisWorkbook.Application.ActiveWindow.Zoom = lngZoom
+    Exit Function
+
+ErrorHandler:
+'    MsgBox Err.Description
+    fncCmnSetCheckBox = Err.Number
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "fncCmnSetCheckBox", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+End Function
+
+'
+'*************************************************************************
+'関数名　　：チェックボックスの削除
+'
+'引　　数　：
+'           CellName       I       削除対象セル
+'
+'戻り値　　：
+'
+'機能説明　：
+'
+'更新履歴　：2006/07/07 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Function fncCmnDelCheckBox(ByRef objTarget As Object, CellName As String) As Long
+Dim c As Object
+    
+On Error GoTo ErrorHandler
+    
+    With objTarget
+        For Each c In .Shapes
+            If Mid(c.Name, 1, 8) = "CheckBox" Then
+                .Shapes(c.Name).Select
+                If Selection.LinkedCell = CellName Then
+                    Selection.Delete
+                End If
+            End If
+        Next
+    End With
+
+    Exit Function
+
+ErrorHandler:
+'    MsgBox Err.Description
+    fncCmnDelCheckBox = Err.Number
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "fncCmnDelCheckBox", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+End Function
+
+
+
+'*************************************************************************
+'関数名　　：画面内の全文字列取得関数
+'
+'引　　数　：なし
+'
+'戻り値　　：取得した文字列
+'
+'機能説明　：
+'
+'更新履歴　：2007/01/10 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Function fucGetAllString() As String
+On Error GoTo ErrorHandler
+    
+    Const START_ROW = 6     '開始行
+    Const START_COL = 2     '開始列"B"から
+    Const END_ROW = 14      '最終行の最小値
+    Const END_COL = 34      '最終列"AI"まで
+    
+    Dim vArea       As Variant
+    Dim lngRow      As Long
+    Dim lngCol      As Long
+    Dim lngMaxRow   As Long     '最終　行
+    Dim lngMaxCol   As Long     '最終　列
+    Dim strBuff     As String
+    Dim strCell     As String
+    
+    strBuff = ""
+    
+    
+    
+    '結合最終行を求める
+    lngMaxRow = ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range(mLINKCELLNAME & "65536").End(xlUp).Row
+    If END_ROW > lngMaxRow Then
+        lngMaxRow = END_ROW
+    End If
+    lngMaxCol = END_COL
+    
+    vArea = ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range(Cells(START_ROW, START_COL), Cells(lngMaxRow, lngMaxCol))
+
+    For lngRow = 1 To lngMaxRow - START_ROW + 1
+    
+        For lngCol = 1 To lngMaxCol - START_COL + 1
+            strCell = ""
+            strCell = CStr(vArea(lngRow, lngCol))
+            strBuff = strBuff & Trim(strCell)
+        Next lngCol
+        
+    Next lngRow
+
+    strBuff = Replace(strBuff, vbCr, "")
+    strBuff = Replace(strBuff, vbLf, "")
+    strBuff = CStr(Mid(strBuff, 1, 32767))
+    fucGetAllString = strBuff
+    
+    Set vArea = Nothing
+
+    Exit Function
+
+ErrorHandler:
+
+    fucGetAllString = ""
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "fucGetAllString", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+    Set vArea = Nothing
+
+End Function
+
+''*************************************************************************
+''関数名　　：コードリストサーチ
+''
+''引　　数　：
+''           strItemAll      I       サーチソース文字列
+''           strListName     I       サーチ対象リスト文字列(リスト定義名)
+''           blnDataFlg      O       該当フラグ(あり：True、なし：False)
+''
+''戻り値　　：
+''           リストに該当なし    ：NULL
+''           リストに該当あり    ：該当文字列
+''　　　　　　　　　　　　　　　　※但し該当文字列とソース文字列が一致する場合NULL
+''           その他エラーなし    ：NULL
+''
+''機能説明　：ソース文字列でリストを検索し該当するリストの文字列を戻す。
+''
+''更新履歴　：2007/01/11 SRA Y.Azuma    新規作成
+''
+''*************************************************************************
+'Public Function func_CodeListSearch(ByVal strItemAll As String, ByVal strListName As String, ByRef blnDataFlg As Boolean) As String
+'
+'On Error GoTo Error_Section
+'
+'    Dim strCode         As String
+'    Dim strR1C1Cd       As String
+'    Dim strA1Cd         As String
+'    Dim lngRow          As Long
+'    Dim lngCdLen        As Long     'コード長さ
+'    Dim strResult       As String
+'
+'
+'    func_CodeListSearch = ""
+'    blnDataFlg = False
+'
+'    'コード長さの設定
+'    Select Case strListName
+'        Case NENKAN_NISSU_LIST
+'        '年間日数リスト
+'            lngCdLen = 1
+'
+'        Case SHISAN_LIST
+'        '資産リスト
+'            lngCdLen = 5
+'
+'        Case RATE_CODE_LIST
+'        '料率コードリスト
+'            lngCdLen = 3
+'
+'        Case PX_SHINTAKU_LIST
+'        '基礎数値種類リスト
+'            lngCdLen = 1
+'
+'        Case KISO_SUCHI_KH_LIST
+'        '基礎数値計算方法リスト
+'            lngCdLen = 1
+'
+'        Case KEISAN_HOHHOH_LIST
+'        '顧問料計算方法リスト
+'            lngCdLen = 1
+'
+'        Case SHOKAI_SAISHU_LIST
+'        '初回最終区分リスト
+'            lngCdLen = 1
+'
+'        Case Else
+'            Exit Function
+'    End Select
+'
+'    'ソース文字列からコードを取り出す(ゼロパディング)
+'    strCode = Right(String(lngCdLen, "0") & Trim(Mid(strItemAll, 1, lngCdLen)), lngCdLen)
+'
+'    With ThisWorkbook.Worksheets(DATA_SHEETNAME)
+'        If Trim(strCode) <> "" And Len(strItemAll) <= lngCdLen Then
+'            strR1C1Cd = "R" & .Range(strListName).Row & "C" & .Range(strListName).Column
+'            strA1Cd = Application.ConvertFormula(strR1C1Cd, xlR1C1, xlA1, xlRelative)
+'
+'            'リストをサーチする
+'            For lngRow = 1 To .Range(strListName).Count
+'                If strCode = Mid(.Range(strA1Cd).Offset(lngRow, 0).Text, 1, lngCdLen) Then
+'                    Exit For
+'                End If
+'            Next lngRow
+'
+'            If lngRow <= .Range(strListName).Count Then
+'                strResult = .Range(strA1Cd).Offset(lngRow, 0).Text
+'                blnDataFlg = True
+'            Else
+'                strResult = ""
+'                blnDataFlg = False
+'            End If
+'
+'            'ソース文字列と検索結果が同じ場合は結果にnullを返す
+'            If Trim(strResult) = Trim(strItemAll) Then
+'                strResult = ""
+'            End If
+'
+'            func_CodeListSearch = strResult
+'        End If
+'    End With
+'
+'    Exit Function
+'
+'Error_Section:
+''---- Error Log Start ----------------------------------------------------
+'    Dim lng As Long
+'    lng = Err.Number
+'    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_CodeListSearch", Err.Number, Err.Description)
+'    On Error GoTo 0
+''    Err.Raise lng
+''---- Error Log End   ----------------------------------------------------
+'    func_CodeListSearch = ""
+'    blnDataFlg = False
+'
+'End Function
+
+
+''*************************************************************************
+''関数名　　：リスト項目の絞込み
+''
+''引　　数　：
+''           TargetSheets        I           チェック対象のシート(main)
+''           Target              I           値が変更された項目
+''
+''戻り値　　：Boolean
+''
+''機能説明　：画面項目の設定値により、リスト項目を絞込む
+''
+''更新履歴　：2007/03/14 SRA H.Anpo     新規作成
+''
+''*************************************************************************
+'Public Function gfuncKeisan_FilterNameList( _
+'    ByRef TargetSheets As Object _
+'  , ByVal Target As Range _
+') As Boolean
+'
+'On Error GoTo ErrorSection
+'
+'    gfuncKeisan_FilterNameList = False
+'
+'    With TargetSheets
+'
+'        '**************************
+'        ' 平残断面区分変更時
+'        '**************************
+'        If Target.Address = .Range("平残断面区分").Address Then
+'
+'            '基礎数値計算方法リスト
+'            If Mid(Target, 1, 1) = "2" Then
+'                '**************************
+'                ' 設定値が 2:断面の場合
+'                '**************************
+'                '前払後払区分リスト
+'                ThisWorkbook.Names.Add Name:="前払後払区分リスト", RefersToR1C1:="=" & CHECK_SHEETNAME & "!R15C3:R15C4"
+'
+'                '基礎数値計算方法リスト
+'                ThisWorkbook.Names.Add Name:="基礎数値計算方法リスト", RefersToR1C1:="=" & CHECK_SHEETNAME & "!R15C15:R15C17"
+'
+'                '資産リスト
+'                ThisWorkbook.Names.Add Name:="資産リスト", RefersToR1C1:="=" & DATA_SHEETNAME & "!R2C3:R2C3"
+'
+'                '顧問料計算方法リスト
+'                ThisWorkbook.Names.Add Name:="顧問料計算方法リスト", RefersToR1C1:="=" & CHECK_SHEETNAME & "!R15C18:R15C18"
+'
+'                'ボタンの可否制御
+'                '調整資産(+/-)
+'                .cmdAdd2.Enabled = False
+'                .cmdDel2.Enabled = False
+'                'T21調整資産
+'                .cmdAdd3.Enabled = False
+'                .cmdDel3.Enabled = False
+'
+'            ElseIf Mid(Target, 1, 1) = "1" Then
+'                '**************************
+'                ' 設定値が 1:平残の場合
+'                '**************************
+'                '前払後払区分リスト
+'                ThisWorkbook.Names.Add Name:="前払後払区分リスト", RefersToR1C1:="=" & CHECK_SHEETNAME & "!R15C3:R15C3"
+''                '初期値をセット
+''                .Range("前払後払区分").Value = func_SearchComboItem(1, "前払後払区分リスト")
+'
+'                '基礎数値計算方法リスト
+'                ThisWorkbook.Names.Add Name:="基礎数値計算方法リスト", RefersToR1C1:="=" & CHECK_SHEETNAME & "!R15C10:R15C14"
+'
+'                '資産リスト
+'                ThisWorkbook.Names.Add Name:="資産リスト", RefersToR1C1:="=" & DATA_SHEETNAME & "!R2C3:R23C3"
+'
+'                '顧問料計算方法リスト
+'                ThisWorkbook.Names.Add Name:="顧問料計算方法リスト", RefersToR1C1:="=" & CHECK_SHEETNAME & "!R15C18:R15C21"
+'
+'                'ボタンの可否制御
+'                '調整資産(+/-)
+'                .cmdAdd2.Enabled = True
+'                .cmdDel2.Enabled = True
+'                'T21調整資産
+'                .cmdAdd3.Enabled = True
+'                .cmdDel3.Enabled = True
+'            Else
+'                'ボタンの可否制御
+'                '調整資産(+/-)
+'                .cmdAdd2.Enabled = True
+'                .cmdDel2.Enabled = True
+'                'T21調整資産
+'                .cmdAdd3.Enabled = True
+'                .cmdDel3.Enabled = True
+'            End If
+'        End If
+'
+'
+'        '**************************
+'        ' 基礎数値種類変更時
+'        '**************************
+'        If Target.Text = "4:元本" And Mid(.Range("平残断面区分"), 1, 1) = "1" Then
+'            '初期値をセット
+'            '基礎数値計算方法
+'            .Cells(Target.Row, 22).Value = func_SearchComboItem(5, "基礎数値計算方法リスト")
+'
+'        End If
+'
+'    End With
+'
+'    gfuncKeisan_FilterNameList = True
+'
+'    Exit Function
+'
+'ErrorSection:
+'
+''---- Error Log Start ----------------------------------------------------
+'    Dim lng As Long
+'    lng = Err.Number
+'    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gfuncKeisan_GetSeikyushoShurui", Err.Number, Err.Description)
+'    On Error GoTo 0
+'    Err.Raise lng
+''---- Error Log End   ----------------------------------------------------
+'
+'
+'End Function
+
+
+'*************************************************************************
+'関数名　　：リスト内の文字列検索
+'
+'引　　数　：
+'           TargetSheets    I       対象のシート
+'           strSrchStr      I       検索する文字列
+'           strListNm       I       検索するリスト名
+'           strFoundStr     O       検索結果の文字列
+'
+'戻り値　　：検索結果のアドレス
+'
+'機能説明　：検索文字列を入力するとその文字列とアドレスを返す
+'
+'更新履歴　：2007/03/16 SRA H.Anpo    新規作成
+'
+'*************************************************************************
+Public Function func_SearchListAddress( _
+    ByRef TargetSheets As Object _
+  , ByVal strSrchStr As String _
+  , ByVal strListNm As String _
+  , ByRef strFoundStr As String _
+  ) As String
+
+    Dim c       As Variant
+    Dim lngCut  As Long
+    
+    func_SearchListAddress = ""
+    strFoundStr = ""
+    
+    If strSrchStr = "" Then Exit Function
+    
+    For Each c In TargetSheets.Range(strListNm)
+        If Trim(c.Value) <> "" Then
+            If strSrchStr = Left(c.Value, Len(strSrchStr)) Then
+                strFoundStr = c.Value
+                func_SearchListAddress = c.Address
+                Exit For
+            End If
+        End If
+    Next c
+    
+    Set c = Nothing
+
+End Function
+
+'*************************************************************************
+'関数名　　：リスト入力規則(参照セル範囲)変更
+'
+'引　　数　：
+'           TargetSheets        I           対象のシート(main)
+'           objTarget           I           変更するセル(RANGE)
+'           strFormula1         I           変更するリストの参照
+'
+'戻り値　　：Boolean
+'
+'機能説明　：画面項目の設定値により、リスト項目を絞込む
+'
+'更新履歴　：2007/03/14 SRA H.Anpo     新規作成
+'
+'*************************************************************************
+Private Function func_ChangeListValidationFormula1( _
+    ByRef TargetSheets As Object _
+  , ByVal objTarget As Range _
+  , ByVal strFormula1 As String _
+) As Boolean
+
+On Error GoTo ErrorSection
+
+    func_ChangeListValidationFormula1 = False
+    
+    
+'*** 2007/08/07 PH3.5対応 Added By T.Ichikawa Start *** オートメーションエラー対応
+    Call gCom01_SheetProtect(TargetSheets, False) 'シート保護解除
+'*** 2007/08/07 PH3.5対応 Added By T.Ichikawa End   *** オートメーションエラー対応
+    
+    objTarget.Validation.Modify Formula1:=strFormula1
+    
+    func_ChangeListValidationFormula1 = True
+    
+    Exit Function
+
+ErrorSection:
+Debug.Print "objTarget is object"
+
+Debug.Print strFormula1 & "   [" & objTarget.Text & "]"
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_ChangeListValidationFormula1", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+'*************************************************************************
+'関数名　　：リスト項目の絞込み
+'
+'引　　数　：
+'           TargetSheets        I           チェック対象のシート(main)
+'           Target              I           値が変更された項目
+'
+'戻り値　　：Boolean
+'
+'機能説明　：画面項目の設定値により、リスト項目を絞込む
+'
+'更新履歴　：2007/03/14 SRA H.Anpo     新規作成
+'
+'*************************************************************************
+Public Function gfuncKeisan_FilterNameList( _
+    ByRef TargetSheets As Object _
+  , ByVal Target As Range _
+) As Boolean
+
+On Error GoTo ErrorSection
+
+    Dim strFormula1 As String
+    Dim blnRet      As Boolean
+    Dim lngRow      As Long
+    Dim lngCnt      As Long
+    Dim strFoundStr As String
+
+    Dim lngStart        As Long
+    Dim lngEnd          As Long
+
+    gfuncKeisan_FilterNameList = False
+    
+    strFormula1 = ""
+
+    '月末顧問料調整資産
+    lngCnt = fncKsCmnSearchDataTopRow(TargetSheets, 2) - 6
+
+    With TargetSheets
+        
+'*** 2007/06/11 PH3.5対応 Modified By T.Ichikawa Start
+'        If .Range("平残断面区分").Address = Target.Address _
+'            And Trim(.Range("平残断面区分").Text) <> "" _
+'            Or ((Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "1", "基礎数値種類リスト") _
+'                 Or Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "2", "基礎数値種類リスト") _
+'                 Or Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "4", "基礎数値種類リスト")) _
+'                And Target.Row <= lngCnt) _
+'        Then
+        
+        '基礎数値計算方法と顧問料計算方法、期初期末区分の条件を追加
+        If .Range("平残断面区分").Address = Target.Address _
+            And Trim(.Range("平残断面区分").Text) <> "" _
+            Or ((Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "1", "基礎数値種類リスト") _
+                 Or Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "2", "基礎数値種類リスト") _
+                 Or Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "4", "基礎数値種類リスト") _
+                 Or Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "1", "基礎数値計算方法リスト") _
+                 Or Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "2", "基礎数値計算方法リスト") _
+                 Or Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "3", "基礎数値計算方法リスト") _
+                 Or Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "4", "基礎数値計算方法リスト") _
+                 Or Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "5", "基礎数値計算方法リスト") _
+                 Or Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "6", "基礎数値計算方法リスト") _
+                 Or Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "7", "基礎数値計算方法リスト") _
+                 Or Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "8", "基礎数値計算方法リスト") _
+                 Or Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "9", "基礎数値計算方法リスト")) _
+                And Target.Row <= lngCnt) _
+        Then
+        
+'        If .Range("平残断面区分").Address = Target.Address _
+'            And Trim(.Range("平残断面区分").Text) <> "" _
+'            Or ((Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "1", "基礎数値種類リスト") _
+'                 Or Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "2", "基礎数値種類リスト") _
+'                 Or Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "4", "基礎数値種類リスト") _
+'                 Or Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "1", "基礎数値計算方法リスト") _
+'                 Or Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "2", "基礎数値計算方法リスト") _
+'                 Or Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "3", "基礎数値計算方法リスト") _
+'                 Or Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "4", "基礎数値計算方法リスト") _
+'                 Or Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "5", "基礎数値計算方法リスト") _
+'                 Or Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "6", "基礎数値計算方法リスト") _
+'                 Or Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "7", "基礎数値計算方法リスト") _
+'                 Or Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "8", "基礎数値計算方法リスト") _
+'                 Or Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "9", "基礎数値計算方法リスト") _
+'                 Or Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "1", "顧問料計算方法リスト") _
+'                 Or Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "2", "顧問料計算方法リスト") _
+'                 Or Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "3", "顧問料計算方法リスト") _
+'                 Or Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "4", "顧問料計算方法リスト") _
+'                 Or Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "5", "顧問料計算方法リスト") _
+'                 Or Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "1", "期初期末区分リスト") _
+'                 Or Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "2", "期初期末区分リスト") _
+'                 Or Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "3", "期初期末区分リスト") _
+'                 Or Target.Text = func_SearchComboItem(ThisWorkbook.Worksheets(CHECK_SHEETNAME), "4", "期初期末区分リスト")) _
+'                And Target.Row <= lngCnt) _
+'        Then
+'*** 2007/06/11 PH3.5対応 Modified By T.Ichikawa End
+        
+
+            ThisWorkbook.Application.ScreenUpdating = False
+            
+            'シートのロックを解除
+            Call gCom01_SheetProtect(TargetSheets, False)
+                
+            '**************************
+            '前払後払区分リスト
+            '**************************
+            If .Range("平残断面区分").Address = Target.Address Then
+                If Mid(.Range("平残断面区分").Value, 1, 1) = "2" Then
+                    ' 平残断面区分が 2:断面の場合
+                    strFormula1 = "=OFFSET(前払後払区分リスト, ,,,2)"
+                ElseIf Mid(.Range("平残断面区分").Value, 1, 1) = "1" Then
+                    ' 平残断面区分が 1:平残の場合
+                    strFormula1 = "=OFFSET(前払後払区分リスト, ,,,1)"
+                Else
+                    strFormula1 = "=OFFSET(前払後払区分リスト, ,,,2)"
+                End If
+                If strFormula1 <> .Range("前払後払区分").Validation.Formula1 Then
+                    blnRet = func_ChangeListValidationFormula1(TargetSheets, .Range("前払後払区分"), strFormula1)
+                    If blnRet = False Then
+                        Exit Function
+                    End If
+                End If
+                '対象外の項目が指定済みの場合はクリアする
+                Call func_SearchListAddress(ThisWorkbook.Worksheets(CHECK_SHEETNAME), .Range("前払後払区分").Text, Mid(strFormula1, 2), strFoundStr)
+                If strFoundStr = "" Then
+                    '指定されている項目がリストに無い場合
+                    If Range(Mid(strFormula1, 2)).Count = 1 And .Range("前払後払区分") = "" Then
+                        '対象が１つの場合は値をセット
+                        .Range("前払後払区分") = Range(Mid(strFormula1, 2)).Value
+                    Else
+                        '対象が複数の場合は値をクリア
+                        .Range("前払後払区分") = ""
+                    End If
+                End If
+
+'*** 2007/06/11 PH3.5対応 Added By T.Ichikawa Start
+                '**************************
+                'ゼロ円請求書区分リスト
+                '**************************
+                If Mid(.Range("平残断面区分").Value, 1, 1) = "2" Then
+                    ' 平残断面区分が 2:断面の場合
+                    strFormula1 = "=OFFSET(ゼロ円請求書区分リスト, ,,,1)"
+                Else
+                    strFormula1 = "=OFFSET(ゼロ円請求書区分リスト, ,,,2)"
+                End If
+                If strFormula1 <> .Range("ゼロ円請求書区分").Validation.Formula1 Then
+                    blnRet = func_ChangeListValidationFormula1(TargetSheets, .Range("ゼロ円請求書区分"), strFormula1)
+                    If blnRet = False Then
+                        Exit Function
+                    End If
+                End If
+                '対象外の項目が指定済みの場合はクリアする
+                Call func_SearchListAddress(ThisWorkbook.Worksheets(CHECK_SHEETNAME), .Range("ゼロ円請求書区分").Text, Mid(strFormula1, 2), strFoundStr)
+                If strFoundStr = "" Then
+                    '指定されている項目がリストに無い場合
+                    If Range(Mid(strFormula1, 2)).Count = 1 And .Range("ゼロ円請求書区分") = "" Then
+                        '対象が１つの場合は値をセット
+                        .Range("ゼロ円請求書区分") = Range(Mid(strFormula1, 2)).Value
+                    Else
+                        '対象が複数の場合は値をクリア
+                        .Range("ゼロ円請求書区分") = ""
+                    End If
+                End If
+'*** 2007/06/11 PH3.5対応 Added By T.Ichikawa End
+
+            End If
+            
+            '一般資産の先頭行
+            If .Range("平残断面区分").Address = Target.Address Then
+                lngRow = fncKsCmnSearchDataTopRow(TargetSheets, 1)
+            Else
+                lngRow = Target.Row
+            End If
+        
+            '一般資産の行ごとに設定する
+            Do While (.Range(mLINKCELLNAME & lngRow) <> vbNullString)
+                
+                '**************************
+                '基礎数値計算方法リスト
+                '**************************
+'*** 2007/06/11 PH3.5対応 Added By T.Ichikawa Start
+'                If Mid(.Range("平残断面区分").Value, 1, 1) = "2" Then
+'                    ' 平残断面区分が 2:断面の場合
+'                    strFormula1 = "=OFFSET(基礎数値計算方法リスト, ,5,,3)"
+'                ElseIf Mid(.Range("平残断面区分").Value, 1, 1) = "1" Then
+'                    ' 平残断面区分が 1:平残の場合
+'
+'                    If Mid(.Range("S" & lngRow), 1, 1) = "4" Then
+'                        ' 基礎数値種類が 4:元本の場合
+'                        strFormula1 = "=OFFSET(基礎数値計算方法リスト, ,4,,1)"
+'                    Else
+'                        ' 基礎数値種類が 4:元本以外の場合
+'                        strFormula1 = "=OFFSET(基礎数値計算方法リスト, ,,,4)"
+'                    End If
+'                Else
+'                    strFormula1 = "=OFFSET(基礎数値計算方法リスト, ,,,8)"
+'                End If
+                
+                '日次追加対応
+                If Mid(.Range("平残断面区分").Value, 1, 1) = "2" Then
+                    ' 平残断面区分が 2:断面の場合
+                    strFormula1 = "=OFFSET(基礎数値計算方法リスト, ,6,,3)"
+                ElseIf Mid(.Range("平残断面区分").Value, 1, 1) = "1" Then
+                    ' 平残断面区分が 1:平残の場合
+                    
+                    If Mid(.Range("S" & lngRow), 1, 1) = "4" Then
+                        ' 基礎数値種類が 4:元本の場合
+                        strFormula1 = "=OFFSET(基礎数値計算方法リスト, ,5,,1)"
+'*** 2007/08/07 PH3.5対応 Added By T.Ichikawa Start ***
+                    Else
+                        ' 基礎数値種類が 4:元本以外の場合
+                        strFormula1 = "=OFFSET(基礎数値計算方法リスト, ,,,5)"
+'*** 2007/08/07 PH3.5対応 Added By T.Ichikawa End   ***
+
+                    End If
+                Else
+                    strFormula1 = "=OFFSET(基礎数値計算方法リスト, ,,,9)"
+                End If
+'*** 2007/06/11 PH3.5対応 Added By T.Ichikawa End
+                
+                If strFormula1 <> .Range("V" & lngRow).Validation.Formula1 Then
+                    blnRet = func_ChangeListValidationFormula1(TargetSheets, .Range("V" & lngRow), strFormula1)
+                    If blnRet = False Then
+                        Exit Function
+                    End If
+                End If
+                '対象外の項目が指定済みの場合はクリアする
+                Call func_SearchListAddress(ThisWorkbook.Worksheets(CHECK_SHEETNAME), .Range("V" & lngRow).Value, Mid(strFormula1, 2), strFoundStr)
+                If strFoundStr = "" Then
+                    '指定されている項目がリストに無い場合
+                    If Range(Mid(strFormula1, 2)).Count = 1 And .Range("V" & lngRow).Value = "" Then
+                        '対象が１つの場合は値をセット
+                        .Range("V" & lngRow).Value = Range(Mid(strFormula1, 2)).Value
+                    Else
+                        '対象が複数の場合は値をクリア
+                        .Range("V" & lngRow).Value = ""
+                    End If
+                End If
+                
+                '**************************
+                '顧問料計算方法リスト
+                '**************************
+                If Mid(.Range("平残断面区分").Value, 1, 1) = "2" Then
+                    ' 平残断面区分が 2:断面の場合
+                    strFormula1 = "=OFFSET(顧問料計算方法リスト, ,,,1)"
+                ElseIf Mid(.Range("平残断面区分").Value, 1, 1) = "1" Then
+                    ' 平残断面区分が 1:平残の場合
+                    
+                    If Mid(.Range("S" & lngRow), 1, 1) = "4" Then
+                        ' 基礎数値種類が 4:元本の場合
+                        strFormula1 = "=OFFSET(顧問料計算方法リスト, ,,,1)"
+                    Else
+                        ' 基礎数値種類が 4:元本以外の場合
+'*** 2007/06/11 PH3.5対応 Modified By T.Ichikawa Start
+'                        strFormula1 = "=OFFSET(顧問料計算方法リスト, ,,,4)"
+'*** 2007/08/07 PH3.5対応 Added By T.Ichikawa Start ***
+                        If Mid(.Range("V" & lngRow), 1, 1) = "5" Or Mid(.Range("V" & lngRow), 1, 1) = "6" Then
+                            ' 基礎数値計算方法が 5:積数平均または6:日次の場合
+'*** 2007/08/07 PH3.5対応 Added By T.Ichikawa End   ***
+
+                            strFormula1 = "=OFFSET(顧問料計算方法リスト, ,,,1)"
+                        Else
+                            strFormula1 = "=OFFSET(顧問料計算方法リスト, ,,,5)"
+                        End If
+'*** 2007/06/11 PH3.5対応 Modified By T.Ichikawa End
+                    End If
+                Else
+                    strFormula1 = "=OFFSET(顧問料計算方法リスト, ,,,4)"
+                End If
+                If strFormula1 <> .Range("Z" & lngRow).Validation.Formula1 Then
+                    blnRet = func_ChangeListValidationFormula1(TargetSheets, .Range("Z" & lngRow), strFormula1)
+                    If blnRet = False Then
+                        Exit Function
+                    End If
+                End If
+                '対象外の項目が指定済みの場合はクリアする
+                Call func_SearchListAddress(ThisWorkbook.Worksheets(CHECK_SHEETNAME), .Range("Z" & lngRow).Value, Mid(strFormula1, 2), strFoundStr)
+                If strFoundStr = "" Then
+                    '指定されている項目がリストに無い場合
+                    If Range(Mid(strFormula1, 2)).Count = 1 And .Range("Z" & lngRow).Value = "" Then
+                        '対象が１つの場合は値をセット
+                        .Range("Z" & lngRow).Value = Range(Mid(strFormula1, 2)).Value
+                    Else
+                        '対象が複数の場合は値をクリア
+                        .Range("Z" & lngRow).Value = ""
+                    End If
+                End If
+                
+'*** 2007/06/11 PH3.5対応 Added By T.Ichikawa Start
+                '**************************
+                '期初期末区分リスト
+                '**************************
+                If Mid(.Range("平残断面区分").Value, 1, 1) = "2" Then
+                    ' 平残断面区分が 2:断面の場合
+                    strFormula1 = "=OFFSET(期初期末時価リスト, ,,,1)"
+                ElseIf Mid(.Range("平残断面区分").Value, 1, 1) = "1" Then
+                    
+'*** 2007/08/07 PH3.5対応 Added By T.Ichikawa Start ***
+                    ' 平残断面区分が 1:平残の場合
+                    If Mid(.Range("S" & lngRow), 1, 1) = "4" Then
+                        ' 基礎数値種類が 4:元本の場合
+                        strFormula1 = "=OFFSET(期初期末時価リスト, ,,,1)"
+                    Else
+                        strFormula1 = "=OFFSET(期初期末時価リスト, ,,,4)"
+                    End If
+                Else
+                    strFormula1 = "=OFFSET(期初期末時価リスト, ,,,4)"
+'*** 2007/08/07 PH3.5対応 Added By T.Ichikawa End   ***
+                    
+                
+                End If
+                If strFormula1 <> .Range("AD" & lngRow).Validation.Formula1 Then
+                    blnRet = func_ChangeListValidationFormula1(TargetSheets, .Range("AD" & lngRow), strFormula1)
+                    If blnRet = False Then
+                        Exit Function
+                    End If
+                End If
+                '対象外の項目が指定済みの場合はクリアする
+                Call func_SearchListAddress(ThisWorkbook.Worksheets(CHECK_SHEETNAME), .Range("AD" & lngRow).Value, Mid(strFormula1, 2), strFoundStr)
+                If strFoundStr = "" Then
+                    '指定されている項目がリストに無い場合
+                    If Range(Mid(strFormula1, 2)).Count = 1 And .Range("AD" & lngRow).Value = "" Then
+                        '対象が１つの場合は値をセット
+                        .Range("AD" & lngRow).Value = Range(Mid(strFormula1, 2)).Value
+                    Else
+                        '対象が複数の場合は値をクリア
+                        .Range("AD" & lngRow).Value = ""
+                    End If
+                End If
+                
+                '**************************
+                '顧客指定区分リスト
+                '**************************
+                If Mid(.Range("平残断面区分").Value, 1, 1) = "2" Then
+                    ' 平残断面区分が 2:断面の場合
+                    strFormula1 = "=OFFSET(顧客指定区分リスト, ,,,1)"
+                ElseIf Mid(.Range("平残断面区分").Value, 1, 1) = "1" Then
+                
+'*** 2007/08/07 PH3.5対応 Added By T.Ichikawa Start ***
+                    ' 平残断面区分が 1:平残の場合
+                    If Mid(.Range("S" & lngRow), 1, 1) = "4" Then
+                        ' 基礎数値種類が 4:元本の場合
+                        strFormula1 = "=OFFSET(顧客指定区分リスト, ,,,1)"
+                    Else
+                        strFormula1 = "=OFFSET(顧客指定区分リスト, ,,,2)"
+                    End If
+'*** 2007/08/07 PH3.5対応 Added By T.Ichikawa End   ***
+                    
+                Else
+                    strFormula1 = "=OFFSET(顧客指定区分リスト, ,,,2)"
+                End If
+                If strFormula1 <> .Range("AG" & lngRow).Validation.Formula1 Then
+                    blnRet = func_ChangeListValidationFormula1(TargetSheets, .Range("AG" & lngRow), strFormula1)
+                    If blnRet = False Then
+                        Exit Function
+                    End If
+                End If
+                '対象外の項目が指定済みの場合はクリアする
+                Call func_SearchListAddress(ThisWorkbook.Worksheets(CHECK_SHEETNAME), .Range("AG" & lngRow).Value, Mid(strFormula1, 2), strFoundStr)
+                If strFoundStr = "" Then
+                    '指定されている項目がリストに無い場合
+                    If Range(Mid(strFormula1, 2)).Count = 1 And .Range("AG" & lngRow).Value = "" Then
+                        '対象が１つの場合は値をセット
+                        .Range("AG" & lngRow).Value = Range(Mid(strFormula1, 2)).Value
+                    Else
+                        '対象が複数の場合は値をクリア
+                        .Range("AG" & lngRow).Value = ""
+                    End If
+                End If
+'*** 2007/06/11 PH3.5対応 Added By T.Ichikawa End
+                
+                '**************************
+                '資産リスト
+                '**************************
+                If Mid(.Range("平残断面区分").Value, 1, 1) = "2" Then
+                    ' 平残断面区分が 2:断面の場合
+                    strFormula1 = "=OFFSET(資産リスト, ,,1)"
+                ElseIf Mid(.Range("平残断面区分").Value, 1, 1) = "1" Then
+                    ' 平残断面区分が 1:平残の場合
+                    
+'*** 2007/08/07 PH3.5対応 Modified By T.Ichikawa Start ***
+'                    If Mid(.Range("S" & lngRow), 1, 1) = "4" Then
+'                        ' 基礎数値種類が 4:元本の場合
+                        
+                    If (Mid(.Range("S" & lngRow), 1, 1) = "4" _
+                        Or Mid(.Range("V" & lngRow), 1, 1) = "6" _
+                        Or (Mid(.Range("V" & lngRow), 1, 1) = "1" And (Mid(.Range("AD" & lngRow), 1, 1) = "1" _
+                                                                    Or Mid(.Range("AD" & lngRow), 1, 1) = "2" _
+                                                                    Or Mid(.Range("AD" & lngRow), 1, 1) = "3")) _
+                        Or Mid(.Range("AG" & lngRow), 1, 1) = "1" _
+                        ) Then
+                        ' 基礎数値種類が 4:元本、基礎数値計算方法が 6:日次、時価算術平均または顧客指定Bの場合
+'*** 2007/08/07 PH3.5対応 Modified By T.Ichikawa End   ***
+                        
+                        strFormula1 = "=OFFSET(資産リスト, ,,1)"
+                    Else
+                        ' 基礎数値種類が 4:元本以外の場合
+                        strFormula1 = "=資産リスト"
+                    End If
+                Else
+                    strFormula1 = "=資産リスト"
+                End If
+                If strFormula1 <> .Range("G" & lngRow).Validation.Formula1 Then
+                    blnRet = func_ChangeListValidationFormula1(TargetSheets, .Range("G" & lngRow), strFormula1)
+                    If blnRet = False Then
+                        Exit Function
+                    End If
+                End If
+                '対象外の項目が指定済みの場合はクリアする
+                Call func_SearchListAddress(ThisWorkbook.Worksheets(DATA_SHEETNAME), .Range("G" & lngRow).Value, Mid(strFormula1, 2), strFoundStr)
+                If strFoundStr = "" Then
+                    '指定されている項目がリストに無い場合
+                    If Range(Mid(strFormula1, 2)).Count = 1 And .Range("G" & lngRow).Value = "" Then
+                        '対象が１つの場合は値をセット
+                        .Range("G" & lngRow).Value = Range(Mid(strFormula1, 2)).Value
+                    Else
+                        '対象が複数の場合は値をクリア
+                        .Range("G" & lngRow).Value = ""
+                    End If
+                End If
+                
+                If .Range("平残断面区分").Address <> Target.Address Then
+                    Exit Do
+                End If
+                
+                lngRow = lngRow + 1
+            
+            Loop
+            
+    
+            
+            '調整資産のボタン可否制御
+            If Mid(.Range("平残断面区分").Value, 1, 1) = "2" Then
+                ' 平残断面区分が 2:断面の場合
+                '調整資産(+/-)
+                '開始・終了行取得
+                lngStart = fncKsCmnSearchDataTopRow(TargetSheets, 2)
+                If .Cells(lngStart, 3) = vbNullString Then
+                    .cmdAdd2.Enabled = False
+                    .cmdDel2.Enabled = False
+                Else
+                    .cmdAdd2.Enabled = False
+                    .cmdDel2.Enabled = True
+                End If
+
+                'T21調整資産
+                lngStart = fncKsCmnSearchDataTopRow(TargetSheets, 3)
+                If .Cells(lngStart, 3) = vbNullString Then
+                    .cmdAdd3.Enabled = False
+                    .cmdDel3.Enabled = False
+                Else
+                    .cmdAdd3.Enabled = False
+                    .cmdDel3.Enabled = True
+                End If
+            
+            Else
+                ' 平残断面区分が 2:断面以外の場合
+                '調整資産(+/-)
+                .cmdAdd2.Enabled = True
+                .cmdDel2.Enabled = True
+                'T21調整資産
+                .cmdAdd3.Enabled = True
+                .cmdDel3.Enabled = True
+            End If
+        
+            'シートのロック
+            Call gCom01_SheetProtect(TargetSheets, True)
+'            ThisWorkbook.Application.ScreenUpdating = True
+        
+        End If
+    
+    
+    End With
+
+    
+    gfuncKeisan_FilterNameList = True
+
+    Exit Function
+
+ErrorSection:
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gfuncKeisan_GetSeikyushoShurui", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+
+End Function
+
+
+

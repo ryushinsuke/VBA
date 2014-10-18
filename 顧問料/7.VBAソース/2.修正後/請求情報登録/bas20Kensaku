@@ -1,0 +1,1327 @@
+Attribute VB_Name = "bas20Kensaku"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：国内顧問料計算システム・請求情報登録
+'
+'オブジェクト名：bas20Kensaku
+'
+'機能概要　：検索ボタン処理
+'
+'更新履歴　：2006/08/15 SRA T.Sato       新規作成
+'
+'*************************************************************************
+
+Const MODULE_NAME = "bas20Kensaku"
+
+'*************************************************************************
+'関数名　　：検索メイン処理
+'
+'引　　数　：
+'           objTarget        I           対象のシート
+'           strSyoriKbn      I           処理区分("検索"、"自動")
+'
+'戻り値　　：
+'
+'機能説明　：
+'
+'更新履歴　：2006/08/15 SRA T.Sato    新規作成
+'
+'*************************************************************************
+Public Sub gsub_KensakuMain(ByRef objTarget As Object, _
+                            ByVal strSyoriKbn As String)
+
+On Error GoTo ErrorSection
+
+    Dim blnret As Boolean
+    
+    With objTarget
+    
+'------------<Modify Start T.Ichikawa マウス砂時計化対応 2007/04/25 > -----------------------
+        Application.Cursor = xlWait
+'------------<Modify End   T.Ichikawa マウス砂時計化対応 2007/04/25 > -----------------------
+        
+        '入力チェック処理(検索･自動)
+        blnret = func_SearchInputCheck(Worksheets(MAIN_SHEETNAME), strSyoriKbn)
+        
+        If blnret = False Then
+        
+'------------<Modify Start T.Ichikawa マウス砂時計化対応 2007/04/25 > -----------------------
+            Application.Cursor = xlDefault
+'------------<Modify End   T.Ichikawa マウス砂時計化対応 2007/04/25 > -----------------------
+        
+            Exit Sub
+        End If
+        
+'''        Application.ScreenUpdating = False
+        
+        '検索処理とデータ設定
+        blnret = func_DoSearch(Worksheets(MAIN_SHEETNAME), strSyoriKbn)
+        
+'''        Application.ScreenUpdating = True
+        
+        If blnret = False Then
+            'システムエラー
+            Call gfunc_ErrorMsg(4, 1603, "", "")
+            
+'------------<Modify Start T.Ichikawa マウス砂時計化対応 2007/04/25 > -----------------------
+            Application.Cursor = xlDefault
+'------------<Modify End   T.Ichikawa マウス砂時計化対応 2007/04/25 > -----------------------
+            
+            Exit Sub
+        End If
+    
+    End With
+    
+'------------<Modify Start T.Ichikawa マウス砂時計化対応 2007/04/25 > -----------------------
+            Application.Cursor = xlDefault
+'------------<Modify End   T.Ichikawa マウス砂時計化対応 2007/04/25 > -----------------------
+    
+    Exit Sub
+    
+ErrorSection:
+
+'------------<Modify Start T.Ichikawa マウス砂時計化対応 2007/04/25 > -----------------------
+    Application.Cursor = xlDefault
+'------------<Modify End   T.Ichikawa マウス砂時計化対応 2007/04/25 > -----------------------
+
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gsub_KensakuMain", Err.Number, Err.Description)
+
+End Sub
+
+'*************************************************************************
+'関数名　　：入力チェック処理(検索時)
+'
+'引　　数　：
+'           TargetSheets     I           チェック対象のシート
+'           strSyoriKbn      I           処理区分("検索"、"自動")
+'
+'戻り値　　：
+'
+'機能説明　：
+'
+'更新履歴　：2006/08/15 SRA T.Sato    新規作成
+'更新履歴　：2006/12/08 SRA Y.Azuma   変更     (PH2)成功報酬対応
+'
+'*************************************************************************
+Private Function func_SearchInputCheck(ByRef TargetSheets As Object, _
+                                       ByVal strSyoriKbn As String) As Boolean
+On Error GoTo ErrorSection
+    
+    Dim strKozaNO           As String
+    Dim strKikanFrom        As String
+    Dim strKikanTo          As String
+    Dim strSeikyuYmd        As String
+    Dim lngRow              As Long
+    Dim strCallOff_Date     As String
+    Dim strSeikohHohshuKbn  As String
+    
+    
+    func_SearchInputCheck = False
+    
+    '口座番号取得
+    strKozaNO = Trim(TargetSheets.Range("口座番号").Text)
+    '請求書期間From取得
+    strKikanFrom = Trim(TargetSheets.Range("請求書期間From"))
+    '請求書期間To取得
+    strKikanTo = Trim(TargetSheets.Range("請求書期間To"))
+    '請求日取得
+    strSeikyuYmd = Trim(TargetSheets.Range("請求日"))
+    
+    '自動ボタン押下時の必須チェック
+    If strSyoriKbn = "自動" Then
+        '請求書期間To（必須チェック）
+        If strKikanTo = "" Then
+            '未入力
+            Call gfunc_ErrorMsg(3, 5001, "請求書期間To ", "")
+            TargetSheets.Range("請求書期間To").Select
+            Exit Function
+        End If
+        '請求日（必須チェック）
+        If strSeikyuYmd = "" Then
+            '未入力
+            Call gfunc_ErrorMsg(3, 5001, "請求日 ", "")
+            TargetSheets.Range("請求日").Select
+            Exit Function
+        End If
+    End If
+
+    '口座番号が入力された場合、以下のチェックを行う
+    If strKozaNO <> "" Then
+        
+        '口座番号（桁数チェック）
+        If Len(strKozaNO) >= 8 Then
+            '"口座番号：入力に誤りがあります。"
+            Call gfunc_ErrorMsg(3, 5002, "口座番号", "7桁以内の値を入力して下さい。")
+            TargetSheets.Range("口座番号").Select
+            Exit Function
+        Else
+        '8桁未満はゼロパディングする。
+            strKozaNO = gfunc_KozaNoFormat(strKozaNO)
+            TargetSheets.Range("口座番号") = strKozaNO
+        End If
+        
+        '口座番号存在チェック
+'------------<Modify Start azuma 2006/12/08 > -----------------------
+        
+        If gfunc_KozaNoExist(strKozaNO, strCallOff_Date, strSeikohHohshuKbn, lngRow) = False Then
+            Exit Function
+        End If
+'        If gfunc_KozaNoExist(strKozaNo, strCallOff_Date, lngRow) = False Then
+'            Exit Function
+'        End If
+'------------<Modify End   azuma 2006/12/08 > -----------------------
+        If lngRow <= 0 Then
+            '"該当する口座番号が存在しません。"
+            Call gfunc_ErrorMsg(3, 5003, "口座番号", "")
+            TargetSheets.Range("口座番号").Select
+            Exit Function
+        End If
+    
+    End If
+    
+    '請求書期間Fromが入力された場合、以下のチェックを行う
+    If Trim(strKikanFrom) <> "" Then
+        '請求書期間From（日付の妥当チェック）
+        If gfunc_CheckDate(Trim(strKikanFrom)) = False Then
+            '入力不正
+            Call gfunc_ErrorMsg(3, 5004, "請求書期間From ", "")
+            TargetSheets.Range("請求書期間From").Select
+            Exit Function
+        End If
+    End If
+        
+    '請求書期間Toが入力された場合、以下のチェックを行う
+    If Trim(strKikanTo) <> "" Then
+        '請求書期間To（日付の妥当チェック）
+        If gfunc_CheckDate(Trim(strKikanTo)) = False Then
+            '入力不正
+            Call gfunc_ErrorMsg(3, 5004, "請求書期間To ", "")
+            TargetSheets.Range("請求書期間To").Select
+            Exit Function
+        End If
+    End If
+        
+    '請求日が入力された場合、以下のチェックを行う
+    If Trim(strSeikyuYmd) <> "" Then
+        '請求日（日付の妥当チェック）
+        If gfunc_CheckDate(Trim(strSeikyuYmd)) = False Then
+            '入力不正
+            Call gfunc_ErrorMsg(3, 5004, "請求日 ", "")
+            TargetSheets.Range("請求日").Select
+            Exit Function
+        End If
+    End If
+        
+    func_SearchInputCheck = True
+
+    Exit Function
+    
+ErrorSection:
+
+    func_SearchInputCheck = False
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_SearchInputCheck", Err.Number, Err.Description)
+
+End Function
+    
+'*************************************************************************
+'関数名　　：口座番号の存在チェック処理
+'
+'引　　数　：
+'           strKozaNo           I       口座番号
+'           strCallOff_Date     O       閉鎖口座年月日
+'           strSeikohHohshuKbn  O       成功報酬区分
+'           lngRow              O       取得件数
+'
+'戻り値　　：Boolean
+'
+'機能説明　：口座番号の存在チェック
+'
+'更新履歴　：2006/08/15 SRA T.Sato    新規作成
+'更新履歴　：2006/12/08 SRA Y.Azuma   変更     (PH2)成功報酬対応
+'更新履歴　：2007/12/06 SRA Y.Azuma   変更     (PH4)PH4対応
+'更新履歴　：2008/01/23 SRA Y.Azuma   変更     (PH4)特殊文字バグ対応
+'          ：2013/04/12 GUT 梁賀松 顧問バック更改対応
+'
+'*************************************************************************
+'------------<Modify Start azuma 2006/12/08 > -----------------------
+Public Function gfunc_KozaNoExist(ByVal strKozaNO As String, _
+                                  ByRef strCallOff_Date As String, _
+                                  ByRef strSeikohHohshuKbn As String, _
+                                  ByRef lngRow As Long) As Boolean
+''Public Function gfunc_KozaNoExist(ByVal strKozaNo As String, _
+''                                  ByRef strCallOff_Date As String, _
+''                                  ByRef lngRow As Long) As Boolean
+'------------<Modify End   azuma 2006/12/08 > -----------------------
+
+On Error GoTo ErrHandler
+    
+    Dim strsql      As String
+    Dim vdata()     As Variant
+    Dim lngCol      As Long
+
+    gfunc_KozaNoExist = False
+
+
+'------------<Modify Start azuma 2007/12/06 (PH4)> ★★★☆-----------------------
+    strsql = ""
+    strsql = strsql & " SELECT"
+    strsql = strsql & "     A.NAME_RJ"
+    strsql = strsql & "    ,C.DATA_TYPE"
+    strsql = strsql & "    ,NVL(A.CALLOFF_DATE,'0') "
+    strsql = strsql & "    ,NVL(C.SEIKOH_HOHSHU_KBN,'0') "
+    strsql = strsql & " FROM"
+    strsql = strsql & "     VW_DT001D         A"
+    strsql = strsql & "    ,kyk_kohza_zokusei C"
+    strsql = strsql & " WHERE"
+'------------<Modify Start azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+'    strsql = strsql & "     A.prtcd         = '" & strKozaNO & "'"
+    strsql = strsql & "     A.prtcd         = '" & func_ChkQuoteshon(strKozaNO, "'") & "'"
+'------------<Modify End   azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+'------------<顧問バック更改対応 2013/04/12 GUT梁賀松 START> ------------
+'    strsql = strsql & " AND A.settei_kbn    = '1'"
+    strsql = strsql & " AND A.settei_kbn    = '0'"
+    strsql = strsql & " AND A.GENGO    = '0'"
+'------------<顧問バック更改対応 2013/04/12 GUT梁賀松 END> ------------
+    strsql = strsql & " AND A.prtcd         = C.KOHZA_NO(+)"
+    strsql = strsql & " AND C.SAKUJO_FLG(+) = '0'"
+
+''''------------<Modify Start azuma 2006/12/08 > -----------------------
+'''    strsql = ""
+'''    strsql = strsql & " SELECT"
+'''    strsql = strsql & "     A.NAME_RJ"
+'''    strsql = strsql & "    ,B.DATA_TYPE"
+'''    strsql = strsql & "    ,NVL(A.CALLOFF_DATE,'0') "
+'''    strsql = strsql & "    ,NVL(C.SEIKOH_HOHSHU_KBN,'0') "
+'''    strsql = strsql & " FROM"
+'''    strsql = strsql & "     VW_DT001D         A"
+'''    strsql = strsql & "    ,keiyaku_kouza     B "
+'''    strsql = strsql & "    ,kyk_kohza_zokusei C"
+'''    strsql = strsql & " WHERE"
+'''    strsql = strsql & "     A.prtcd         = '" & strKozaNO & "'"
+'''    strsql = strsql & " AND A.prtcd         = B.KOUZA_NO"
+'''    strsql = strsql & " AND A.settei_kbn    = '1'"
+'''    strsql = strsql & " AND A.prtcd         = C.KOHZA_NO(+)"
+'''    strsql = strsql & " AND C.SAKUJO_FLG(+) = '0'"
+'''
+''''    strSql = ""
+''''    strSql = strSql & " SELECT"
+''''    strSql = strSql & "     A.NAME_RJ,"
+''''    strSql = strSql & "     B.DATA_TYPE,"
+''''    strSql = strSql & "     NVL(A.CALLOFF_DATE,'0') "
+''''    strSql = strSql & " FROM"
+''''    strSql = strSql & "     VW_DT001D A,"
+''''    strSql = strSql & "     keiyaku_kouza B"
+''''    strSql = strSql & " WHERE"
+''''    strSql = strSql & "     A.prtcd='" & strKozaNo & "'   AND"
+''''    strSql = strSql & "     A.prtcd=B.KOUZA_NO   AND"
+''''    strSql = strSql & "     A.settei_kbn='1'"
+''''    strSql = strSql & " "
+''''------------<Modify End   azuma 2006/12/08 > -----------------------
+'------------<Modify End   azuma 2007/12/06 (PH4)> ★★★☆-----------------------
+
+    'データ取得
+    Call gclsdb.DoExequteSql(gcSELECT, strsql, vdata, lngCol, lngRow)
+
+    '閉鎖口座年月日の初期値設定
+    strCallOff_Date = "0"
+    
+    'データありの場合のみ正常
+    If lngRow > 0 Then
+        '閉鎖口座年月日の設定
+        strCallOff_Date = vdata(2, 0)
+        
+'------------<Modify Start azuma 2006/12/08 > -----------------------
+        '成功報酬区分
+        strSeikohHohshuKbn = CStr(vdata(3, 0))
+'------------<Modify End   azuma 2006/12/08 > -----------------------
+    End If
+
+    Erase vdata
+
+    gfunc_KozaNoExist = True
+    
+    Exit Function
+
+ErrHandler:
+    gfunc_KozaNoExist = False
+    Erase vdata
+
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gfunc_KozaNoExist", Err.Number, Err.Description)
+
+End Function
+
+'*************************************************************************
+'関数名　　：検索・自動画面設定処理
+'
+'引　　数　：
+'           TargetSheets     I           チェック対象のシート
+'           strSyoriKbn      I           処理区分("検索"、"自動")
+'
+'戻り値　　：Boolean（True:OK、False：NG）
+'
+'機能説明　：検索＝請求管理テーブルよりデータを取得して画面に表示する。
+'　　　　　　自動＝顧問料請求期間テーブルよりデータを取得して画面に表示する。
+'
+'更新履歴　：2006/08/15 SRA T.Sato    新規作成
+'更新履歴　：2007/01/17 SRA Y.Azuma    変更     (仕変)総No.185 信託銀行リストのコード入力対応
+'
+'*************************************************************************
+Private Function func_DoSearch(ByRef TargetSheets As Object, _
+                               ByVal strSyoriKbn) As Boolean
+On Error GoTo Error_Section
+    
+    Dim blnret          As Boolean
+    Dim strKozaNO       As String
+    Dim strSGinkoCd     As String
+    Dim strKikanFrom    As String
+    Dim strKikanTo      As String
+    Dim strSeikyuYmd    As String
+    
+    Dim vGetData()      As Variant      '取得データ
+    Dim lngDataCnt      As Long         '取得件数
+    
+    Erase vGetData
+    
+    func_DoSearch = False
+
+'*******************************************************
+'* 関数開始　                                        　*
+'*******************************************************
+    '検索キー情報取得
+    strKozaNO = Trim(TargetSheets.Range("口座番号").Text)
+'------------<Modify Start azuma 2007/01/17 > -----------------------
+    Dim lngPoint    As Long
+    With TargetSheets
+        lngPoint = InStr(1, .Range("信託銀行コード").Text, LIST_SEPARATER)
+        If lngPoint = 0 Then
+            strSGinkoCd = .Range("信託銀行コード").Text
+        Else
+            strSGinkoCd = Mid(.Range("信託銀行コード").Text, 1, lngPoint - 1)
+            strSGinkoCd = Left(strSGinkoCd & String(6, " "), 6)
+        End If
+    End With
+'    strSGinkoCd = Mid(TargetSheets.Range("信託銀行コード"), 1, 3)
+'------------<Modify End   azuma 2007/01/17 > -----------------------
+    strKikanFrom = Trim(TargetSheets.Range("請求書期間From"))
+    strKikanTo = Trim(TargetSheets.Range("請求書期間To"))
+    strSeikyuYmd = Trim(TargetSheets.Range("請求日"))
+
+    Select Case strSyoriKbn
+    Case "検索"
+        '請求管理情報の取得
+        blnret = func_GetSeikyuKanriInfo(TargetSheets, _
+                                         strKozaNO, _
+                                         strSGinkoCd, _
+                                         strKikanFrom, _
+                                         strKikanTo, _
+                                         strSeikyuYmd, _
+                                         vGetData, _
+                                         lngDataCnt)
+    
+        If blnret = False Then
+            Exit Function
+        End If
+
+        '該当データが存在しない
+        If lngDataCnt = 0 Then
+            Call gfunc_ErrorMsg(3, 5009, "", "", True)
+            func_DoSearch = True
+            Exit Function
+        End If
+
+        '請求管理情報の画目設定
+        blnret = func_SetSeikyuKanriInfo(TargetSheets, _
+                                         vGetData, _
+                                         lngDataCnt)
+        
+        If blnret = False Then
+            Exit Function
+        End If
+    
+    Case "自動"
+        '顧問料請求期間情報の取得
+        blnret = func_GetSeikyuKikanInfo(TargetSheets, _
+                                         strKozaNO, _
+                                         strSGinkoCd, _
+                                         strKikanFrom, _
+                                         strKikanTo, _
+                                         strSeikyuYmd, _
+                                         vGetData, _
+                                         lngDataCnt)
+    
+        If blnret = False Then
+            Exit Function
+        End If
+        
+        '該当データが存在しない
+        If lngDataCnt = 0 Then
+            Call gfunc_ErrorMsg(3, 5009, "", "", True)
+            func_DoSearch = True
+            Exit Function
+        End If
+        
+        '顧問料請求期間情報の画目設定
+        blnret = func_SetSeikyuKikanInfo(TargetSheets, _
+                                         strSeikyuYmd, _
+                                         vGetData, _
+                                         lngDataCnt)
+        
+        If blnret = False Then
+            Exit Function
+        End If
+    
+    End Select
+    
+    '取得データをメモリーから破棄
+    Erase vGetData
+    
+    func_DoSearch = True
+
+    Exit Function
+
+Error_Section:
+
+    func_DoSearch = False
+
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_DoSearch", Err.Number, Err.Description)
+
+    Erase vGetData
+
+End Function
+
+'*************************************************************************
+'関数名　　：請求管理情報取得処理
+'
+'引　　数　：
+'           TargetSheets    I       処理対象ワークシート
+'           strKozaNo       I       口座番号
+'           strSGinkoCd     I       信託銀行コード
+'           strKikanFrom    I       請求書期間From
+'           strKikanTo      I       請求書期間To
+'           strSeikyubi     I       請求日
+'           vdata()         O       取得結果
+'           lngRow          O       取得件数
+'
+'戻り値　　：Boolean
+'
+'機能説明　：請求管理情報を取得する
+'
+'更新履歴　：2006/08/15 SRA T.Sato    新規作成
+'　　　　　　2006/10/30 SRA T.Sato    ソート順を変更
+'　　　　　　2006/11/06 SRA T.Sato    合算親口座の取得する条件を変更
+'更新履歴　：2008/01/23 SRA Y.Azuma   変更     (PH4)特殊文字バグ対応
+'
+'*************************************************************************
+Private Function func_GetSeikyuKanriInfo(ByVal TargetSheets As Object, _
+                                         ByVal strKozaNO As String, _
+                                         ByVal strSGinkoCd As String, _
+                                         ByVal strKikanFrom As String, _
+                                         ByVal strKikanTo As String, _
+                                         ByVal strSeikyuBi As String, _
+                                         ByRef vdata() As Variant, _
+                                         ByRef lngRow As Long) As Boolean
+
+On Error GoTo ErrHandler
+    
+    Dim strsql      As String
+    Dim lngCol      As Long
+    Dim lngCnt      As Long
+    Dim strErrCode  As String
+    
+    func_GetSeikyuKanriInfo = False
+    
+    strsql = ""
+    strsql = strsql & "SELECT A.KOHZA_NO,"
+    strsql = strsql & "       B.NAME_J,"
+    strsql = strsql & "       A.SEIKYUSHO_KIKAN_FROM,"
+    strsql = strsql & "       A.SEIKYUSHO_KIKAN_TO,"
+    strsql = strsql & "       A.SEIKYU_YMD,"
+    strsql = strsql & "       A.HIZUKE_SHURUI,"
+    strsql = strsql & "       A.NYUKIN_YOTEI_YMD,"
+'------------<Modify Start azuma 2006/11/10 > -----------------------
+    strsql = strsql & "       A.STATUS,"
+'------------<Modify End   azuma 2006/11/10 > -----------------------
+    
+'------------<Modify Start azuma 2006/12/22 (PH2)> -----------------------
+    strsql = strsql & "       A.SHUEKI_RATE_SA_KIJUN_SHUEKI,"
+'    strSql = strSql & "       A.SEIKOU_KEISAN_KISO,"
+'------------<Modify End   azuma 2006/12/22 (PH2)> -----------------------
+    strsql = strsql & "       A.KAKEME_CD,"
+    strsql = strsql & "       A.SEIKYU_KIKAN_ID,"
+'***** UPDATE T.Sato 2006/10/30 *****
+'ソート順を合算親口座、口座番号、請求期間FROMに変更
+'    strSql = strSql & "       C.GASSAN_OYA_KOHZA_NO"
+    strsql = strsql & "       NVL(C.GASSAN_OYA_KOHZA_NO, ' ') AS OYA_KOHZA_NO"
+'***** UPDATE End *****
+    strsql = strsql & "  FROM KYK_SEIKYU_KANRI A, VW_DT001D B, KYK_GASSAN_KOHZA C "
+'------------<Modify Start azuma 2006/11/10 > -----------------------
+    strsql = strsql & " WHERE A.STATUS = A.STATUS "
+'    strSql = strSql & " WHERE A.STATUS = '0'"
+'------------<Modify End   azuma 2006/11/10 > -----------------------
+    If strKozaNO <> "" Then
+'------------<Modify Start azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+        strsql = strsql & " AND A.KOHZA_NO = '" & func_ChkQuoteshon(strKozaNO, "'") & "'"
+'        strsql = strsql & " AND A.KOHZA_NO = '" & strKozaNO & "'"
+'------------<Modify End   azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+    End If
+    If strKikanFrom <> "" Then
+        strsql = strsql & " AND A.SEIKYUSHO_KIKAN_FROM = " & strKikanFrom
+    End If
+    If strKikanTo <> "" Then
+        strsql = strsql & " AND A.SEIKYUSHO_KIKAN_TO = " & strKikanTo
+    End If
+    If strSeikyuBi <> "" Then
+        strsql = strsql & " AND A.SEIKYU_YMD = " & strSeikyuBi
+    End If
+    If strSGinkoCd <> "" Then
+        strsql = strsql & " AND A.KOHZA_NO IN (SELECT PRTCD"
+        strsql = strsql & "                      FROM VW_DT001D"
+'------------<Modify Start azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+        strsql = strsql & "                     WHERE SINTAKU_BANK_CD = '" & func_ChkQuoteshon(strSGinkoCd, "'") & "')"
+'        strsql = strsql & "                     WHERE SINTAKU_BANK_CD = '" & strSGinkoCd & "')"
+'------------<Modify End   azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+    End If
+    strsql = strsql & "   AND A.SAKUJO_FLG  = '0'"
+    strsql = strsql & "   AND A.KOHZA_NO    = B.PRTCD(+)"
+    strsql = strsql & "   AND A.KOHZA_NO    = C.GASSAN_KO_KOHZA_NO(+)"
+'***** UPDATE T.Sato 2006/11/06 *****
+'    strSql = strSql & "   AND A.SEIKYU_YMD >= C.GASSAN_KAISHI_YMD(+)"
+'    strSql = strSql & "   AND A.SEIKYU_YMD <= NVL(C.GASSAN_SHURYOH_YMD(+),'99999999')"
+    strsql = strsql & "   AND A.SEIKYUSHO_KIKAN_FROM <= NVL(C.GASSAN_SHURYOH_YMD(+),'99999999')"
+    strsql = strsql & "   AND A.SEIKYUSHO_KIKAN_TO   >= C.GASSAN_KAISHI_YMD(+)"
+    strsql = strsql & "   AND C.SAKUJO_FLG(+) = '0'"
+'***** UPDATE End *****
+
+'------------<Modify Start azuma 2006/11/14 > -----------------------
+    '合算口座番号を除く
+    strsql = strsql & "   AND SUBSTR(A.KOHZA_NO,1,1)<>'G'"
+'------------<Modify End   azuma 2006/11/14 > -----------------------
+
+
+'***** UPDATE T.Sato 2006/10/30 *****
+'ソート順を合算親口座、口座番号、請求期間FROMに変更
+'    strSql = strSql & " ORDER BY A.KOHZA_NO, A.SEIKYUSHO_KIKAN_FROM"
+    strsql = strsql & " ORDER BY OYA_KOHZA_NO, A.KOHZA_NO, A.SEIKYUSHO_KIKAN_FROM"
+'***** UPDATE End *****
+    
+    'データ取得
+    Call gclsdb.DoExequteSql(gcSELECT, strsql, vdata, lngCol, lngRow, strErrCode)
+
+    If Trim(strErrCode) <> "" Then
+        Exit Function
+    End If
+    
+    func_GetSeikyuKanriInfo = True
+    
+    Exit Function
+
+ErrHandler:
+    func_GetSeikyuKanriInfo = False
+
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_GetSeikyuKanriInfo", Err.Number, Err.Description)
+
+End Function
+
+'*************************************************************************
+'関数名　　：ワークシートに請求管理情報を設定する
+'
+'引　　数　：
+'           TargetSheets    I       処理対象ワークシート
+'           vdata()         I       設定データ
+'           lngRow          I       設定データ件数
+'
+'戻り値　　：Boolean
+'
+'機能説明　：処理対象ワークシートにデータを設定する。
+'
+'更新履歴　：2006/08/15 SRA T.Sato    新規作成
+'　　　　　　2006/09/29 SRA T.Sato    修正
+'               ・検索、自動データ、上下期区分の更新可能対応（更新前の上下期を保管）
+'更新履歴　：2007/03/02 SRA Y.Azuma    変更     (PH2)連No.36対応 変更不可対応
+'
+'*************************************************************************
+Private Function func_SetSeikyuKanriInfo(ByVal TargetSheets As Object, _
+                                         ByVal vdata As Variant, _
+                                         ByVal lngRow As Long) As Boolean
+On Error GoTo ErrHandler
+
+    Dim lngCnt      As Long
+    Dim lngStartRow As Long
+    
+    func_SetSeikyuKanriInfo = False
+'Dim dblS    As Double
+'Dim dblE    As Double
+    
+            'カレント明細行番号取得
+            lngStartRow = fncKsCmnSearchNewRow(TargetSheets) - 1
+    
+''''*** PH3対応 2007/04/12 Added By H.Anpo Start ***
+'''    Sheets(TEMPLATE_SHEETNAME).Rows("9:9").Copy
+'''    Sheets(MAIN_SHEETNAME).Rows(lngStartRow + 1 & ":" & lngStartRow + lngrow).Insert Shift:=xlDown
+''''*** PH3対応 2007/04/12 Added By H.Anpo End ***
+    
+    '明細行の追加
+    With TargetSheets
+        For lngCnt = 1 To lngRow
+lngStartRow = lngStartRow + 1
+'dblS = Timer
+            '明細行の追加
+'------------<Modify Start azuma 2006/11/10 > -----------------------
+            If CStr(vdata(7, lngCnt - 1)) = "2" Then
+            '入金済み
+'*** PH3対応 2007/04/12 Modified By H.Anpo Start ***
+'                Call gsub_NewClick(9)
+    Sheets(TEMPLATE_SHEETNAME).Rows("9:9").Copy
+    Sheets(MAIN_SHEETNAME).Rows(lngStartRow & ":" & lngStartRow).Insert Shift:=xlDown
+                Call gsub_NewClick2(9, lngStartRow)
+'*** PH3対応 2007/04/12 Modified By H.Anpo End ***
+            Else
+            '入金済み以外
+'*** PH3対応 2007/04/12 Modified By H.Anpo Start ***
+''------------<Modify Start azuma 2007/03/02 > -----------------------
+'                Call gsub_NewClick(11)
+''                Call gsub_NewClick(5)
+''------------<Modify End   azuma 2007/03/02 > -----------------------
+    Sheets(TEMPLATE_SHEETNAME).Rows("11:11").Copy
+    Sheets(MAIN_SHEETNAME).Rows(lngStartRow & ":" & lngStartRow).Insert Shift:=xlDown
+                Call gsub_NewClick2(11, lngStartRow)
+'*** PH3対応 2007/04/12 Modified By H.Anpo End ***
+            End If
+'            Call gsub_NewClick(5)
+'------------<Modify End   azuma 2006/11/10 > -----------------------
+'dblE = Timer
+'Debug.Print "行追加：" & Round(dblE - dblS, 2)
+            
+            'カレント明細行番号取得
+'            lngStartRow = fncKsCmnSearchNewRow(TargetSheets) - 1
+            'データの設定
+'*** PH3対応 2007/04/12 Modified By H.Anpo Start *** (PH1の不具合)
+'            .Cells(lngStartRow, 3).Value = vdata(10, lngCnt - 1)    '合算口座番号
+            .Cells(lngStartRow, 3).Value = vdata(11, lngCnt - 1)    '合算口座番号
+'*** PH3対応 2007/04/12 Modified By H.Anpo End ***
+            .Cells(lngStartRow, 6).Value = vdata(0, lngCnt - 1)     '口座番号
+            .Cells(lngStartRow, 9).Value = vdata(1, lngCnt - 1)     '口座名称
+            .Cells(lngStartRow, 15).Value = vdata(2, lngCnt - 1)    '請求書期間From
+            .Cells(lngStartRow, 18).Value = vdata(3, lngCnt - 1)    '請求書期間To
+            '<2007/01/24 ADD S IIDA >
+            .Cells(lngStartRow, gcSEIKYU_KIKAN_TO_RC).Value = vdata(3, lngCnt - 1)    '請求期間TO格納
+            '<2007/01/24 ADD E IIDA >
+            .Cells(lngStartRow, 21).Value = vdata(4, lngCnt - 1)    '請求日
+            .Cells(lngStartRow, 24).Value = func_SearchComboItem(vdata(5, lngCnt - 1), "上下期区分リスト", 1)  '上期下期区分
+            .Cells(lngStartRow, 26).Value = vdata(6, lngCnt - 1)    '入金予定日
+            
+'------------<Modify Start azuma 2006/11/10 > -----------------------
+            .Cells(lngStartRow, 29).Value = func_SearchComboItem(vdata(7, lngCnt - 1), "ステータスリスト", 1)  'ステータス
+            .Cells(lngStartRow, 32).Value = vdata(8, lngCnt - 1)    '成功報酬基礎数値
+            .Cells(lngStartRow, 35).Value = vdata(9, lngCnt - 1)    '掛け目コード
+            .Cells(lngStartRow, gcSEIKYU_KIKAN_ID_RC).Value = vdata(10, lngCnt - 1)    '請求期間ID
+            .Cells(lngStartRow, gcSHORI_KBN_RC).Value = 1                       '処理区分（検索）
+            .Cells(lngStartRow, gcHIZUKE_SHURUI_RC).Value = vdata(5, lngCnt - 1)    '上下期区分
+'''            .Cells(lngStartRow, 29).Value = vData(7, lngCnt - 1)    '成功報酬基礎数値
+'''            .Cells(lngStartRow, 32).Value = vData(8, lngCnt - 1)    '掛け目コード
+'''            .Cells(lngStartRow, 37).Value = vData(9, lngCnt - 1)    '請求期間ID
+'''            .Cells(lngStartRow, 38).Value = 1                       '処理区分（検索）
+''''***** INSERT T.Sato 2006/09/29 *****
+'''            .Cells(lngStartRow, 39).Value = vData(5, lngCnt - 1)    '上下期区分
+''''***** INSERT End *****
+'------------<Modify End   azuma 2006/11/10 > -----------------------
+'dblE = Timer
+'Debug.Print "明細貼り付け：" & Round(dblE - dblS, 2)
+        Next lngCnt
+    End With
+    
+    func_SetSeikyuKanriInfo = True
+
+    Exit Function
+
+ErrHandler:
+    func_SetSeikyuKanriInfo = False
+
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_SetSeikyuKanriInfo", Err.Number, Err.Description)
+
+End Function
+
+'*************************************************************************
+'関数名　　：顧問料請求期間情報取得処理
+'
+'引　　数　：
+'           TargetSheets    I       処理対象ワークシート
+'           strKozaNo       I       口座番号
+'           strSGinkoCd     I       信託銀行コード
+'           strKikanFrom    I       請求書期間From
+'           strKikanTo      I       請求書期間To
+'           strSeikyubi     I       請求日
+'           vdata()         O       取得結果
+'           lngRow          O       取得件数
+'
+'戻り値　　：Boolean
+'
+'機能説明　：顧問料請求期間情報を取得する
+'
+'更新履歴　：2006/08/15 SRA T.Sato    新規作成
+'　　　　　　2006/10/30 SRA T.Sato    ソート順を変更
+'　　　　　　2006/11/08 SRA T.Sato    バグ対応
+'　　　　　　2007/04/12 SRA H.Anpo    PH3対応
+'更新履歴　：2007/12/06 SRA Y.Azuma   (PH4)PH4対応
+'更新履歴　：2008/01/23 SRA Y.Azuma    変更     (PH4)特殊文字バグ対応
+'
+'*************************************************************************
+Private Function func_GetSeikyuKikanInfo(ByVal TargetSheets As Object, _
+                                         ByVal strKozaNO As String, _
+                                         ByVal strSGinkoCd As String, _
+                                         ByVal strKikanFrom As String, _
+                                         ByVal strKikanTo As String, _
+                                         ByVal strSeikyuBi As String, _
+                                         ByRef vdata() As Variant, _
+                                         ByRef lngRow As Long) As Boolean
+    
+On Error GoTo ErrHandler
+    
+    Dim strsql          As String
+    Dim lngCol          As Long
+    Dim lngCnt          As Long
+    Dim strErrCode      As String
+    Dim strKikanToEdit  As String
+    Dim strMonthEnd     As String
+    
+    func_GetSeikyuKikanInfo = False
+    
+    '請求書期間TOの6ヶ月後の月末日を取得
+    '2006/10/17 UPDATE
+    '入力した請求書期間Toがその月の月末の時、半年後の月の月末
+    'さもなければそのままで半年加算
+'***** UPDATE T.Sato 2006/11/08 *****
+'月に+1している為、12月の場合13月になりエラーとなる
+'    strMonthEnd = Mid(strKikanTo, 1, 4) & "/" & Mid(strKikanTo, 5, 2) + 1 & "/01"
+    strMonthEnd = DateAdd("m", 1, Mid(strKikanTo, 1, 4) & "/" & Mid(strKikanTo, 5, 2) & "/01")
+'***** End *****
+    strMonthEnd = Replace(DateAdd("d", -1, strMonthEnd), "/", "")
+    If strKikanTo = strMonthEnd Then
+        strKikanToEdit = Mid(strKikanTo, 1, 4) & "/" & Mid(strKikanTo, 5, 2)
+        strKikanToEdit = Replace(DateAdd("d", -1, DateAdd("m", 7, strKikanToEdit)), "/", "")
+    Else
+        strKikanToEdit = Mid(strKikanTo, 1, 4) & "/" & Mid(strKikanTo, 5, 2) & "/" & Mid(strKikanTo, 7, 2)
+        strKikanToEdit = Replace(DateAdd("m", 6, strKikanToEdit), "/", "")
+    End If
+'    strKikanToEdit = Mid(strKikanTo, 1, 4) & "/" & Mid(strKikanTo, 5, 2)
+'    strKikanToEdit = Replace(DateAdd("d", -1, DateAdd("m", 7, strKikanToEdit)), "/", "")
+    
+'------------<Modify Start azuma 2007/12/06 (PH4)> ★★★☆-----------------------
+'''''    strsql = "SELECT * FROM ("
+'''''    strsql = strsql & "SELECT A.KOHZA_NO,"
+'''''    strsql = strsql & "       C.NAME_J,"
+'''''    strsql = strsql & "       A.SEIKYU_KIKAN_FROM,"
+'''''    strsql = strsql & "       A.SEIKYU_KIKAN_TO,"
+'''''    strsql = strsql & "       '3' AS HIZUKE_SHURUI,"    '通期
+'''''    strsql = strsql & "       A.SEIKYU_KIKAN_ID,"
+''''''***** UPDATE T.Sato 2006/10/30 *****
+''''''ソート順を合算親口座、口座番号に変更
+''''''    strSql = strSql & "       D.GASSAN_OYA_KOHZA_NO"
+'''''    strsql = strsql & "       NVL(D.GASSAN_OYA_KOHZA_NO,' ') AS OYA_KOHZA_NO"
+''''''***** End *****
+'''''    '<2007/01/25 ADD S IIDA > 入金区分取得
+'''''    strsql = strsql & ",NYUKIN_YMD_KBN  "
+'''''    '<2007/01/25 ADD E IIDA >
+'''''    strsql = strsql & "  FROM KYK_SEIKYU_KIKAN A, KEIYAKU_KOUZA B, VW_DT001D C, KYK_GASSAN_KOHZA D"
+'''''    strsql = strsql & " WHERE A.SAKUJO_FLG = '0'"
+'''''    If strKozaNO <> "" Then
+'''''    strsql = strsql & "   AND A.KOHZA_NO = '" & strKozaNO & "'"
+'''''    End If
+'''''    If strKikanFrom <> "" Then
+'''''    strsql = strsql & "   AND A.SEIKYU_KIKAN_FROM = " & strKikanFrom
+'''''    End If
+'''''    If strKikanTo <> "" Then
+'''''    strsql = strsql & "   AND A.SEIKYU_KIKAN_TO = " & strKikanTo
+'''''    End If
+'''''    If strSGinkoCd <> "" Then
+'''''    strsql = strsql & "   AND A.KOHZA_NO IN (SELECT PRTCD"
+'''''    strsql = strsql & "                        FROM VW_DT001D"
+'''''    strsql = strsql & "                       WHERE SINTAKU_BANK_CD = '" & strSGinkoCd & "')"
+'''''    End If
+'''''    strsql = strsql & "   AND A.KOHZA_NO    = B.KOUZA_NO"
+''''''*** PH3対応 2007/04/12 Modified By H.Anpo Start ***
+''''''断面系の場合は請求回数が変動するための対応
+''''''    strsql = strsql & "   AND B.SEIKYUU_KAI = 1"
+'''''    strsql = strsql & "   AND ((A.HEIZAN_DANMEN_KBN = '1' AND B.SEIKYUU_KAI = 1) OR "
+'''''    strsql = strsql & "        (A.HEIZAN_DANMEN_KBN = '2'))"
+''''''*** PH3対応 2007/04/12 Modified By H.Anpo End ***
+'''''    strsql = strsql & "   AND A.KOHZA_NO    = C.PRTCD(+)"
+'''''    strsql = strsql & "   AND A.KOHZA_NO    = D.GASSAN_KO_KOHZA_NO(+)"
+'''''    strsql = strsql & "   AND A.SEIKYU_KIKAN_FROM <= NVL(D.GASSAN_SHURYOH_YMD(+),'99999999')"
+'''''    strsql = strsql & "   AND A.SEIKYU_KIKAN_TO   >= D.GASSAN_KAISHI_YMD(+)"
+'''''    strsql = strsql & "   AND D.SAKUJO_FLG(+) = '0'"
+'''''    strsql = strsql & " UNION "
+'''''    strsql = strsql & "SELECT A.KOHZA_NO,"
+'''''    strsql = strsql & "       C.NAME_J,"
+'''''    strsql = strsql & "       A.SEIKYU_KIKAN_FROM,"
+'''''    strsql = strsql & "       A.SEIKYU_KIKAN_TO,"
+'''''    strsql = strsql & "       '2' AS HIZUKE_SHURUI,"    '下期
+'''''    strsql = strsql & "       A.SEIKYU_KIKAN_ID,"
+''''''***** UPDATE T.Sato 2006/10/30 *****
+''''''ソート順を合算親口座、口座番号に変更
+''''''    strSql = strSql & "       D.GASSAN_OYA_KOHZA_NO"
+'''''    strsql = strsql & "       NVL(D.GASSAN_OYA_KOHZA_NO,' ') AS OYA_KOHZA_NO"
+''''''***** End *****
+'''''    '<2007/01/25 ADD S IIDA > 入金区分取得
+'''''    strsql = strsql & ",NYUKIN_YMD_KBN "
+'''''    '<2007/01/25 ADD E IIDA >
+'''''    strsql = strsql & "  FROM KYK_SEIKYU_KIKAN A, KEIYAKU_KOUZA B, VW_DT001D C, KYK_GASSAN_KOHZA D"
+'''''    strsql = strsql & " WHERE A.SAKUJO_FLG = '0'"
+'''''    If strKozaNO <> "" Then
+'''''    strsql = strsql & "   AND A.KOHZA_NO = '" & strKozaNO & "'"
+'''''    End If
+'''''    If strKikanFrom <> "" Then
+'''''    strsql = strsql & "   AND A.SEIKYU_KIKAN_FROM = '" & strKikanFrom & "'"
+'''''    End If
+'''''    If strKikanTo <> "" Then
+'''''    strsql = strsql & "   AND A.SEIKYU_KIKAN_TO = '" & strKikanTo & "'"
+'''''    End If
+'''''    If strSGinkoCd <> "" Then
+'''''    strsql = strsql & "   AND A.KOHZA_NO IN (SELECT PRTCD"
+'''''    strsql = strsql & "                        FROM VW_DT001D"
+'''''    strsql = strsql & "                       WHERE SINTAKU_BANK_CD = '" & strSGinkoCd & "')"
+'''''    End If
+'''''    strsql = strsql & "   AND A.KOHZA_NO    = B.KOUZA_NO"
+''''''*** PH3対応 2007/04/12 Added By H.Anpo Start ***
+'''''    strsql = strsql & "   AND A.HEIZAN_DANMEN_KBN = '1'"
+''''''*** PH3対応 2007/04/12 Added By H.Anpo End ***
+'''''    strsql = strsql & "   AND B.SEIKYUU_KAI = 2"
+'''''    strsql = strsql & "   AND A.KOHZA_NO    = C.PRTCD(+)"
+'''''    strsql = strsql & "   AND A.KOHZA_NO    = D.GASSAN_KO_KOHZA_NO(+)"
+'''''    strsql = strsql & "   AND A.SEIKYU_KIKAN_FROM <= NVL(D.GASSAN_SHURYOH_YMD(+),'99999999')"
+'''''    strsql = strsql & "   AND A.SEIKYU_KIKAN_TO   >= D.GASSAN_KAISHI_YMD(+)"
+'''''    strsql = strsql & "   AND D.SAKUJO_FLG(+) = '0'"
+'''''    strsql = strsql & " UNION "
+'''''    strsql = strsql & "SELECT A.KOHZA_NO,"
+'''''    strsql = strsql & "       C.NAME_J,"
+'''''    strsql = strsql & "       A.SEIKYU_KIKAN_FROM,"
+'''''    strsql = strsql & "       A.SEIKYU_KIKAN_TO,"
+'''''    strsql = strsql & "       '1' AS HIZUKE_SHURUI,"    '上期
+'''''    strsql = strsql & "       A.SEIKYU_KIKAN_ID,"
+''''''***** UPDATE T.Sato 2006/10/30 *****
+''''''ソート順を合算親口座、口座番号に変更
+''''''    strSql = strSql & "       D.GASSAN_OYA_KOHZA_NO"
+'''''    strsql = strsql & "       NVL(D.GASSAN_OYA_KOHZA_NO,' ') AS OYA_KOHZA_NO"
+''''''***** End *****
+'''''    '<2007/01/25 ADD S IIDA > 入金区分取得
+'''''    strsql = strsql & ",NYUKIN_YMD_KBN "
+'''''    '<2007/01/25 ADD E IIDA >
+'''''    strsql = strsql & "  FROM KYK_SEIKYU_KIKAN A, KEIYAKU_KOUZA B, VW_DT001D C, KYK_GASSAN_KOHZA D"
+'''''    strsql = strsql & " WHERE A.SAKUJO_FLG = '0'"
+'''''    If strKozaNO <> "" Then
+'''''    strsql = strsql & "   AND A.KOHZA_NO = '" & strKozaNO & "'"
+'''''    End If
+'''''    If strKikanFrom <> "" Then
+'''''    strsql = strsql & "   AND A.SEIKYU_KIKAN_FROM = " & strKikanFrom
+'''''    End If
+'''''    If strKikanTo <> "" Then
+'''''    strsql = strsql & "   AND A.SEIKYU_KIKAN_TO = " & strKikanToEdit
+'''''    End If
+'''''    If strSGinkoCd <> "" Then
+'''''    strsql = strsql & "   AND A.KOHZA_NO IN (SELECT PRTCD"
+'''''    strsql = strsql & "                        FROM VW_DT001D"
+'''''    strsql = strsql & "                       WHERE SINTAKU_BANK_CD = '" & strSGinkoCd & "')"
+'''''    End If
+'''''    strsql = strsql & "   AND A.KOHZA_NO    = B.KOUZA_NO"
+''''''*** PH3対応 2007/04/12 Added By H.Anpo Start ***
+'''''    strsql = strsql & "   AND A.HEIZAN_DANMEN_KBN = '1'"
+''''''*** PH3対応 2007/04/12 Added By H.Anpo End ***
+'''''    strsql = strsql & "   AND B.SEIKYUU_KAI = 2"
+'''''    strsql = strsql & "   AND A.KOHZA_NO    = C.PRTCD(+)"
+'''''    strsql = strsql & "   AND A.KOHZA_NO    = D.GASSAN_KO_KOHZA_NO(+)"
+'''''    strsql = strsql & "   AND A.SEIKYU_KIKAN_FROM <= NVL(D.GASSAN_SHURYOH_YMD(+),'99999999')"
+'''''    strsql = strsql & "   AND A.SEIKYU_KIKAN_TO   >= D.GASSAN_KAISHI_YMD(+)"
+'''''    strsql = strsql & "   AND D.SAKUJO_FLG(+) = '0'"
+'''''
+''''''*** PH3対応 2007/04/12 Modified By H.Anpo Start ***
+''''''    strsql = strsql & ") "
+'''''    strsql = strsql & "     ) SUB1"
+'''''    strsql = strsql & " WHERE"
+'''''    strsql = strsql & "   NOT EXISTS ("
+'''''    strsql = strsql & "     SELECT KAN.KOHZA_NO FROM     KYK_SEIKYU_KANRI KAN"
+'''''    strsql = strsql & "     WHERE KAN.KOHZA_NO = SUB1.KOHZA_NO"
+'''''    strsql = strsql & "     AND   KAN.SEIKYU_KIKAN_ID = SUB1.SEIKYU_KIKAN_ID"
+'''''
+''''''*** 2007/06/04 Modified By H.Anpo Start ***
+''''''    strsql = strsql & "     AND   KAN.HIZUKE_SHURUI = SUB1.HIZUKE_SHURUI"
+'''''    strsql = strsql & "     AND  (KAN.HIZUKE_SHURUI = SUB1.HIZUKE_SHURUI OR"
+'''''    strsql = strsql & "          (SUB1.HIZUKE_SHURUI = '1' AND KAN.HIZUKE_SHURUI = '3') OR"
+'''''    strsql = strsql & "          (SUB1.HIZUKE_SHURUI = '2' AND KAN.HIZUKE_SHURUI = '3')"
+'''''    strsql = strsql & "          ) "
+''''''*** 2007/06/04 Modified By H.Anpo End ***
+'''''
+'''''    strsql = strsql & "     AND   KAN.SAKUJO_FLG = '0'"
+'''''    strsql = strsql & "   )"
+''''''*** PH3対応 2007/04/12 Modified By H.Anpo End ***
+'''''
+''''''***** UPDATE T.Sato 2006/10/30 *****
+''''''ソート順を合算親口座、口座番号に変更
+''''''    strSql = strSql & " ORDER BY KOHZA_NO"
+'''''    strsql = strsql & " ORDER BY OYA_KOHZA_NO, KOHZA_NO"
+''''''***** UPDATE End *****
+    
+    strsql = "SELECT * FROM ("
+    strsql = strsql & "SELECT A.KOHZA_NO,"
+    strsql = strsql & "       C.NAME_J,"
+    strsql = strsql & "       A.SEIKYU_KIKAN_FROM,"
+    strsql = strsql & "       A.SEIKYU_KIKAN_TO,"
+    strsql = strsql & "       '3' AS HIZUKE_SHURUI,"    '通期
+    strsql = strsql & "       A.SEIKYU_KIKAN_ID,"
+    strsql = strsql & "       NVL(D.GASSAN_OYA_KOHZA_NO,' ') AS OYA_KOHZA_NO,"
+    strsql = strsql & "       A.NYUKIN_YMD_KBN  "
+    strsql = strsql & "  FROM KYK_SEIKYU_KIKAN A, KYK_KOHZA_ZOKUSEI B, VW_DT001D C, KYK_GASSAN_KOHZA D"
+    strsql = strsql & " WHERE A.SAKUJO_FLG = '0'"
+    If strKozaNO <> "" Then
+'------------<Modify Start azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+    strsql = strsql & "   AND A.KOHZA_NO = '" & func_ChkQuoteshon(strKozaNO, "'") & "'"
+'    strsql = strsql & "   AND A.KOHZA_NO = '" & strKozaNO & "'"
+'------------<Modify End   azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+    End If
+    If strKikanFrom <> "" Then
+    strsql = strsql & "   AND A.SEIKYU_KIKAN_FROM = " & strKikanFrom
+    End If
+    If strKikanTo <> "" Then
+    strsql = strsql & "   AND A.SEIKYU_KIKAN_TO = " & strKikanTo
+    End If
+    If strSGinkoCd <> "" Then
+    strsql = strsql & "   AND A.KOHZA_NO IN (SELECT PRTCD"
+    strsql = strsql & "                        FROM VW_DT001D"
+'------------<Modify Start azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+    strsql = strsql & "                       WHERE SINTAKU_BANK_CD = '" & func_ChkQuoteshon(strSGinkoCd, "'") & "')"
+'    strsql = strsql & "                       WHERE SINTAKU_BANK_CD = '" & strSGinkoCd & "')"
+'------------<Modify End   azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+    End If
+    strsql = strsql & "   AND A.KOHZA_NO    = B.KOHZA_NO"
+    strsql = strsql & "   AND ((A.HEIZAN_DANMEN_KBN = '1' AND B.SEIKYUU_KAI = '1') OR "
+    strsql = strsql & "        (A.HEIZAN_DANMEN_KBN = '2'))"
+    strsql = strsql & "   AND A.KOHZA_NO    = C.PRTCD(+)"
+    strsql = strsql & "   AND A.KOHZA_NO    = D.GASSAN_KO_KOHZA_NO(+)"
+    strsql = strsql & "   AND A.SEIKYU_KIKAN_FROM <= NVL(D.GASSAN_SHURYOH_YMD(+),'99999999')"
+    strsql = strsql & "   AND A.SEIKYU_KIKAN_TO   >= D.GASSAN_KAISHI_YMD(+)"
+    strsql = strsql & "   AND D.SAKUJO_FLG(+) = '0'"
+    strsql = strsql & " UNION "
+    strsql = strsql & "SELECT A.KOHZA_NO,"
+    strsql = strsql & "       C.NAME_J,"
+    strsql = strsql & "       A.SEIKYU_KIKAN_FROM,"
+    strsql = strsql & "       A.SEIKYU_KIKAN_TO,"
+    strsql = strsql & "       '2' AS HIZUKE_SHURUI,"    '下期
+    strsql = strsql & "       A.SEIKYU_KIKAN_ID,"
+    strsql = strsql & "       NVL(D.GASSAN_OYA_KOHZA_NO,' ') AS OYA_KOHZA_NO,"
+    strsql = strsql & "       A.NYUKIN_YMD_KBN "
+    strsql = strsql & "  FROM KYK_SEIKYU_KIKAN A, KYK_KOHZA_ZOKUSEI B, VW_DT001D C, KYK_GASSAN_KOHZA D"
+    strsql = strsql & " WHERE A.SAKUJO_FLG = '0'"
+    If strKozaNO <> "" Then
+'------------<Modify Start azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+'    strsql = strsql & "   AND A.KOHZA_NO = '" & strKozaNO & "'"
+    strsql = strsql & "   AND A.KOHZA_NO = '" & func_ChkQuoteshon(strKozaNO, "'") & "'"
+'------------<Modify End   azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+    End If
+    If strKikanFrom <> "" Then
+    strsql = strsql & "   AND A.SEIKYU_KIKAN_FROM = '" & strKikanFrom & "'"
+    End If
+    If strKikanTo <> "" Then
+    strsql = strsql & "   AND A.SEIKYU_KIKAN_TO = '" & strKikanTo & "'"
+    End If
+    If strSGinkoCd <> "" Then
+    strsql = strsql & "   AND A.KOHZA_NO IN (SELECT PRTCD"
+    strsql = strsql & "                        FROM VW_DT001D"
+'------------<Modify Start azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+    strsql = strsql & "                       WHERE SINTAKU_BANK_CD = '" & func_ChkQuoteshon(strSGinkoCd, "'") & "')"
+'    strsql = strsql & "                       WHERE SINTAKU_BANK_CD = '" & strSGinkoCd & "')"
+'------------<Modify End   azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+    End If
+    strsql = strsql & "   AND A.KOHZA_NO    = B.KOHZA_NO"
+    strsql = strsql & "   AND A.HEIZAN_DANMEN_KBN = '1'"
+    strsql = strsql & "   AND B.SEIKYUU_KAI = '2'"
+    strsql = strsql & "   AND A.KOHZA_NO    = C.PRTCD(+)"
+    strsql = strsql & "   AND A.KOHZA_NO    = D.GASSAN_KO_KOHZA_NO(+)"
+    strsql = strsql & "   AND A.SEIKYU_KIKAN_FROM <= NVL(D.GASSAN_SHURYOH_YMD(+),'99999999')"
+    strsql = strsql & "   AND A.SEIKYU_KIKAN_TO   >= D.GASSAN_KAISHI_YMD(+)"
+    strsql = strsql & "   AND D.SAKUJO_FLG(+) = '0'"
+    strsql = strsql & " UNION "
+    strsql = strsql & "SELECT A.KOHZA_NO,"
+    strsql = strsql & "       C.NAME_J,"
+    strsql = strsql & "       A.SEIKYU_KIKAN_FROM,"
+    strsql = strsql & "       A.SEIKYU_KIKAN_TO,"
+    strsql = strsql & "       '1' AS HIZUKE_SHURUI,"    '上期
+    strsql = strsql & "       A.SEIKYU_KIKAN_ID,"
+    strsql = strsql & "       NVL(D.GASSAN_OYA_KOHZA_NO,' ') AS OYA_KOHZA_NO,"
+    strsql = strsql & "       A.NYUKIN_YMD_KBN "
+    strsql = strsql & "  FROM KYK_SEIKYU_KIKAN A, KYK_KOHZA_ZOKUSEI B, VW_DT001D C, KYK_GASSAN_KOHZA D"
+    strsql = strsql & " WHERE A.SAKUJO_FLG = '0'"
+    If strKozaNO <> "" Then
+'------------<Modify Start azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+'    strsql = strsql & "   AND A.KOHZA_NO = '" & strKozaNO & "'"
+    strsql = strsql & "   AND A.KOHZA_NO = '" & func_ChkQuoteshon(strKozaNO, "'") & "'"
+'------------<Modify End   azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+    End If
+    If strKikanFrom <> "" Then
+    strsql = strsql & "   AND A.SEIKYU_KIKAN_FROM = " & strKikanFrom
+    End If
+    If strKikanTo <> "" Then
+    strsql = strsql & "   AND A.SEIKYU_KIKAN_TO = " & strKikanToEdit
+    End If
+    If strSGinkoCd <> "" Then
+    strsql = strsql & "   AND A.KOHZA_NO IN (SELECT PRTCD"
+    strsql = strsql & "                        FROM VW_DT001D"
+'------------<Modify Start azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+    strsql = strsql & "                       WHERE SINTAKU_BANK_CD = '" & func_ChkQuoteshon(strSGinkoCd, "'") & "')"
+'    strsql = strsql & "                       WHERE SINTAKU_BANK_CD = '" & strSGinkoCd & "')"
+'------------<Modify End   azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+    End If
+    strsql = strsql & "   AND A.KOHZA_NO    = B.KOHZA_NO"
+    strsql = strsql & "   AND A.HEIZAN_DANMEN_KBN = '1'"
+    strsql = strsql & "   AND B.SEIKYUU_KAI = '2'"
+    strsql = strsql & "   AND A.KOHZA_NO    = C.PRTCD(+)"
+    strsql = strsql & "   AND A.KOHZA_NO    = D.GASSAN_KO_KOHZA_NO(+)"
+    strsql = strsql & "   AND A.SEIKYU_KIKAN_FROM <= NVL(D.GASSAN_SHURYOH_YMD(+),'99999999')"
+    strsql = strsql & "   AND A.SEIKYU_KIKAN_TO   >= D.GASSAN_KAISHI_YMD(+)"
+    strsql = strsql & "   AND D.SAKUJO_FLG(+) = '0'"
+    strsql = strsql & "     ) SUB1"
+    strsql = strsql & " WHERE"
+    strsql = strsql & "   NOT EXISTS ("
+    strsql = strsql & "     SELECT KAN.KOHZA_NO FROM     KYK_SEIKYU_KANRI KAN"
+    strsql = strsql & "     WHERE KAN.KOHZA_NO = SUB1.KOHZA_NO"
+    strsql = strsql & "     AND   KAN.SEIKYU_KIKAN_ID = SUB1.SEIKYU_KIKAN_ID"
+    strsql = strsql & "     AND  (KAN.HIZUKE_SHURUI = SUB1.HIZUKE_SHURUI OR"
+    strsql = strsql & "          (SUB1.HIZUKE_SHURUI = '1' AND KAN.HIZUKE_SHURUI = '3') OR"
+    strsql = strsql & "          (SUB1.HIZUKE_SHURUI = '2' AND KAN.HIZUKE_SHURUI = '3')"
+    strsql = strsql & "          ) "
+    strsql = strsql & "     AND   KAN.SAKUJO_FLG = '0'"
+    strsql = strsql & "   )"
+    strsql = strsql & " ORDER BY OYA_KOHZA_NO, KOHZA_NO"
+'------------<Modify End   azuma 2007/12/06 (PH4)> ★★★☆-----------------------
+    
+    
+    'データ取得
+    Call gclsdb.DoExequteSql(gcSELECT, strsql, vdata, lngCol, lngRow, strErrCode)
+
+    If Trim(strErrCode) <> "" Then
+        Exit Function
+    End If
+    
+    func_GetSeikyuKikanInfo = True
+    
+    Exit Function
+
+ErrHandler:
+    func_GetSeikyuKikanInfo = False
+
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_GetSeikyuKikanInfo", Err.Number, Err.Description)
+
+End Function
+'*************************************************************************
+'関数名　　：ワークシートに顧問料請求期間情報を設定する
+'
+'引　　数　：
+'           TargetSheets    O       処理対象ワークシート
+'           strSeikyuYmd    I       請求日
+'           vdata()         I       設定データ
+'           lngRow          I       設定データ件数
+'
+'戻り値　　：Boolean
+'
+'機能説明　：処理対象ワークシートにデータを設定する。
+'
+'更新履歴　：2006/08/15 SRA T.Sato    新規作成
+'            2006/09/29 SRA T.Sato    修正
+'               ・請求書期間Toは、画面に入力した内容を設定するように修正
+'               ・検索、自動データ、上下期区分の更新可能対応（更新前の上下期を保管）
+'更新履歴　：2007/04/12 SRA H.Anpo    PH3対応
+'
+'*************************************************************************
+Private Function func_SetSeikyuKikanInfo(ByRef TargetSheets As Object, _
+                                         ByVal strSeikyuYmd As String, _
+                                         ByVal vdata As Variant, _
+                                         ByVal lngRow As Long) As Boolean
+On Error GoTo ErrHandler
+
+    Dim lngCnt      As Long
+    Dim lngStartRow As Long
+    Dim strKikanTo  As String
+    
+    func_SetSeikyuKikanInfo = False
+    
+    
+''    Sheets(TEMPLATE_SHEETNAME).Rows(iSrcRow & ":" & iSrcRow).Copy
+    
+'------------<Modify Start azuma 2006/11/14 > -----------------------
+''    Sheets(MAIN_SHEETNAME).Rows(iInsRow & ":" & iInsRow).Insert Shift:=xlDown
+''    Application.CutCopyMode = False
+    
+'*** PH3対応 2007/04/12 Added By H.Anpo Start ***
+lngStartRow = fncKsCmnSearchNewRow(Sheets(MAIN_SHEETNAME))
+    
+    Sheets(TEMPLATE_SHEETNAME).Rows("5:5").Copy
+    Sheets(MAIN_SHEETNAME).Rows(lngStartRow & ":" & lngStartRow + lngRow - 1).Insert Shift:=xlDown
+'*** PH3対応 2007/04/12 Added By H.Anpo End ***
+    
+'***** UPDATE T.Sato 2006/09/29 *****
+    '請求書期間To（入力値）取得
+    strKikanTo = Trim(TargetSheets.Range("請求書期間To"))
+'***** UPDATE End *****
+    '明細行の追加
+    With TargetSheets
+        For lngCnt = 1 To lngRow
+
+            '明細行の追加
+            Call gsub_NewClick2(5, lngStartRow)
+            
+'            'カレント明細行番号取得
+'            lngStartRow = fncKsCmnSearchNewRow(TargetSheets) - 1
+
+            'データの設定
+            .Cells(lngStartRow, 3).Value = vdata(6, lngCnt - 1)     '合算口座番号
+            .Cells(lngStartRow, 6).Value = vdata(0, lngCnt - 1)     '口座番号
+            .Cells(lngStartRow, 9).Value = vdata(1, lngCnt - 1)     '口座名称
+            .Cells(lngStartRow, 15).Value = vdata(2, lngCnt - 1)    '請求書期間From
+'***** UPDATE T.Sato 2006/09/29 *****
+'            .Cells(lngStartRow, 18).Value = vData(3, lngCnt - 1)    '請求書期間To
+            .Cells(lngStartRow, 18).Value = strKikanTo              '請求書期間To
+            '<2007/01/24 ADD S IIDA> 請求期間TO格納
+            .Cells(lngStartRow, gcSEIKYU_KIKAN_TO_RC).Value = strKikanTo    ''請求書期間To
+            '<2007/01/24 ADD E IIDA>
+'***** UPDATE End *****
+            .Cells(lngStartRow, 21).Value = strSeikyuYmd            '請求日
+            .Cells(lngStartRow, 24).Value = func_SearchComboItem(vdata(4, lngCnt - 1), "上下期区分リスト", 1)  '上期下期区分
+'------------<Modify Start azuma 2006/11/10 > -----------------------
+            .Cells(lngStartRow, gcSEIKYU_KIKAN_ID_RC).Value = vdata(5, lngCnt - 1)  '請求期間ID
+            .Cells(lngStartRow, gcSHORI_KBN_RC).Value = 2                           '処理区分（自動）
+            .Cells(lngStartRow, gcHIZUKE_SHURUI_RC).Value = vdata(4, lngCnt - 1)    '上下期区分
+
+'            .Cells(lngStartRow, 37).Value = vData(5, lngCnt - 1)    '請求期間ID
+'            .Cells(lngStartRow, 38).Value = 2                       '処理区分（自動）
+''***** INSERT T.Sato 2006/09/29 *****
+'    '***** UPDATE T.Sato 2006/09/29 *****
+'            'バグ対応（上下期区分に請求期間IDを設定していた）
+'            '.Cells(lngStartRow, 39).Value = vData(5, lngCnt - 1)    '上下期区分
+'            .Cells(lngStartRow, 39).Value = vData(4, lngCnt - 1)    '上下期区分
+'    '***** UPDATE End *****
+''***** INSERT End *****
+'------------<Modify End   azuma 2006/11/10 > -----------------------
+'*** PH3対応 2007/04/12 Modified By H.Anpo Start ***
+'            '<2007/01/25 ADD S IIDA>　入金予定日取得
+'            .Cells(lngStartRow, 26).Value = fncGetNyuKnYoteibi(CLng(strSeikyuYMD), IIf(vdata(7, lngCnt - 1) = "", 0, vdata(7, lngCnt - 1))) '入金予定日
+'            '<2007/01/25 ADD E IIDA>
+            .Cells(lngStartRow, 26).Value = fncGetNyuKnYoteibi(CLng(strSeikyuYmd), IIf(vdata(7, lngCnt - 1) = "", 0, vdata(7, lngCnt - 1)), CLng(vdata(2, lngCnt - 1)), CLng(strKikanTo)) '入金予定日
+'*** PH3対応 2007/04/12 Modified By H.Anpo Start ***
+        
+            lngStartRow = lngStartRow + 1
+        
+        Next lngCnt
+    End With
+    
+    func_SetSeikyuKikanInfo = True
+
+    Exit Function
+
+ErrHandler:
+    func_SetSeikyuKikanInfo = False
+
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_SetSeikyuKikanInfo", Err.Number, Err.Description)
+
+End Function
+
+'*************************************************************************
+'関数名　　：コンボ表示検索
+'
+'引　　数　：
+'           strCode     I       コード(DBなどから取得したコード)
+'           strName     I       サーチするリスト名
+'           intCut      I       コード桁数
+'
+'戻り値　　：コンボ表示文字列
+'
+'機能説明　：コード値を入力するとその文字列を返す
+'
+'更新履歴　：2006/08/15 SRA T.Sato    新規作成
+'
+'*************************************************************************
+Private Function func_SearchComboItem(ByVal strCode As String, _
+                                      ByVal strName As String, _
+                                      ByVal intLen As Integer) As String
+
+    Dim c       As Variant
+    
+    func_SearchComboItem = ""
+    
+    For Each c In Worksheets(DATA_SHEETNAME).Range(strName)
+        
+        If Trim(c.Value) <> "" Then
+            If strCode = Left(c.Value, intLen) Then
+                func_SearchComboItem = c.Value
+                Exit For
+            End If
+        End If
+    
+    Next c
+    
+    Set c = Nothing
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：請求日の存在チェック処理
+'
+'引　　数　：
+'           strKozaNo           I       口座番号
+'           strSeikyuYmd        I       請求日
+'
+'戻り値　　：Boolean
+'
+'機能説明　：請求日の存在チェック
+'
+'更新履歴　：2007/04/25 SRA T.Ichikawa  新規作成
+'更新履歴　：2008/01/23 SRA Y.Azuma     変更     (PH4)特殊文字バグ対応
+'
+'*************************************************************************
+Public Function gfunc_SeikyuYmdExist(ByVal strKozaNO As String, _
+                                  ByVal strSeikyuYmd As String) As Boolean
+
+On Error GoTo ErrHandler
+    
+    Dim strsql      As String
+    Dim vdata()     As Variant
+    Dim lngCol      As Long
+    Dim lngRow      As Long
+
+    gfunc_SeikyuYmdExist = False
+
+    strsql = ""
+    strsql = strsql & " SELECT"
+    strsql = strsql & "     * "
+    strsql = strsql & " FROM"
+    strsql = strsql & "     KYK_SEIKYU_KANRI"
+    strsql = strsql & " WHERE"
+'------------<Modify Start azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+'    strsql = strsql & "     KOHZA_NO   = '" & strKozaNO & "'"
+    strsql = strsql & "     KOHZA_NO   = '" & func_ChkQuoteshon(strKozaNO, "'") & "'"
+'------------<Modify End   azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+    strsql = strsql & " AND SEIKYU_YMD = " & strSeikyuYmd
+    strsql = strsql & " AND SAKUJO_FLG = '0'"
+
+    'データ取得
+    Call gclsdb.DoExequteSql(gcSELECT, strsql, vdata, lngCol, lngRow)
+
+    Erase vdata
+    
+    'データありの場合、エラー
+    If lngRow > 0 Then
+        Exit Function
+    End If
+
+    gfunc_SeikyuYmdExist = True
+    
+    Exit Function
+
+ErrHandler:
+    gfunc_SeikyuYmdExist = False
+    Erase vdata
+
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gfunc_SeikyuYmdExist", Err.Number, Err.Description)
+
+End Function
+

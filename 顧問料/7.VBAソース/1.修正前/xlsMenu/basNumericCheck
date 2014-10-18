@@ -1,0 +1,123 @@
+Attribute VB_Name = "basNumericCheck"
+Option Explicit
+'*************************************************************************
+'
+'プロジェクト名：国内顧問料計算システム・口座属性登録
+'
+'オブジェクト名：basNumericCheck
+'
+'機能概要　：共通関数
+'
+'更新履歴　：2008/01/16 SRA Y.Azuma     新規作成
+'
+'*************************************************************************
+Const MODULE_NAME = "basNumericCheck"
+
+'*************************************************************************
+'関数名　　：数値チェック処理
+'
+'引　　数　：
+'           strNumChar      I       チェック対象文字
+'           strJogai        I       チェック対象除外文字(カンマ区切りの文字)
+'
+'戻り値　　：Boolean
+'
+'機能説明　：チェック対象文字列が数値のみかをチェックする。
+'            チェック除外文字に設定された文字は、存在しても
+'            エラーとしない。
+' 例)gkyk_IsNumeric(strNum,"-+,")　※"-+,"の3文字を除外したい場合
+'
+'更新履歴　：2008/01/16 SRA Y.Azuma     新規作成
+'更新履歴　：2008/01/21 SRA Y.Azuma     変更     マイナス金額対応
+'更新履歴　：2008/01/24 SRA Y.Azuma     変更     "1E9"入力対応
+'
+'*************************************************************************
+Public Function gkyk_IsNumeric(ByVal strNumChar As String, Optional strJogai As String = "") As Boolean
+
+    Dim vChkChar    As Variant          '判定文字配列
+    Dim dicJogai    As Variant          '除外文字ディクショナリ
+    Dim lngChrCnt   As Long
+    Dim lngDic      As Long
+    Dim lngCnt      As Long
+    Dim strBuff     As String
+    Dim lngChar     As Long
+    Dim strAbsChar  As String
+    
+    strBuff = ""
+    gkyk_IsNumeric = False
+    
+    'ディクショナリオブジェクト生成
+    Set dicJogai = CreateObject("Scripting.Dictionary")
+    dicJogai.RemoveAll
+    
+    'ディクショナリの作成
+    For lngDic = 0 To Len(strJogai) - 1
+        strBuff = CStr(Mid(strJogai, lngDic + 1, 1))
+        dicJogai.Add strBuff, strBuff
+    Next lngDic
+    
+    '判定文字の設定
+    vChkChar = Array("&", "'", "(", ")", "-", "\", ",", "+")
+    
+    
+    '前提チェック(NULLの場合エラー)
+    If Trim(strNumChar) = "" Then
+        GoTo Exit_Process
+    End If
+    
+    '①VBの標準関数で判定
+    If IsNumeric(strNumChar) = False Then
+        '数値以外
+        GoTo Exit_Process
+    End If
+    
+    '②チェック文字で判定
+    For lngCnt = 0 To UBound(vChkChar)
+        If dicJogai.exists(vChkChar(lngCnt)) = False Then
+        '除外に存在しない(チェックを行う)
+        
+            'マイナス記号が後ろにある場合のみエラーとする。
+            If CStr(vChkChar(lngCnt)) = "-" Then
+                If CStr(vChkChar(lngCnt)) = CStr(Right(strNumChar, 1)) Then
+                    'チェック文字が見つかった場合数値以外
+                    GoTo Exit_Process
+                Else
+                '処理なし(エラーとしない)
+                End If
+            Else
+            'マイナス記号以外のチェック
+                If InStr(1, strNumChar, CStr(vChkChar(lngCnt))) <> 0 Then
+                'チェック文字が見つかった場合数値以外
+                    GoTo Exit_Process
+                Else
+                '見つからなかった
+                    '処理なし
+                End If
+            End If
+        Else
+        '除外に存在する。
+            '処理なし
+        End If
+    Next lngCnt
+
+    '③１文字毎チェック
+    If Mid(strNumChar, 1, 1) = "-" Then
+        strAbsChar = Mid(strNumChar, 2, Len(strNumChar) - 1)
+    Else
+        strAbsChar = strNumChar
+    End If
+    '一文字毎にチェック
+    For lngChar = 1 To Len(strAbsChar)
+        If Not Mid(strAbsChar, lngChar, 1) Like "[0-9,.]" Then
+            GoTo Exit_Process
+        End If
+    Next lngChar
+
+    gkyk_IsNumeric = True
+    
+Exit_Process:
+'終了時処理
+    Erase vChkChar
+    Set dicJogai = Nothing
+    
+End Function

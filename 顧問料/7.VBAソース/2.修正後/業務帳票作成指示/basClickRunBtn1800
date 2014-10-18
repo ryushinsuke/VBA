@@ -1,0 +1,837 @@
+Attribute VB_Name = "basClickRunBtn1800"
+Option Explicit
+
+'*************************************************************************
+'プロジェクト名：新契約管理システム・業務帳票作成指示
+'オブジェクト名：basClickRunBtn1800
+'機能概要　：メイン画面
+'更新履歴　：2007/10/11 SRA 東          新規作成
+'更新履歴　：2009/05/19 SRA 東　　　    変更   候補テーマNo.54(時価未登録一覧のチェック対象追加)対応
+'
+'*************************************************************************
+
+Const MODULE_NAME = "basClickRunBtn1800"
+
+Private Const cSTART_RAW = 9
+Private Const cBaseFile = gc帳票Base8
+Private Const cPreFName = gc帳票名8
+
+'時価構造体
+Private Type typJika
+    JikaKijunbi         As String   '時価基準日
+    JikaGaku            As String   '時価額
+    JikaKisosuchiKbn    As String   '時価PX区分(基礎数値種類)
+End Type
+
+'口座資産構造体
+Private Type typKohzaShisan
+    KohzaNo             As String   '口座番号
+    KokyakuName         As String   '顧客名
+    ShisanBunrui        As String   '資産分類
+    ShisanCode          As String   '資産コード
+    ShisanName          As String   '資産名
+    RateTekiyohFrom     As String   '料率適用期間FROM
+    RateTekiyohTo       As String   '料率適用期間TO
+    KisosuchiKbn        As String   '基礎数値種類
+    KisosuchiName       As String   '基礎数値種類名
+    KeisanHohhoh        As String   '基礎数値計算方法
+    kisho_kimatsu_kbn   As String   '期初期末区分   '<----------- Modify azuma 2007/11/21 (PH3.5)★★★☆
+    Jika()              As typJika  '時価()
+    PrintFlg            As Boolean  '出力フラグ
+End Type
+
+
+'*************************************************************************
+'関数名　　：時価未登録一覧表(帳票作成)
+'引　　数　：
+'           objTarget        I           対象のシート
+'戻り値　　：
+'機能説明　：
+'更新履歴　：2007/10/11 SRA             新規作成
+'
+'*************************************************************************
+Public Function fncClickRunBtn1800(ByRef objTarget As Object) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncClickRunBtn1800"
+
+On Error GoTo ErrSection
+
+    Dim strDay          As String
+    Dim strOutFName     As String
+    Dim strData()       As typKohzaShisan
+    
+    Call subBeginProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    fncClickRunBtn1800 = False
+   
+    With objTarget
+
+        ' 作成選択の場合
+        If .chkMake.Value = True Then
+        
+            strDay = Trim(.Range("基準年月").Value)
+
+            ' データ取得
+            If fncGetDBData1800(strDay, strData()) = False Then
+                GoTo RtnErrSection
+            End If
+        
+            ' 帳票ファイル取得
+            If fncGetFile1800(strDay, strOutFName) = False Then
+                GoTo RtnErrSection
+            End If
+        
+            ' フォルダをつける。
+            strOutFName = .Range("保存フォルダ").Value & "\" & strOutFName
+            
+            ' ファイルコピー
+            If fncCopyBook(cBaseFile, strOutFName) = False Then
+                GoTo RtnErrSection
+            End If
+            
+            ' ファイル作成
+            If fncMakeBook1800(strOutFName, strDay, strData()) = False Then
+                ' ファイル削除
+                Call fncDeleteFile(strOutFName)
+                
+                GoTo RtnErrSection
+            End If
+        End If
+    
+        ' 印刷選択の場合
+        If .chkPrint.Value = True Then
+            ' ファイル印刷
+            If fncPrintBook(cPreFName, .Range("保存フォルダ").Value) = False Then
+                GoTo RtnErrSection
+            End If
+        End If
+    
+    End With
+   
+    fncClickRunBtn1800 = True
+    Erase strData
+    
+    Call subEndProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                     *
+'*******************************************************
+ErrSection:
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+'*******************************************************
+'* リターンエラーセクション                              *
+'*******************************************************
+RtnErrSection:
+                
+    fncClickRunBtn1800 = False
+    Erase strData
+    
+End Function
+
+'*************************************************************************
+'関数名　　：時価未登録一覧表(帳票ファイル取得)
+'引　　数　：
+'           strDay             I           基準日
+'           strOutFName        O           出力ファイル名
+'戻り値　　：処理結果
+'機能説明　：時価未登録一覧表を出力するファイルを取得する。
+'更新履歴　：2007/10/11 SRA             新規作成
+'
+'*************************************************************************
+Public Function fncGetFile1800(ByVal strDay As String, _
+                               ByRef strOutFName As String) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncGetFile1800"
+
+On Error GoTo ErrSection
+
+    Dim strDate         As String
+    Dim strTime         As String
+
+    strOutFName = ""
+    
+    fncGetFile1800 = False
+    
+    Call gfunc_GetSvDateTime(strDate, strTime)
+       
+    ' 出力帳票ファイル
+    strOutFName = cPreFName
+    strOutFName = strOutFName & "_" & strDate
+    strOutFName = strOutFName & "_" & strTime
+    strOutFName = strOutFName & "-(" & strDay
+    strOutFName = strOutFName & ")"
+    strOutFName = strOutFName & ".xls"
+    
+    fncGetFile1800 = True
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncGetFile1800 = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+End Function
+
+'*************************************************************************
+'関数名　　：時価未登録一覧表(帳票データ取得)
+'引　　数　：
+'           strDay             I           基準年月(YYYYMM)
+'           strData()          O           取得データ
+'戻り値　　：処理結果
+'機能説明　：時価未登録一覧表のデータを取得する。
+'更新履歴　：2007/10/11 SRA Y.Azuma    新規     (PH3)時価未登録一覧表追加
+'更新履歴　：2009/05/27 SRA Y.Azuma    変更   候補テーマNo.54(時価未登録一覧のチェック対象追加)対応
+'
+'*************************************************************************
+Public Function fncGetDBData1800(ByVal strDay As String, ByRef strData() As typKohzaShisan) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncGetDBData1800"
+
+On Error GoTo ErrSection
+
+    Dim strSql      As String
+    Dim vData()     As Variant
+    Dim lngCol      As Long
+    Dim lngRow      As Long
+    Dim lngRowCnt   As Long
+    Dim lngColCnt   As Long
+    Dim blnRet      As Boolean
+    Dim strLastDay  As String   '基準月末日
+    
+    fncGetDBData1800 = False
+    
+    blnRet = False
+    
+    '基準年月の月末日取得
+    strSql = "SELECT TO_CHAR(LAST_DAY(TO_DATE('" & strDay & "','YYYYMM')),'YYYYMMDD') FROM DUAL"
+    'データ取得
+    Call gclsDB.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow)
+    
+    If lngRow > 0 Then
+        strLastDay = CStr(vData(0, 0))
+    Else
+        ' 該当データが存在しません。
+        Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3001, cPreFName, "")
+        Erase vData
+        Exit Function
+    End If
+    
+    Erase vData
+
+    '①口座・資産一覧取得
+    blnRet = fncGetKohzaSisan(strLastDay, strData())
+    
+    '②ストアド(SP_JIKA_SHUTOKU)の呼出
+    If blnRet Then
+        blnRet = fncGetKohzaSisanJika(strLastDay, strData())
+'------------<Modify Start azuma 2009/05/27 > 候補テーマNo.54対応---------------
+        If blnRet = False Then
+            Exit Function
+        End If
+'------------<Modify End   azuma 2009/05/27 > 候補テーマNo.54対応---------------
+    Else
+        Exit Function
+    End If
+
+    '③時価未登録の確認
+    If blnRet Then
+        blnRet = fncCheckKohzaSisanJika(strDay, strData())
+'------------<Modify Start azuma 2009/05/27 > 候補テーマNo.54対応---------------
+        If blnRet = False Then
+            Exit Function
+        End If
+'------------<Modify End   azuma 2009/05/27 > 候補テーマNo.54対応---------------
+    Else
+        Exit Function
+    End If
+
+    fncGetDBData1800 = True
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncGetDBData1800 = False
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- エラーログ出力 End  ---------------------------------
+
+    Erase vData
+    Erase strData
+   
+End Function
+
+
+'*************************************************************************
+'関数名　　：口座・資産一覧取得
+'引　　数　：
+'           strLastDay         I           基準年月末日(YYYYMMDD)
+'           strData()          O           取得データ
+'戻り値　　：処理結果
+'機能説明　：時価未登録一覧表のチェック対象口座・資産データを取得する。
+'更新履歴　：2007/10/11 SRA Y.Azuma    新規     (PH3)時価未登録一覧表追加
+'更新履歴　：2007/11/21 SRA Y.Azuma    変更     (PH3.5)PH3.5機能追加
+'更新履歴　：2009/05/19 SRA Y.Azuma    変更   　候補テーマNo.54(時価未登録一覧のチェック対象追加)対応
+'
+'*************************************************************************
+Public Function fncGetKohzaSisan(ByVal strLastDay As String, ByRef strData() As typKohzaShisan) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncGetKohzaSisan"
+
+On Error GoTo ErrSection
+
+    Dim strSql      As String
+    Dim vData()     As Variant
+    Dim lngCol      As Long
+    Dim lngRow      As Long
+    Dim lngRowCnt   As Long
+    Dim lngColCnt   As Long
+    
+    fncGetKohzaSisan = False
+    
+
+'*******************************************************
+'* SQL文作成                                           *
+'*******************************************************
+
+    strSql = ""
+    strSql = strSql & " SELECT S.KOHZA_NO"
+    strSql = strSql & "       ,V.NAME_RJ"
+    strSql = strSql & "       ,R.SHISAN_BUNRUI"
+    strSql = strSql & "       ,R.SHISAN_CODE"
+    strSql = strSql & "       ,N.SHISAN_NAME"
+    strSql = strSql & "       ,R.RATE_TEKIYOH_KIKAN_FROM"
+    strSql = strSql & "       ,R.RATE_TEKIYOH_KIKAN_TO"
+    strSql = strSql & "       ,R.PX_SHINTAKU_KBN"
+    strSql = strSql & "       ,C.VALUE_NAME"
+    strSql = strSql & "       ,R.KISO_SUCHI_KEISAN_HOHHOH"
+'------------<Modify Start azuma 2007/06/28 (PH3)> -----------------------
+    strSql = strSql & "       ,KISHO_KIMATSU_KBN "      '期初期末区分
+'------------<Modify End   azuma 2007/06/28 (PH3)> -----------------------
+    strSql = strSql & "   FROM KYK_SEIKYU_KIKAN       S"
+    strSql = strSql & "       ,KYK_RATE_TEKIYOH_KIKAN R"
+    strSql = strSql & "       ,VW_DT001D              V"
+    strSql = strSql & "       ,KYK_SHISAN             N"
+    strSql = strSql & "       ,KYK_CODE_VALUE         C"
+    strSql = strSql & "  WHERE S.KOHZA_NO        = R.KOHZA_NO"
+    strSql = strSql & "    AND S.SEIKYU_KIKAN_ID = R.SEIKYU_KIKAN_ID"
+    strSql = strSql & "    AND S.SAKUJO_FLG      = '0'"
+    strSql = strSql & "    AND R.SAKUJO_FLG      = '0'"
+    strSql = strSql & "    AND R.SHISAN_BUNRUI   = '0'"
+    strSql = strSql & "    AND R.KEISAN_HOHHOH   = '3'"
+'------------<Modify Start azuma 2009/05/19 > 候補テーマNo.54対応---------------
+    strSql = strSql & "    AND (S.SEIKYU_KIKAN_FROM <= '" & strLastDay & "' AND"
+    strSql = strSql & "         S.SEIKYU_KIKAN_TO   >= '" & strLastDay & "')"
+    strSql = strSql & "    AND R.RATE_TEKIYOH_KIKAN_FROM <= '" & strLastDay & "'"
+'    strSql = strSql & "    AND (R.RATE_TEKIYOH_KIKAN_FROM <= '" & strLastDay & "' AND"
+'    strSql = strSql & "         R.RATE_TEKIYOH_KIKAN_TO   >= '" & strLastDay & "')"
+'------------<Modify End   azuma 2009/05/19 > 候補テーマNo.54対応---------------
+    strSql = strSql & "    AND S.KOHZA_NO        = V.PRTCD"
+    strSql = strSql & "    AND R.SHISAN_BUNRUI   = N.SHISAN_BUNRUI"
+    strSql = strSql & "    AND R.SHISAN_CODE     = N.SHISAN_CODE"
+    strSql = strSql & "    AND C.CODE_NO         = '6'"
+    strSql = strSql & "    AND C.CODE_VALUE      = R.PX_SHINTAKU_KBN"
+'    strSql = strSql & "    AND ROWNUM < 11 "    'for debug
+    strSql = strSql & "  ORDER BY S.KOHZA_NO"
+    strSql = strSql & "          ,R.RATE_TEKIYOH_KIKAN_ID"
+    strSql = strSql & "          ,R.SHISAN_BUNRUI"
+    strSql = strSql & "          ,R.SHISAN_CODE"
+
+    'データ取得
+    Call gclsDB.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow)
+    
+    If lngRow > 0 Then
+        ' 動的配列変数に対するメモリ領域の再割り当てを行います
+        ReDim strData(lngRow - 1)
+        
+        '取得データを配列に設定
+        For lngRowCnt = 0 To lngRow - 1
+            With strData(lngRowCnt)
+                .KohzaNo = CStr(vData(0, lngRowCnt))            '口座番号
+                .KokyakuName = CStr(vData(1, lngRowCnt))        '顧客名
+                .ShisanBunrui = CStr(vData(2, lngRowCnt))       '資産分類
+                .ShisanCode = CStr(vData(3, lngRowCnt))         '資産コード
+                .ShisanName = CStr(vData(4, lngRowCnt))         '資産名
+                .RateTekiyohFrom = CStr(vData(5, lngRowCnt))    '料率適用期間FROM
+                .RateTekiyohTo = CStr(vData(6, lngRowCnt))      '料率適用期間TO
+                .KisosuchiKbn = CStr(vData(7, lngRowCnt))       '基礎数値種類
+                .KisosuchiName = CStr(vData(8, lngRowCnt))      '基礎数値種類名
+                .KeisanHohhoh = CStr(vData(9, lngRowCnt))       '基礎数値計算方法
+'------------<Modify Start azuma 2007/11/21 (PH3.5)> ★★★☆-----------------------
+                .kisho_kimatsu_kbn = CStr(vData(10, lngRowCnt)) '期初期末区分
+'------------<Modify End   azuma 2007/11/21 (PH3.5)> ★★★☆-----------------------
+                .PrintFlg = False                               '出力フラグ
+            End With
+        Next lngRowCnt
+        fncGetKohzaSisan = True
+    Else
+        ' 該当データが存在しません。
+        Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3001, cPreFName, "")
+    End If
+
+    Erase vData
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncGetKohzaSisan = False
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- エラーログ出力 End  ---------------------------------
+
+    Erase vData
+   
+End Function
+
+'*************************************************************************
+'関数名　　：口座・資産時価取得
+'引　　数　：
+'           strLastDay         I           基準年月末日(YYYYMM)
+'           strData()          O           取得データ
+'戻り値　　：処理結果
+'機能説明　：チェック対象口座・資産の時価をストアド(SP_JIKA_SHUTOKU)で取得する。
+'更新履歴　：2007/10/11 SRA Y.Azuma    新規     (PH3)時価未登録一覧表追加
+'更新履歴　：2007/11/21 SRA Y.Azuma    変更     (PH3.5)PH3.5機能追加
+'更新履歴　：2009/05/19 SRA Y.Azuma    変更     候補テーマNo.54(時価未登録一覧のチェック対象追加)対応
+'
+'*************************************************************************
+Public Function fncGetKohzaSisanJika(ByVal strLastDay As String, ByRef strData() As typKohzaShisan) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncGetKohzaSisanJika"
+
+On Error GoTo ErrSection
+
+    Dim strJkijyunbi    As String
+    Dim strJjikagaku    As String
+    Dim strJpxSinKbn    As String
+    Dim KijyunbiAry()   As String
+    Dim JikagakuAry()   As String
+    Dim PxSinKbnAry()   As String
+    Dim lngDimCnt       As Long
+    Dim lngJikaCnt      As Long
+
+    'プロシジャーCALL用
+    Dim objCmd As ADODB.Command
+    Dim objPrm As ADODB.Parameter
+
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+
+    fncGetKohzaSisanJika = False
+
+    '時価取得プロシジャー(ストアドJAVA)をCALL
+    Set objCmd = New ADODB.Command
+        
+    With objCmd
+        'コマンドの準備
+        .ActiveConnection = mainmenu.cnAdo
+        .CommandType = adCmdStoredProc
+        .CommandText = "SP_JIKA_SHUTOKU" 'SP名
+            
+        For lngDimCnt = 0 To UBound(strData)
+            '初期化
+            strJkijyunbi = ""
+            strJjikagaku = ""
+            strJpxSinKbn = ""
+            Erase KijyunbiAry
+            Erase JikagakuAry
+            Erase PxSinKbnAry
+            
+            'パラメータの設定
+
+            '口座番号
+            Set objPrm = .CreateParameter("ps_kohza_no", adVarChar, adParamInput, 7, strData(lngDimCnt).KohzaNo)
+            .Parameters.Append objPrm
+            '基準日
+'------------<Modify Start azuma 2009/05/19 > 候補テーマNo.54対応---------------
+            If strData(lngDimCnt).RateTekiyohTo < strLastDay Then
+                Set objPrm = .CreateParameter("pn_kijyunbi", adInteger, adParamInput, , strData(lngDimCnt).RateTekiyohTo)
+            Else
+                Set objPrm = .CreateParameter("pn_kijyunbi", adInteger, adParamInput, , strLastDay)
+            End If
+'            Set objPrm = .CreateParameter("pn_kijyunbi", adInteger, adParamInput, , CLng(strLastDay))
+'------------<Modify End   azuma 2009/05/19 > 候補テーマNo.54対応---------------
+            .Parameters.Append objPrm
+            '資産分類
+            Set objPrm = .CreateParameter("ps_shisan_bunrui", adVarChar, adParamInput, 1, strData(lngDimCnt).ShisanBunrui)
+            .Parameters.Append objPrm
+            '資産コード
+            Set objPrm = .CreateParameter("ps_shisan_code", adVarChar, adParamInput, 4, strData(lngDimCnt).ShisanCode)
+            .Parameters.Append objPrm
+            '料率適用期間FROM
+            Set objPrm = .CreateParameter("pn_rate_kikan_from", adInteger, adParamInput, , strData(lngDimCnt).RateTekiyohFrom)
+            .Parameters.Append objPrm
+            '料率適用期間TO
+'------------<Modify Start azuma 2009/05/19 > 候補テーマNo.54対応---------------
+            '料率適用期間TOが基準日より小さい場合、料率適用期間TOそれ以外基準日を設定する。
+            If strData(lngDimCnt).RateTekiyohTo < strLastDay Then
+                Set objPrm = .CreateParameter("pn_rate_kikan_to", adInteger, adParamInput, , strData(lngDimCnt).RateTekiyohTo)
+            Else
+                Set objPrm = .CreateParameter("pn_rate_kikan_to", adInteger, adParamInput, , strLastDay)
+            End If
+'            Set objPrm = .CreateParameter("pn_rate_kikan_to", adInteger, adParamInput, , strData(lngDimCnt).RateTekiyohTo)
+'------------<Modify End   azuma 2009/05/19 > 候補テーマNo.54対応---------------
+            .Parameters.Append objPrm
+            'PX信託区分
+            Set objPrm = .CreateParameter("ps_px_sin_kbn", adVarChar, adParamInput, 1, strData(lngDimCnt).KisosuchiKbn)
+            .Parameters.Append objPrm
+            '基礎数値計算方法
+            Set objPrm = .CreateParameter("ps_ks_keisan_hohhoh", adVarChar, adParamInput, 1, strData(lngDimCnt).KeisanHohhoh)
+            .Parameters.Append objPrm
+    
+'------------<Modify Start azuma 2007/11/21 (PH3.5)> ★★★☆-----------------------
+        '期初期末時価
+            Set objPrm = .CreateParameter("ps_kisho_kimatsu_kbn", adVarChar, adParamInput, 1, strData(lngDimCnt).kisho_kimatsu_kbn)
+            .Parameters.Append objPrm
+'------------<Modify End   azuma 2007/11/21 (PH3.5)> ★★★☆-----------------------
+    
+            '時価基準日
+            Set objPrm = .CreateParameter("ps_jika_kijyunbi", adVarChar, adParamOutput, 8192)
+            .Parameters.Append objPrm
+            '時価時価額
+            Set objPrm = .CreateParameter("ps_jika_jikagaku", adVarChar, adParamOutput, 8192)
+            .Parameters.Append objPrm
+            '時価PX信託区分
+            Set objPrm = .CreateParameter("ps_jika_px_sin_kbn", adVarChar, adParamOutput, 8192)
+            .Parameters.Append objPrm
+            'エラーステータス
+            Set objPrm = .CreateParameter("pn_err_status", adInteger, adParamOutput)
+            .Parameters.Append objPrm
+            'エラーメッセージ
+            Set objPrm = .CreateParameter("ps_err_message", adVarChar, adParamOutput, 1024)
+            .Parameters.Append objPrm
+
+            '実行
+            .Execute
+            
+            If .Parameters("pn_err_status").Value = 0 Then
+
+                'カンマ文字列を配列に変換
+                '基準日
+                If IsNull(.Parameters("ps_jika_kijyunbi").Value) Then
+                    '該当データ無し
+                    fncGetKohzaSisanJika = False
+'------------<Modify Start azuma 2009/05/27 > 候補テーマNo.54対応---------------
+                    ' 該当データが存在しません。
+                    Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3001, cPreFName, "(ps_jika_kijyunbi)")
+'------------<Modify End   azuma 2009/05/27 > 候補テーマNo.54対応---------------
+                    Exit Function
+                End If
+                strJkijyunbi = .Parameters("ps_jika_kijyunbi").Value
+                KijyunbiAry = Split(strJkijyunbi, ",")
+                
+                '時価額
+                If Not IsNull(.Parameters("ps_jika_jikagaku").Value) Then
+                    strJjikagaku = .Parameters("ps_jika_jikagaku").Value
+'------------<Modify Start azuma 2009/05/27 > 候補テーマNo.54対応---------------
+                Else
+                    ' 該当データが存在しません。
+                    Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3001, cPreFName, "(ps_jika_jikagaku)")
+                    Exit Function
+'------------<Modify End   azuma 2009/05/27 > 候補テーマNo.54対応---------------
+                End If
+                JikagakuAry = Split(strJjikagaku, ",")
+                
+                'PX/信託区分
+                If Not IsNull(.Parameters("ps_jika_px_sin_kbn").Value) Then
+                    strJpxSinKbn = .Parameters("ps_jika_px_sin_kbn").Value
+'------------<Modify Start azuma 2009/05/27 > 候補テーマNo.54対応---------------
+                Else
+                    ' 該当データが存在しません。
+                    Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3001, cPreFName, "(ps_jika_px_sin_kbn)")
+                    Exit Function
+'------------<Modify End   azuma 2009/05/27 > 候補テーマNo.54対応---------------
+                End If
+                PxSinKbnAry = Split(strJpxSinKbn, ",")
+                
+                '構造体の時価配列に格納する。
+                For lngJikaCnt = 0 To UBound(KijyunbiAry)
+                    ReDim Preserve strData(lngDimCnt).Jika(lngJikaCnt)
+                    With strData(lngDimCnt).Jika(lngJikaCnt)
+                        .JikaKijunbi = KijyunbiAry(lngJikaCnt)
+                        .JikaGaku = JikagakuAry(lngJikaCnt)
+                        .JikaKisosuchiKbn = PxSinKbnAry(lngJikaCnt)
+                    End With
+                Next lngJikaCnt
+        
+            Else
+                '3026 JAVAプロシジャーでエラーが発生しました。
+                Call gfunc_ErrorMsg(gcMsgKbn_3, 3026, "時価情報", IIf(IsNull(.Parameters("ps_err_message").Value), "", .Parameters("ps_err_message").Value), True)
+                fncGetKohzaSisanJika = False
+                Exit For
+            End If
+            
+            'パラメーターの削除
+            Do
+                .Parameters.Delete .Parameters.Count - 1
+            Loop Until .Parameters.Count = 0
+        
+            DoEvents
+        Next lngDimCnt
+    End With
+
+    
+    '破棄
+    Erase KijyunbiAry
+    Erase JikagakuAry
+    Erase PxSinKbnAry
+    Set objCmd = Nothing
+    Set objPrm = Nothing
+    
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+
+    fncGetKohzaSisanJika = True
+
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncGetKohzaSisanJika = False
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- エラーログ出力 End  ---------------------------------
+    
+    Erase KijyunbiAry
+    Erase JikagakuAry
+    Erase PxSinKbnAry
+    Set objCmd = Nothing
+    Set objPrm = Nothing
+
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：時価未登録チェック処理
+'引　　数　：
+'           strDay             I           基準年月(YYYYMM)
+'           strData()          O           取得データ
+'戻り値　　：処理結果
+'機能説明　：基準年月と一致する時価が未設定の場合構造体の出力フラグにTrueを設定する。
+'更新履歴　：2007/10/11 SRA Y.Azuma    新規     (PH3)時価未登録一覧表追加
+'更新履歴　：2009/05/19 SRA Y.Azuma    変更   　候補テーマNo.54(時価未登録一覧のチェック対象追加)対応
+'
+'*************************************************************************
+Public Function fncCheckKohzaSisanJika(ByVal strDay As String, ByRef strData() As typKohzaShisan) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncCheckKohzaSisanJika"
+
+On Error GoTo ErrSection
+
+    Dim lngDimCnt       As Long
+    Dim lngJikaCnt      As Long
+    
+    fncCheckKohzaSisanJika = False
+    
+    For lngDimCnt = 0 To UBound(strData)
+        With strData(lngDimCnt)
+            
+            For lngJikaCnt = 0 To UBound(.Jika)
+
+'------------<Modify Start azuma 2009/05/19 > 候補テーマNo.54対応---------------
+                '時価額が未登録の場合、出力フラグにTrueを設定
+                If Trim(.Jika(lngJikaCnt).JikaGaku) = vbNullString Then
+                    .PrintFlg = True
+                    Exit For
+                Else
+                    '処理なし(続行)
+                End If
+''                '時価基準日と基準年月が一致する時価を求める
+''                If CStr(Mid(.Jika(lngJikaCnt).JikaKijunbi, 1, 6)) = strDay Then
+''
+''                    '時価額が未登録の場合、出力フラグにTrueを設定
+''                    If Trim(.Jika(lngJikaCnt).JikaGaku) = vbNullString Then
+''                        .PrintFlg = True
+''                    End If
+''                    Exit For
+''
+''                End If
+'------------<Modify End   azuma 2009/05/19 > 候補テーマNo.54対応---------------
+            
+            Next lngJikaCnt
+        
+        End With
+    Next lngDimCnt
+    
+    
+    fncCheckKohzaSisanJika = True
+
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncCheckKohzaSisanJika = False
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- エラーログ出力 End  ---------------------------------
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：時価未登録一覧表(帳票作成)
+'引　　数　：
+'           strOutFName        I           出力ファイル名
+'           strDay             I           基準日月
+'           strData()          I           出力データ
+'戻り値　　：処理結果
+'機能説明　：時価未登録一覧表の作成を取得する。
+'更新履歴　：2007/10/11 SRA Y.Azuma    新規     (PH3)時価未登録一覧表追加
+'
+'*************************************************************************
+Public Function fncMakeBook1800(ByVal strOutFName As String, ByVal strDay As String, _
+                                ByRef strData() As typKohzaShisan) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncMakeBook1800"
+
+On Error GoTo ErrSection
+
+    Dim strTitleDate    As String
+    Dim lngRowCnt       As Long
+    Dim strSrcRange     As String
+    Dim strDesRange     As String
+    Dim lngDataMax          As Long
+    Dim lngDataCnt      As Long
+    
+    Call subBeginProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    lngRowCnt = 0
+    
+    ' ファイルOpen
+    Workbooks.Open Filename:=strOutFName
+    
+    lngDataMax = UBound(strData)
+    fncMakeBook1800 = False
+    
+    strSrcRange = "A" & cSTART_RAW & ":I" & cSTART_RAW
+    
+    strTitleDate = "'" & Mid(strDay, 1, 4) & "/" & Mid(strDay, 5, 2)
+    
+    With Workbooks(Workbooks.Count).Worksheets(1)
+        
+        ' タイトル日付
+        .Range("タイトル").Value = strTitleDate
+      
+
+        ' 一覧出力
+        For lngDataCnt = 0 To lngDataMax
+        
+            If strData(lngDataCnt).PrintFlg Then
+                lngRowCnt = lngRowCnt + 1
+                strDesRange = "A" & (cSTART_RAW + lngRowCnt) & ":I" & (cSTART_RAW + lngRowCnt)
+                .Range(strSrcRange).Copy Destination:=.Range(strDesRange)
+                .Cells(cSTART_RAW + lngRowCnt, .Range("口座番号").Column).Value = strData(lngDataCnt).KohzaNo
+                .Cells(cSTART_RAW + lngRowCnt, .Range("顧客名").Column).Value = strData(lngDataCnt).KokyakuName
+                .Cells(cSTART_RAW + lngRowCnt, .Range("資産コード").Column).Value = "'" & strData(lngDataCnt).ShisanCode
+                .Cells(cSTART_RAW + lngRowCnt, .Range("資産名").Column).Value = strData(lngDataCnt).ShisanName
+                .Cells(cSTART_RAW + lngRowCnt, .Range("資産保有期間FROM").Column).Value = "'" & strData(lngDataCnt).RateTekiyohFrom
+                .Cells(cSTART_RAW + lngRowCnt, .Range("資産保有期間TO").Column).Value = "'" & strData(lngDataCnt).RateTekiyohTo
+                .Cells(cSTART_RAW + lngRowCnt, .Range("基礎数値種類").Column).Value = strData(lngDataCnt).KisosuchiName
+            End If
+            
+        Next lngDataCnt
+        
+        .Range(cSTART_RAW & ":" & cSTART_RAW).Delete
+         
+        ' カソル位置を異動する。
+        .Activate     ' シートが２個以上の場合要る。
+        .Range("A1").Activate
+        
+    End With
+    
+    ActiveWindow.ScrollRow = 1
+    ActiveWindow.ScrollColumn = 1
+    
+    If lngRowCnt <= 0 Then
+        ' 該当データが存在しません。
+        Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3001, cPreFName, "")
+        Workbooks(Workbooks.Count).Close SaveChanges:=False
+        fncMakeBook1800 = False
+        Call subEndProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+        Exit Function
+    Else
+        Workbooks(Workbooks.Count).Close SaveChanges:=True
+    End If
+    
+    fncMakeBook1800 = True
+    
+    Call subEndProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    Workbooks(Workbooks.Count).Close SaveChanges:=True
+    fncMakeBook1800 = False
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- エラーログ出力 End  ---------------------------------
+   
+End Function
+
+
+
+
+
+

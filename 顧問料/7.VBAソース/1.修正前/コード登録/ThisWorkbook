@@ -1,0 +1,59 @@
+VERSION 1.0 CLASS
+BEGIN
+  MultiUse = -1  'True
+END
+Attribute VB_Name = "ThisWorkbook"
+Attribute VB_GlobalNameSpace = False
+Attribute VB_Creatable = False
+Attribute VB_PredeclaredId = True
+Attribute VB_Exposed = True
+Option Explicit
+Const MODULE_NAME = "ThisWorkBook"
+
+
+
+'ブッククローズ処理
+Private Sub Workbook_BeforeClose(Cancel As Boolean)
+    
+    'ブックの保護
+    Call gCom01_BookProtect(ThisWorkbook, True)
+
+
+
+    '強制終了
+    If Me.Saved = False Then
+        Application.DisplayAlerts = False
+        ThisWorkbook.Saved = True
+    End If
+
+End Sub
+
+
+'ブックオープン処理
+Private Sub Workbook_Open()
+
+    Application.ScreenUpdating = False
+    
+    Call HideItem
+    
+    Call gCom01_SheetProtect(Worksheets(MAIN_SHEETNAME), False)
+    
+    blnProcessing = True
+    
+    '初期起動関数呼出
+    Call g_subInitialize
+    
+    
+    ThisWorkbook.Worksheets(MAIN_SHEETNAME).Activate
+    ActiveWindow.ScrollRow = 1
+    ActiveWindow.ScrollColumn = 1
+    ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range("コードNO").Select
+    
+    blnProcessing = False
+
+    Call gCom01_SheetProtect(Worksheets(MAIN_SHEETNAME), True)
+
+    Application.ScreenUpdating = True
+End Sub
+
+

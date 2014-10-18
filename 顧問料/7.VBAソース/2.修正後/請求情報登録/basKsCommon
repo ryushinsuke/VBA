@@ -1,0 +1,467 @@
+Attribute VB_Name = "basKsCommon"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：国内顧問料計算システム・請求情報登録（共通）
+'
+'オブジェクト名：basKsCommon
+'
+'機能概要　：更新処理
+'
+'更新履歴　：2006/08/15 SRA T.Sato       新規作成
+'
+'*************************************************************************
+
+Const MODULE_NAME = "basKsCommon"
+
+'------- Public Const定義 -------
+'更新情報
+Public Const UPDATE_USER = "APL001"
+Public Const UPDATE_PGM_ID = "請求情報登録"
+
+'シート名
+Public Const MAIN_SHEETNAME = "main"
+Public Const TEMPLATE_SHEETNAME = "Template"
+Public Const DATA_SHEETNAME = "Data"
+
+'------------<Modify Start azuma 2006/11/10 > -----------------------
+Public Const gcSTATUS = "AC"            'ステータス
+Public Const gcSTATUS_RC = 29           'ステータス
+
+Public Const mLINKCELLNAME = "AK"       'チェックボックスリンクセルの位置(チェックボックスの値を格納)
+Public Const gcSEIKYU_KIKAN_ID = "AL"   '請求期間ID
+Public Const gcSEIKYU_KIKAN_ID_RC = 38  '請求期間ID(R1C1形式)
+Public Const gcSHORI_KBN = "AM"         '処理区分
+Public Const gcSHORI_KBN_RC = 39        '処理区分(R1C1形式)
+Public Const gcHIZUKE_SHURUI = "AN"     '上下期区分
+Public Const gcHIZUKE_SHURUI_RC = 40    '上下期区分(R1C1形式)
+Public Const gcSEIKYU_KIKAN_TO = "AO"   '請求期間TO　'<----------- Modify azuma 2007/03/02
+Public Const gcSEIKYU_KIKAN_TO_RC = 41  '請求期間TO(R1C1形式)　'<2007/01/24 IIDA ADD>
+
+'Public Const mLINKCELLNAME = "AJ"      'チェックボックスリンクセルの位置(チェックボックスの値を格納)
+'------------<Modify End   azuma 2006/11/10 > -----------------------
+
+'------------<Modify Start azuma 2006/12/08 > -----------------------
+Public Const gcHIZUKE_KAMIKI = "1"      '上期
+Public Const gcHIZUKE_SHIMOKI = "2"     '下期
+Public Const gcHIZUKE_TSUUKI = "3"      '通期
+'------------<Modify End   azuma 2006/12/08 > -----------------------
+
+
+Private Const mCELLNAME = "B"          'チェックボックスの表示位置
+'
+'*************************************************************************
+'関数名　　：明細行追加メイン処理
+'
+'引　　数　：
+'           iInsRow       I       追加対象ROW
+'           iSrcRow       I       複写元ROW
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：指定された明細行の追加を行う。
+'
+'更新履歴　：2006/07/05 SRA T.Azuma    新規作成
+'
+'*************************************************************************
+Public Function gKsC_fncKsCmnInsRow(TargetSheets As Object, iInsRow As Long, iSrcRow As Long) As Long
+    
+On Error GoTo ErrorHandler
+
+    gKsC_fncKsCmnInsRow = 0
+    
+'*** PH3対応 2007/04/12 Deleted By H.Anpo Start ***
+''    Sheets(TEMPLATE_SHEETNAME).Rows(iSrcRow & ":" & iSrcRow).Copy
+    
+'------------<Modify Start azuma 2006/11/14 > -----------------------
+''    Sheets(MAIN_SHEETNAME).Rows(iInsRow & ":" & iInsRow).Insert Shift:=xlDown
+''    Application.CutCopyMode = False
+'*** PH3対応 2007/04/12 Deleted By H.Anpo End ***
+
+'    Sheets(MAIN_SHEETNAME).Select
+'    Rows(iInsRow & ":" & iInsRow).Select
+'    Selection.Insert Shift:=xlDown
+'    Application.CutCopyMode = False
+'------------<Modify End   azuma 2006/11/14 > -----------------------
+
+    'チェックボックスの追加
+    Call fncCmnSetCheckBox(TargetSheets, mCELLNAME & iInsRow, mLINKCELLNAME & iInsRow)
+    
+'    TargetSheets.Cells(iInsRow, 3).Select '<------------ Modify azuma 2006/11/14
+
+    
+    Exit Function
+
+ErrorHandler:
+    gKsC_fncKsCmnInsRow = Err.Number
+    
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gKsC_fncKsCmnInsRow", Err.Number, Err.Description)
+    
+End Function
+
+'*************************************************************************
+'関数名　　：明細行全削除（クリア）処理
+'
+'引　　数　：
+'           TargetSheets    I   対象のシート
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：明細行の削除を行う。
+'
+'更新履歴　：2006/08/15 SRA T.Sato    新規作成
+'
+'*************************************************************************
+Public Function gKsC_fncKsCmnRowAllDelete(TargetSheets As Object) As Long
+    Dim lngCnt          As Long
+    
+
+On Error GoTo ErrorHandler
+
+    gKsC_fncKsCmnRowAllDelete = 0
+    
+    '削除行取得
+    lngCnt = gfncKsCmnSearchDataTopRow(TargetSheets)
+        
+'    With TargetSheets
+'        Do While (.Range(mLINKCELLNAME & lngCnt) <> vbNullString)
+            '明細行削除
+            Call gfncKsCmnDeleteRow(TargetSheets, lngCnt, True)
+'        Loop
+'    End With
+    
+    Exit Function
+
+ErrorHandler:
+    gKsC_fncKsCmnRowAllDelete = Err.Number
+    
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gKsC_fncKsCmnRowAllDelete", Err.Number, Err.Description)
+
+End Function
+
+'*************************************************************************
+'関数名　　：明細行削除処理
+'
+'引　　数　：
+'           iDelRow       I       削除対象ROW
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：指定された明細行の削除を行う。
+'
+'更新履歴　：2006/08/15 SRA T.Sato    新規作成
+'
+'*************************************************************************
+Public Function gfncKsCmnDeleteRow(TargetSheets As Object, iDelRow As Long, Optional blnAllDel As Boolean = False) As Long
+On Error GoTo ErrorHandler
+
+    
+    gfncKsCmnDeleteRow = 0
+    
+    If TargetSheets.Range(mLINKCELLNAME & iDelRow) = "" Then
+'        MsgBox "消す行がない！！", vbExclamation
+        Exit Function
+    End If
+    
+    'チェックボックスの削除処理
+    Call fncCmnDelCheckBox(TargetSheets, mLINKCELLNAME & iDelRow, blnAllDel)
+    
+    '明細行の削除処理
+
+'------------<Modify Start azuma 2006/11/14 > -----------------------
+    
+    Application.CutCopyMode = False
+    If blnAllDel Then
+        Dim lngEnd As Long
+        lngEnd = fncKsCmnSearchNewRow(TargetSheets)
+        
+'------------<Modify Start T.Ichikawa 削除処理を高速化 2007/04/25 > -----------------------
+'        TargetSheets.Rows(13 & ":" & lngEnd).Delete Shift:=xlUp
+        
+        With TargetSheets.Rows(13 & ":" & lngEnd)
+            .Clear
+            .Rows(13 & ":" & lngEnd).Delete Shift:=xlUp
+            DoEvents
+        End With
+'------------<Modify End   T.Ichikawa 削除処理を高速化 2007/04/25 > -----------------------
+        
+    Else
+        TargetSheets.Rows(iDelRow & ":" & iDelRow).Delete Shift:=xlUp
+    End If
+'    TargetSheets.Rows(iDelRow & ":" & iDelRow).Select
+'    Application.CutCopyMode = False
+'    Selection.Delete Shift:=xlUp
+
+'    TargetSheets.Cells(iDelRow, 2).Select
+'------------<Modify End   azuma 2006/11/14 > -----------------------
+
+    Exit Function
+
+ErrorHandler:
+    gfncKsCmnDeleteRow = Err.Number
+
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gfncKsCmnDeleteRow", Err.Number, Err.Description)
+
+End Function
+
+'*************************************************************************
+'関数名　　：明細行追加位置取得処理
+'
+'引　　数　：
+'           TargetSheets   I       対象シート
+'
+'戻り値　　：明細行の追加行番号
+'
+'機能説明　：明細行の追加行番号を返す
+'
+'更新履歴　：2006/08/15 SRA T.Sato    新規作成
+'更新履歴　：2006/11/14 SRA Y.Azuma   変更     性能改善1
+'
+'*************************************************************************
+Public Function fncKsCmnSearchNewRow(TargetSheets As Object) As Long
+    Dim lngKindCnt As Long
+    Dim lngCnt As Long
+
+On Error GoTo ErrorHandler
+
+    fncKsCmnSearchNewRow = 0
+        
+    '明細行設定
+'    lngCnt = 12
+    
+    With TargetSheets
+    
+'------------<Modify Start azuma 2006/11/14 > -----------------------
+        lngCnt = .Range(mLINKCELLNAME & 65536).End(xlUp).Row
+            If lngCnt <= 12 Then
+                fncKsCmnSearchNewRow = 13
+            Else
+                fncKsCmnSearchNewRow = lngCnt + 1
+            End If
+
+'        Do While (1)
+'            If .Cells(lngCnt, 2) = "対象" Then
+'                lngCnt = lngCnt + 1
+'            End If
+'
+'            If .Range(mLINKCELLNAME & lngCnt) = vbNullString Then
+'                fncKsCmnSearchNewRow = lngCnt
+'                Exit Function
+'            End If
+'
+'            lngCnt = lngCnt + 1
+'        Loop
+'------------<Modify End   azuma 2006/11/14 > -----------------------
+    End With
+    
+    Exit Function
+
+ErrorHandler:
+    fncKsCmnSearchNewRow = Err.Number
+    
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "fncKsCmnSearchNewRow", Err.Number, Err.Description)
+
+End Function
+
+'*************************************************************************
+'関数名　　：明細行位置取得処理
+'
+'引　　数　：
+'           TargetSheets       I       対象シート
+'
+'戻り値　　：明細行の開始行番号
+'
+'機能説明　：明細行の開始行番号を返す
+'
+'更新履歴　：2006/08/15 SRA T.Sato    新規作成
+'
+'*************************************************************************
+Public Function gfncKsCmnSearchDataTopRow(TargetSheets As Object) As Long
+    Dim lngKindCnt As Long
+    Dim lngCnt As Long
+
+On Error GoTo ErrorHandler
+
+    gfncKsCmnSearchDataTopRow = 0
+    
+    lngCnt = 12
+    
+    With TargetSheets
+        Do While (1)
+            If .Cells(lngCnt, 2) = "対象" Then
+                gfncKsCmnSearchDataTopRow = lngCnt + 1
+                Exit Function
+            End If
+            lngCnt = lngCnt + 1
+        Loop
+    End With
+    
+    Exit Function
+
+ErrorHandler:
+    gfncKsCmnSearchDataTopRow = Err.Number
+    
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gfncKsCmnSearchDataTopRow", Err.Number, Err.Description)
+
+End Function
+
+'*************************************************************************
+'関数名　　：チェックボックスの作成
+'
+'引　　数　：
+'           CellName       I       作成対象セル
+'
+'戻り値　　：
+'
+'機能説明　：
+'
+'更新履歴　：2006/07/07 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Function fncCmnSetCheckBox(ByRef objTarget As Object _
+                                , ByVal CellName As String _
+                                , ByVal LinkCellName As String) As Long
+    
+On Error GoTo ErrorHandler
+    fncCmnSetCheckBox = 0
+    
+    Dim lngZoom As Long
+    Dim objX    As Object
+    
+    lngZoom = ActiveWindow.Zoom
+    ActiveWindow.Zoom = 100
+    
+'*** PH3対応 2007/04/12 Deleted By H.Anpo Start ***
+'''    With objTarget.Range(CellName)
+''''''        Worksheets(MAIN_SHEETNAME).OLEObjects.Add( _
+''''''            ClassType:="Forms.CheckBox.1", _
+''''''            Link:=False, _
+''''''            DisplayAsIcon:=False, _
+''''''            Left:=.Left + 6, _
+''''''            Top:=.Top + 2.3, _
+''''''            Width:=10.5, _
+''''''            Height:=10). _
+''''''        Select
+''''''        Selection.LinkedCell = LinkCellName
+'''        Worksheets(MAIN_SHEETNAME).Range(LinkCellName).Value = False
+'''    End With
+'*** PH3対応 2007/04/12 Deleted By H.Anpo End ***
+
+
+
+'*** PH3対応 2007/04/12 Added By H.Anpo Start ***
+    With ThisWorkbook.ActiveSheet.Range(CellName)
+        Set objX = ThisWorkbook.ActiveSheet.Shapes.AddFormControl( _
+             xlCheckBox, _
+            .Left + 3, _
+            .Top - 1, _
+            10, _
+            8)
+        With objX.OLEFormat.Object
+'            .Name = "CheckBox" & LinkCellName
+            .Display3DShading = True
+            .Caption = ""
+            .LinkedCell = LinkCellName
+        End With
+    End With
+    Worksheets(MAIN_SHEETNAME).Range(LinkCellName).Value = False
+'*** PH3対応 2007/04/12 Added By H.Anpo End ***
+
+
+    ActiveWindow.Zoom = lngZoom
+    Exit Function
+
+ErrorHandler:
+    fncCmnSetCheckBox = Err.Number
+    
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "fncCmnSetCheckBox", Err.Number, Err.Description)
+    
+End Function
+
+'*** PH3対応 2007/04/12 Deleted By H.Anpo Start ***
+'*************************************************************************
+'関数名　　：チェックボックスの削除
+'
+'引　　数　：
+'           CellName       I       削除対象セル
+'
+'戻り値　　：
+'
+'機能説明　：
+'
+'更新履歴　：2006/07/07 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+'''Public Function fncCmnDelCheckBox(ByRef objTarget As Object, CellName As String, ByVal blnAllDel As Boolean) As Long
+'''Dim c As Object
+'''
+'''On Error GoTo ErrorHandler
+'''
+'''    With objTarget
+'''        For Each c In .Shapes
+'''            If Mid(c.Name, 1, 8) = "CheckBox" Then
+'''                If blnAllDel Then
+'''                    .Shapes(c.Name).Delete
+'''                Else
+'''                    .Shapes(c.Name).Select
+'''                    If Selection.LinkedCell = CellName Then
+'''                        Selection.Delete
+'''                    End If
+'''                End If
+'''            End If
+'''        Next
+'''    End With
+'''
+'''    Exit Function
+'''
+'''ErrorHandler:
+'''    fncCmnDelCheckBox = Err.Number
+'''
+'''    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "fncCmnDelCheckBox", Err.Number, Err.Description)
+'''
+'''End Function
+'*** PH3対応 2007/04/12 Deleted By H.Anpo End ***
+
+'*** PH3対応 2007/04/12 Added By H.Anpo Start ***
+Public Function fncCmnDelCheckBox(ByRef objTarget As Object, CellName As String, ByVal blnAllDel As Boolean) As Long
+Dim ccc As Object
+Dim objRange As Object
+Dim strName As String
+
+On Error GoTo ErrorHandler
+    fncCmnDelCheckBox = 0
+
+    With ActiveSheet
+        For Each ccc In .Shapes
+            If ccc.Type = msoFormControl Then
+                If ccc.FormControlType = xlCheckBox Then
+                    If blnAllDel Then
+                        .Shapes(ccc.Name).Delete
+                    Else
+                        .Shapes(ccc.Name).Select
+                        If Selection.LinkedCell = CellName Then
+'Debug.Print Selection.LinkedCell & " CellName=" & CellName
+'                        If .Shapes(ccc.Name).Object.LinkedCell = CellName Then
+                            ccc.Delete
+                        End If
+                    End If
+                End If
+            End If
+        Next
+    
+        .Range("B" & Mid(CellName, 3)).Select
+    End With
+
+
+    Exit Function
+
+ErrorHandler:
+    fncCmnDelCheckBox = Err.Number
+
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "fncCmnDelCheckBox", Err.Number, Err.Description)
+
+End Function
+'*** PH3対応 2007/04/12 Added By H.Anpo End ***
+
+

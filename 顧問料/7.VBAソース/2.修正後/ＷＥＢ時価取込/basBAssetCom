@@ -1,0 +1,1551 @@
+Attribute VB_Name = "basBAssetCom"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：新顧問料契約管理システム・WEB時価ﾃﾞｰﾀ取込処理
+'
+'オブジェクト名：basBAssetCom
+'
+'機能概要　：ビジネスロジック共通
+'
+'更新履歴　：2006/01/19 SRA T.Tanaka    新規作成
+'　　　　　：2006/05/09 SRA H.Anpo      TCSB,JTSB対応
+'
+'
+'*************************************************************************
+Private Const MODULE_NAME As String = "basBAssetCom"
+Private strKMKCD1 As Variant
+Private strKMKCD2 As Variant
+Private strKMKCD3 As Variant
+Private strAkmkCD As Variant
+
+'*************************************************************************
+'関数名　　：ヘッダーの終点行取得
+'
+'引　　数　：ARG1   I   Target  Worksheet   対象ワークシート
+'
+'戻り値　　：終点行
+'
+'機能説明　：データの項目名の行を返す。
+'
+'更新履歴　：2006/01/19 SRA T.Tanaka    新規作成
+'　　　　　：2006/05/09 SRA H.Anpo      TCSB,JTSB対応
+'
+'*************************************************************************
+Public Function fncGetRowHeader(ByVal Target As Worksheet) As Long
+    
+    Const PROCEDURE_NAME As String = "fncGetRowHeader"
+    
+    On Error GoTo ErrHandler
+    
+    Dim lngrow  As Long
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    With Target
+    
+        Do
+            lngrow = lngrow + 1
+            '=== 2006/05/09 Modified By Anpo Start
+'            If .Cells(lngRow, levsCCComDat) = DET_HEADER Then
+'                Exit Do
+'            End If
+            
+            If Sheets(SHEET_MAIN).cmbBank.Value = LIST_ITEM_MSB Then
+                If .Cells(lngrow, levsCCComDat) = DET_HEADER Then
+                    Exit Do
+                End If
+            ElseIf Sheets(SHEET_MAIN).cmbBank.Value = LIST_ITEM_JTS Then
+                If .Cells(lngrow, levsCCComDat) = DET_HEADER_JTS Then
+                    Exit Do
+                End If
+            ElseIf Sheets(SHEET_MAIN).cmbBank.Value = LIST_ITEM_TCB Then
+                If .Cells(lngrow, levsCCComDat) = DET_HEADER_TCB Then
+                    Exit Do
+                End If
+            End If
+            If lngrow > .Cells.SpecialCells(xlCellTypeLastCell).Row Then
+                lngrow = 0
+                '<2006/12/18 UPDATE iida>
+                GoTo ErrHandler
+                'Err.Raise ERR_CHECK_FILE
+            End If
+
+            '=== 2006/05/09 Modified By Anpo End
+        Loop Until False
+    
+    End With
+    
+    fncGetRowHeader = lngrow
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    Exit Function
+    
+ErrHandler:
+     
+    '=== 2006/05/09 Modified By Anpo Start
+    With gusrErr
+        .ModuleId = MODULE_NAME         'モージュールID
+        .Procedure = PROCEDURE_NAME     'プロシージャID
+        .MsgCode = ERR_MSGCD_USER       'メッセージ区分
+        .MsgSyousai = Target.Name       'メッセージ詳細
+        .ErrNum = ERR_CHECK_FILE
+        .ErrDescript = Err.Description
+        fncWriteErrSheet
+    End With
+    '=== 2006/05/09 Modified By Anpo End
+     
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+       
+End Function
+
+'*************************************************************************
+'関数名　　：フッターの始点行取得
+'
+'引　　数　：ARG1   I   Target  Worksheet   対象ワークシート
+'
+'戻り値　　：始点行
+'
+'機能説明　：集計の行を返す。
+'
+'更新履歴　：2006/01/19 SRA T.Tanaka    新規作成
+'　　　　　：2006/05/09 SRA H.Anpo      TCSB,JTSB対応
+'
+'*************************************************************************
+Public Function fncGetRowFooter(ByVal Target As Worksheet) As Integer
+    
+    Const PROCEDURE_NAME As String = "fncGetRowHeader"
+    
+    On Error GoTo ErrHandler
+    
+    Dim lngrow  As Long
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    With Target
+        
+        lngrow = .Cells.SpecialCells(xlCellTypeLastCell).Row
+        '=== 2006/05/09 Added By Anpo Start
+        If Sheets(SHEET_MAIN).cmbBank.Value <> LIST_ITEM_MSB Then
+            lngrow = fncGetRowHeader(Target)
+        End If
+        '=== 2006/05/09 Added By Anpo End
+    
+        Do
+        
+            '=== 2006/05/09 Modified By Anpo Start
+'            If .Cells(lngRow, levsCCComDat) = DET_FOOTER Then
+'                Exit Do
+'            End If
+            
+            If Sheets(SHEET_MAIN).cmbBank.Value = LIST_ITEM_MSB Then
+                If .Cells(lngrow, levsCCComDat) = DET_FOOTER Then
+                    Exit Do
+                End If
+                lngrow = lngrow - 1
+            ElseIf Sheets(SHEET_MAIN).cmbBank.Value = LIST_ITEM_JTS Then
+                If .Cells(lngrow, levsCCComDat) = DET_FOOTER_JTS Then
+                    Exit Do
+                End If
+                lngrow = lngrow + 1
+            ElseIf Sheets(SHEET_MAIN).cmbBank.Value = LIST_ITEM_TCB Then
+                If .Cells(lngrow, levsCCComDat) = DET_FOOTER_TCB Then
+                    Exit Do
+                End If
+                lngrow = lngrow + 1
+            End If
+            '=== 2006/05/09 Modified By Anpo End
+            '=== 2006/05/09 Deleted By Anpo Start
+'            lngRow = lngRow - 1
+            '=== 2006/05/09 Deleted By Anpo End
+            
+        Loop Until False
+    
+    End With
+    
+    fncGetRowFooter = lngrow
+    
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+ErrHandler:
+     
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+
+'*************************************************************************
+'関数名　　：集計対象の取得
+'
+'引　　数　：ARG1   I   Target  Worksheet 対象シート
+'
+'戻り値　　：集計対象のファンドコード
+'
+'機能説明　：対象シートから集計対象のファンドコードを取得する。
+'
+'更新履歴　：2006/01/19 SRA T.Tanaka    新規作成
+'　　　　　：2006/02/10 SRA T.Tanaka    400000000形式以外のファンドＮＯ対応
+'　　　　　：2006/05/09 SRA H.Anpo      TCSB,JTSB対応
+'　　　　　：2006/12/18 SRA Iida        FANDNOチェック用に変更
+'*************************************************************************
+Public Function fncGetTargetFundCode(ByVal Target As Worksheet, ByRef ArrFandNO() As Variant) As String
+                
+    Const PROCEDURE_NAME As String = "fncGetTargetFundCode"
+    
+    On Error GoTo ErrHandler
+    
+    Dim lngrow  As Long
+    Dim lngStr  As Long
+    Dim lngEnd  As Long
+    
+    Dim strbuf  As String
+    Dim curBuf  As Currency
+    Dim strTmp  As String
+    '=== 2006/05/09 Added By Anpo Start
+    Dim strBuf2 As String
+    '=== 2006/05/09 Added By Anpo End
+    Dim lngcnt  As Long     '<2006/12/18 ADD iida>
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+       
+    With Target
+    
+        lngStr = fncGetRowHeader(Target) + 1
+        lngEnd = fncGetRowFooter(Target) - 1
+        
+        '=== 2006/05/09 Modified By Anpo Start
+'        For lngRow = lngStr To lngEnd
+'           If strBuf <> .Cells(lngRow, levsCCFandNo) Then
+'                strBuf = .Cells(lngRow, levsCCFandNo)
+'                strTmp = strTmp & ",'" & strBuf & "'"
+'                strTmp = strTmp & ",'" & CStr(CCur(strBuf) - FUNDNO_BASE) & "'"
+'           End If
+'        Next lngRow
+        
+        If Sheets(SHEET_MAIN).cmbBank.Value = LIST_ITEM_MSB Then
+            '<2006/12/18 ADD S iida>
+            lngcnt = 0
+            '<2006/12/18 ADD E iida>
+            For lngrow = lngStr To lngEnd
+               If strbuf <> .Cells(lngrow, levsCCFandNo) Then
+                    strbuf = .Cells(lngrow, levsCCFandNo)
+                    '<2006/12/18 ADD S iida>
+                    lngcnt = lngcnt + 1
+                    ReDim Preserve ArrFandNO(lngcnt)
+                    ArrFandNO(lngcnt) = strbuf
+                    '<2006/12/18 ADD E iida>
+                    strTmp = strTmp & ",'" & strbuf & "'"
+                    strTmp = strTmp & ",'" & CStr(CCur(strbuf) - FUNDNO_BASE) & "'"
+               End If
+            Next lngrow
+        ElseIf Sheets(SHEET_MAIN).cmbBank.Value = LIST_ITEM_JTS Then
+            '<2006/12/18 ADD S iida>
+            lngcnt = 0
+            '<2006/12/18 ADD E iida>
+            For lngrow = lngStr To lngEnd
+               If strbuf <> .Cells(lngrow, levsCDKyaku_jts) & .Cells(lngrow, levsCDKoza_jts) Then
+                    strbuf = .Cells(lngrow, levsCDKyaku_jts) & .Cells(lngrow, levsCDKoza_jts)
+                    strBuf2 = Format(.Cells(lngrow, levsCDKyaku_jts), "00000")
+                    strBuf2 = strBuf2 & "-" & Format(.Cells(lngrow, levsCDKoza_jts), "0000")
+                    '<2006/12/18 ADD S iida>
+                    lngcnt = lngcnt + 1
+                    ReDim Preserve ArrFandNO(lngcnt)
+                    ArrFandNO(lngcnt) = strBuf2
+                    '<2006/12/18 ADD E iida>
+                    strTmp = strTmp & ",'" & strBuf2 & "'"
+               End If
+            Next lngrow
+        ElseIf Sheets(SHEET_MAIN).cmbBank.Value = LIST_ITEM_TCB Then
+            '<2006/12/18 ADD S iida>
+            lngcnt = 0
+            '<2006/12/18 ADD E iida>
+            For lngrow = lngStr To lngEnd
+               If strbuf <> .Cells(lngrow, levsCDFandCd_tcb) Then
+                    strbuf = .Cells(lngrow, levsCDFandCd_tcb)
+                    '<2006/12/18 ADD S iida>
+                    lngcnt = lngcnt + 1
+                    ReDim Preserve ArrFandNO(lngcnt)
+                    ArrFandNO(lngcnt) = strbuf
+                    '<2006/12/18 ADD E iida>
+                    strTmp = strTmp & ",'" & CLng(Mid(strbuf, 2)) & "'"
+               End If
+            Next lngrow
+        End If
+        '=== 2006/05/09 Modified By Anpo End
+        
+        fncGetTargetFundCode = Mid$(strTmp, 2)
+        
+    End With
+        
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+ErrHandler:
+     
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+
+'*************************************************************************
+'関数名　　：エラーシート書き込み
+'
+'引　　数　：ARG1   I   AAA     Strinng あああ
+'
+'戻り値　　：なし
+'
+'機能説明　：エラー情報をエラーシートに書き込む。
+'
+'更新履歴　：2006/01/24 SRA T.Tanaka    新規作成
+'
+'*************************************************************************
+Public Function fncWriteErrSheet()
+
+    Const PROCEDURE_NAME As String = "fncWriteErrSheet"
+    
+    On Error GoTo ErrHandler
+    
+    Dim lngrow  As Long
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    With gusrErr
+        Select Case .MsgCode
+        Case ERR_MSGCD_USER
+            .MsgName = "User"
+        Case ERR_MSGCD_ORACLE
+            .MsgName = "Oracle"
+        Case ERR_MSGCD_PLSQL
+            .MsgName = "PL/SQL"
+        Case ERR_MSGCD_VB
+            .MsgName = "VB"
+        End Select
+        
+        '<2006/12/27 DEL S iida>
+'        If .Procedure = "fncSetData" Then
+'            .MsgNaiyou = .MsgNaiyou & ERRMSG_GET_DATA   'メッセージ内容
+'        End If
+        '<2006/12/27 DEL E iida>
+        
+        Call subSetUserErr
+        .DateTime = Now
+    End With
+    
+    With Sheets(SHEET_ERR1)
+        glngErrNum = glngErrNum + 1
+        lngrow = glngErrNum + 1
+        .Cells(lngrow, 1) = gusrErr.ModuleId      'モージュールID
+        .Cells(lngrow, 2) = gusrErr.Procedure     'プロシージャID
+        .Cells(lngrow, 3) = gusrErr.UserEvent    'ユーザーイベント名
+        .Cells(lngrow, 4) = gusrErr.MsgCode      'メッセージ区分
+        .Cells(lngrow, 5) = gusrErr.MsgName      'メッセージ種類
+        .Cells(lngrow, 6) = gusrErr.ErrNum       'エラー番号
+        .Cells(lngrow, 7) = gusrErr.ErrDescript  'エラー概要
+        .Cells(lngrow, 8) = gusrErr.MsgNaiyou     'メッセージ内容
+        .Cells(lngrow, 9) = gusrErr.MsgSyousai    'メッセージ詳細
+        .Cells(lngrow, 10) = gusrErr.DateTime    '発生日時
+    
+    End With
+    
+    With gusrErr
+'        ModuleId    As String   'モージュールID
+'        Procedure   As String   'プロシージャID
+'        UserEvent   As String   'ユーザーイベント名
+'        MsgCode     As String   'メッセージ区分
+'        MsgName     As String   'メッセージ種類
+'        ErrNum      As Long     'エラー番号
+        .ErrDescript = vbNullString     'エラー概要
+        .MsgNaiyou = vbNullString       'メッセージ内容
+        .MsgSyousai = vbNullString      'メッセージ詳細
+'        DateTime    As Date     '発生日時
+    End With
+    
+    Call fncSetSheetsVisible
+    
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+ErrHandler:
+     
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+
+'*************************************************************************
+'関数名　　：ユーザー定義のエラー
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：ユーザー定義のエラーを変数に格納
+'
+'更新履歴　：2006/01/28 SRA T.Tanaka    新規作成
+'
+'*************************************************************************
+Private Sub subSetUserErr()
+
+    Const PROCEDURE_NAME As String = "subSetUserErr"
+    
+    On Error GoTo ErrHandler
+    Dim strbuf   As String   '<2006/12/18 ADD iida>
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    With gusrErr
+    
+        Select Case .ErrNum
+            '<2006/12/18 ADD IIDA>
+            'ファイルフォーマットエラー
+            Case ERRMSG_FILE_FORMAT
+                 .MsgNaiyou = gfunc_ErrorMsg(3, ERRMSG_FILE_FORMAT, "", "", False)
+            'ファイル取込チェックエラー
+            Case ERRMSG_IMPORT
+                 .MsgNaiyou = gfunc_ErrorMsg(3, ERRMSG_IMPORT, "", "", False)
+            'ファイル形式チェックエラー
+            Case ERR_CHECK_FILE
+                 .MsgNaiyou = gfunc_ErrorMsg(3, ERR_CHECK_FILE, "", "", False)
+            'ダウンロードファイル対象件数が0件
+            Case ERRMSG_NODATA_SHEET
+                .MsgName = "???"
+                .MsgNaiyou = gfunc_ErrorMsg(3, ERRMSG_NODATA_SHEET, "", "", False)
+            '<2006/12/18 DEL IIDA>
+    '        Case ERR_NO_DATA_DB, ERR_NO_DATA_REC
+    '             .MsgNaiyou = ERRMSG_NODATA_DB
+            '<2006/12/18 DEL IIDA>
+    '        Case ERR_UPLOAD
+    '            .MsgNaiyou = ERRMSG_UPLOAD
+            '<2006/12/04 DEL iida>
+    '        Case ERR_PLSQL_PARA
+    '            .MsgNaiyou = ERRMSG_PLSQL_PARA
+            'ダウンロードファイル対象件数が0件
+            '<2006/12/04 DEL iida>
+    '        Case ERR_NOT_CALC
+    '            .MsgNaiyou = ERRMSG_NOT_CALC
+            '<2006/12/04 UPDATE iida>
+            '集計分類コードが設定されていません
+             Case ERRMSG_NO_DATA_COL2
+                .MsgNaiyou = gfunc_ErrorMsg(3, ERRMSG_NO_DATA_COL2, "", "", False)
+    '        Case ERR_NO_DATA_COL2
+    '            .ErrDescript = ERRMSG_NO_DATA_COL2
+            '<2006/12/04 DEL iida>
+    '        Case ERR_NO_DATA_COL3
+    '            .MsgName = "???"
+    '            .ErrDescript = ERRMSG_NODATA_CONVERT
+            '<2006/12/18 DEL IIDA>
+            'Case ERR_OUT_TARGET3
+            '    .ErrDescript = ERRMSG_OUT_TARGET3
+            '<2006/12/04 UPDATE iida>
+            '集計項目が数値に変換できません
+            Case ERRMSG_ERR_NOT_NUMBER
+                .MsgNaiyou = gfunc_ErrorMsg(3, ERRMSG_ERR_NOT_NUMBER, "", "", False)
+    '        Case ERR_NOT_NUMBER
+    '            .ErrDescript = ERRMSG_ERR_NOT_NUMBER
+            '<2006/12/04 UPDATE iida>
+            'UPLOADｼｰﾄが存在しません
+            Case ERRMSG_NO_SHEET
+                .MsgNaiyou = gfunc_ErrorMsg(3, ERRMSG_NO_SHEET, "", "", False)
+    '        Case ERR_NO_SHEET
+    '            .ErrDescript = ERRMSG_ERR_NO_SHEET
+            '<2006/12/04 UPDATE iida>
+            '資産別時価資産未登録
+            Case ERRMSG_ERR_NO_SHISAN
+                .MsgNaiyou = gfunc_ErrorMsg(3, ERRMSG_ERR_NO_SHISAN, "", "", False)
+    '        Case ERR_NO_SHISAN
+    '            .ErrDescript = ERRMSG_NODATA_DB
+    '            .MsgNaiyou = ERRMSG_ERR_NO_SHISAN
+            '<2006/12/04 UPDATE iida>
+            '資産別時価口座未設定
+            Case ERRMSG_ERR_NO_KOUZA
+                .MsgNaiyou = gfunc_ErrorMsg(3, ERRMSG_ERR_NO_KOUZA, "", "", False)
+    '        Case ERR_NO_DATA_COL
+    '            .ErrDescript = ERRMSG_NODATA_COL
+    '            .MsgNaiyou = ERRMSG_ERR_NO_KOUZA
+            '<2006/12/18 ADD S IIDA>
+            '口座属性ﾃﾞｰﾀ不一致
+            Case ERRMSG_MISS_DATA
+                .MsgNaiyou = gfunc_ErrorMsg(3, ERRMSG_MISS_DATA, "", "", False)
+            '<2006/12/22 ADD S IIDA>
+            '口座属性ﾃﾞｰﾀ取得ｴﾗｰ
+            Case ERRMSG_NO_DATA_KOUZA
+                .MsgNaiyou = gfunc_ErrorMsg(3, ERRMSG_NO_DATA_KOUZA, "", "", False)
+            '<2006/12/18 ADD S IIDA>
+            '信託識別子取得エラー
+            Case ERRMSG_NOT_IDENT
+                .MsgNaiyou = ERRMSG4_SIKIBETU & gfunc_ErrorMsg(3, ERRMSG_MISS_DATA, "", "", False)
+            '<2006/12/18 ADD S IIDA>
+            '約定取得エラー
+            Case ERRMSG_NOT_YAKUJYO
+                .MsgNaiyou = ERRMSG3_YUKBN & gfunc_ErrorMsg(3, ERRMSG_MISS_DATA, "", "", False)
+        End Select
+
+    End With
+    
+'    With Sheets(SHEET_ERR1)
+'        glngErrNum = glngErrNum + 1
+'
+'        .Cells(glngErrNum, 1) = gusrErr.ModuleId      'モージュールID
+'        .Cells(glngErrNum, 2) = gusrErr.Procedure     'プロシージャID
+'        .Cells(glngErrNum, 3) = gusrErr.UserEvent    'ユーザーイベント名
+'        .Cells(glngErrNum, 4) = gusrErr.MsgCode      'メッセージ区分
+'        .Cells(glngErrNum, 5) = gusrErr.MsgName      'メッセージ種類
+'        .Cells(glngErrNum, 6) = gusrErr.ErrNum       'エラー番号
+'        .Cells(glngErrNum, 7) = gusrErr.ErrDescript  'エラー概要
+'        .Cells(glngErrNum, 8) = gusrErr.MsgNaiyou     'メッセージ内容
+'        .Cells(glngErrNum, 9) = gusrErr.MsgSyousai    'メッセージ詳細
+'        .Cells(glngErrNum, 10) = gusrErr.DateTime    '発生日時
+'
+'    End With
+    
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Sub
+ErrHandler:
+     
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Sub
+
+'*************************************************************************
+'関数名　　：セル範囲データ取得
+'
+'引　　数　：ARG1   I   Target  Range   対象セル範囲
+'　　　　  ：ARG2   O   ArrRet  Variant 配列
+'　　　　  ：ARG3   O   StrRet  String  カンマ区切りの文字列
+'
+'戻り値　　：なし
+'
+'機能説明　：セル範囲のデータを配列とカンマ区切りの文字列に変換する。
+'
+'更新履歴　：2006/01/28 SRA T.Tanaka    新規作成
+'　　　　　：2006/01/28 SRA T.Tanaka    カンマ区切りの文字列を全行返す
+'
+'*************************************************************************
+Public Sub subGetRangeData(ByRef Target As Range, ByRef ArrRet As Variant, ByRef StrRet() As String)
+
+    Const PROCEDURE_NAME As String = "subGetRangeData"
+    
+    On Error GoTo ErrHandler
+    
+    Dim lngrow  As Long
+    Dim lngCol  As Long
+    Dim strbuf  As String
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    ArrRet = Target
+    ReDim StrRet(LBound(ArrRet, 1) To UBound(ArrRet, 1))
+    
+    For lngrow = LBound(ArrRet, 1) To UBound(ArrRet, 1)
+        strbuf = ""
+        For lngCol = LBound(ArrRet, 2) To UBound(ArrRet, 2)
+            strbuf = strbuf & "," & ArrRet(lngrow, lngCol)
+        Next lngCol
+        StrRet(lngrow) = Mid(strbuf, 2)
+    Next lngrow
+    
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Sub
+ErrHandler:
+     
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Sub
+
+'<2006/12/06 UPDATE S iida>
+'*************************************************************************
+'関数名　　：アップロードの実行
+'
+'引　　数　：
+'          :PrcName : 種別名
+'          :Upload  : Uploadシート名
+
+'戻り値　　：エラー番号
+'
+'機能説明　：アップロードシートを基に資産別信託時価テーブルに更新
+'
+'作成履歴　：2006/12/06 SRA Iida
+'
+'*************************************************************************
+Public Function fncUpLoad(ByVal PrcName As String, ByVal upload As String, ByVal strBank As String) As Long
+    
+    Const PROCEDURE_NAME As String = "fncUpLoad"
+    
+    On Error GoTo ErrHandler
+    
+    Dim lngrow          As Long
+    Dim lngCol          As Long
+    Dim lngRet          As Long
+    Dim strRange()      As String
+    Dim arrRange        As Variant
+    Dim lngErrStatus    As Long
+   
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    '<2006/12/08 ADD S IIDA>
+    fncUpLoad = -1
+    
+    With Sheets(upload)
+        
+        gusrErr.ErrNum = 0
+        
+        lngrow = .Cells.SpecialCells(xlCellTypeLastCell).Row
+        
+        Select Case strBank
+            Case LIST_ITEM_MSB
+                Call subGetRangeData(.Range(.Cells(1, 1), .Cells(lngrow, 9)), arrRange, strRange)
+            Case LIST_ITEM_JTS
+                Call subGetRangeData(.Range(.Cells(1, 1), .Cells(lngrow, 9)), arrRange, strRange)
+            Case LIST_ITEM_TCB
+                Call subGetRangeData(.Range(.Cells(1, 1), .Cells(lngrow, 9)), arrRange, strRange)
+        End Select
+        
+        'トランザクション開始
+        cnAdo.BeginTrans
+        
+        For lngrow = LBound(arrRange, 1) To UBound(arrRange, 1)
+        
+            If arrRange(lngrow, 1) = vbNullString Then
+                Exit For
+            End If
+        
+            'DBへ登録
+            lngRet = fncUploadData(upload, arrRange, lngrow)
+            
+            If lngRet <> 0 Then
+                'エラーデータの格納
+            End If
+            '--------------------------------------------------------
+        Next lngrow
+        
+        'コミット
+        cnAdo.CommitTrans
+
+    End With
+        
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    '<2006/12/08 ADD S IIDA>
+    fncUpLoad = 0
+    Exit Function
+    
+ErrHandler:
+    '<2006/12/08 UPDATE S IIDA>
+    fncUpLoad = -1
+    'fncUpLoad = Err.Number
+    
+    With gusrErr
+         cnAdo.RollbackTrans
+        .MsgSyousai = strRange(lngrow)   'メッセージ詳細
+        .ErrNum = Err.Number
+        '.ErrDescript = Err.Description
+        .ModuleId = MODULE_NAME         'モージュールID
+        .Procedure = PROCEDURE_NAME     'プロシージャID
+        .MsgCode = ERR_MSGCD_VB         'メッセージ区分
+        .MsgNaiyou = ERRMSG_UPLOAD      'メッセージ内容
+        fncWriteErrSheet
+    End With
+     
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+'<2006/12/06 UPDATE E iida>
+'<2006/12/18 DEL S IIDA>
+''*************************************************************************
+''関数名　　：アップロードの実行
+''
+''引　　数　：なし
+''
+''戻り値　　：エラー番号
+''
+''機能説明　：アップロードシートを基にＰＬ／ＳＱＬを実行する。
+''
+''更新履歴　：2006/02/02 SRA T.Tanaka    新規作成(パラメータの引渡し変更に伴う共通化)
+''
+''*************************************************************************
+'Public Function fncUpLoad(ByVal PrcName As String, ByVal UpLoad As String, _
+'                          ByVal SPName As String, ByVal SPParaNum As Integer)
+'
+'    Const PROCEDURE_NAME As String = "fncUpLoad"
+'
+'    On Error GoTo ErrHandler
+'
+'    Dim lngrow          As Long
+'    Dim lngCol          As Long
+'    Dim lngRet          As Long
+'    Dim strRange()      As String
+'    Dim arrRange        As Variant
+'    Dim lngErrStatus    As Long
+'
+'    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+'
+'    gusrErr.ErrNum = ERR_NO_SHEET
+'
+'    With Sheets(UpLoad)
+'
+'        gusrErr.ErrNum = 0
+'
+'        lngrow = .Cells.SpecialCells(xlCellTypeLastCell).Row
+'        lngCol = SPParaNum
+'        Call subGetRangeData(.Range(.Cells(1, 1), .Cells(lngrow, lngCol)), _
+'                             arrRange, strRange)
+'
+'        For lngrow = LBound(arrRange, 1) To UBound(arrRange, 1)
+'
+'            If arrRange(lngrow, 1) = vbNullString Then
+'                Exit For
+'            End If
+'
+'            '----- 時価毎のローカルルール ----------------------------
+'            Select Case UpLoad
+'            Case SHEET_UPD1
+'                lngRet = fncAGetKikanId(arrRange, strRange, lngrow)
+'            Case SHEET_UPD2
+'                lngRet = fncBChkJika(arrRange, strRange, lngrow)
+'            Case SHEET_UPD3
+'            End Select
+'            If lngRet <> 0 Then
+'                GoTo Continue
+'            End If
+'            '--------------------------------------------------------
+'            On Error GoTo AdoErr
+'
+'            With cmADO
+'                .CommandText = SPName
+'                .CommandType = adCmdStoredProc
+'                With .Parameters
+'                    .Refresh
+'                    For lngCol = 1 To .Count - 1
+'                        .Item(lngCol - 1) = (arrRange(lngrow, lngCol))
+'                    Next lngCol
+'                End With
+'                .Execute
+'                lngErrStatus = .Parameters(.Parameters.Count - 1)
+'            End With
+'
+'            On Error GoTo ErrHandler
+'
+'            If lngErrStatus Then
+'AdoErr:
+'                With gusrErr
+'                    .ModuleId = MODULE_NAME         'モージュールID
+'                    .Procedure = PROCEDURE_NAME     'プロシージャID
+'                    .MsgCode = ERR_MSGCD_PLSQL      'メッセージ区分
+'                    If lngErrStatus = -1 Then
+'                        .ErrNum = ERR_UPLOAD
+'                    Else
+'                        .ErrNum = ERR_PLSQL_PARA
+'                    End If
+'                    .MsgNaiyou = ERRMSG_UPLOAD      'メッセージ内容
+'                    .MsgSyousai = strRange(lngrow)  'メッセージ詳細
+'                    fncWriteErrSheet
+'                End With
+'
+'            End If
+'Continue:
+'        Next lngrow
+'
+'    End With
+'
+'    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+'
+'    Exit Function
+'ErrHandler:
+'
+'    With gusrErr
+'        If .ErrNum = ERR_NO_SHEET Then
+'            'シートがないのは正常扱い
+'        Else
+'            .MsgSyousai = strRange(lngrow)   'メッセージ詳細
+'            fncUpLoad = Err.Number
+'            .ErrNum = Err.Number
+'            .ErrDescript = Err.Description
+'        End If
+'        .ModuleId = MODULE_NAME         'モージュールID
+'        .Procedure = PROCEDURE_NAME     'プロシージャID
+'        .MsgCode = ERR_MSGCD_VB         'メッセージ区分
+'        .MsgNaiyou = ERRMSG_UPLOAD      'メッセージ内容
+'        fncWriteErrSheet
+'    End With
+'
+'    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+'End Function
+'<2006/12/18 DEL E IIDA>
+
+'*************************************************************************
+'関数名　　：ユーザーシートのデータ取得
+'
+'引　　数　：ARG1   I   AAA     Strinng あああ
+'
+'戻り値　　：なし
+'
+'機能説明　：ユーザーが管理するシートからデータを取得する。
+'
+'更新履歴　：2006/02/08 SRA T.Tanaka    新規作成
+'
+'*************************************************************************
+Public Function fncGetUserSheetData(ByVal Target As String, ByRef pRet As Collection, _
+                               ByVal pColumns As Integer) As Long
+
+    Const PROCEDURE_NAME As String = "fncGetUserSheetData"
+
+    On Error GoTo ErrHandler
+
+    Const ROWS_HEADER       As Long = 1
+    Const COLS_HEADER       As Long = 0
+    Const COL_BRAKE         As Long = 1
+    Const STR_BRAKE         As String = USER_SHEET_END
+    Const FORMAT_KOUZA_NO   As String = "0000000"
+    
+    Dim lngrow      As Long
+    Dim lngRowFr    As Long
+    Dim lngRowTo    As Long
+    Dim lngColFr    As Long
+    Dim lngColTo    As Long
+    Dim vrtRange    As Variant
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    fncGetUserSheetData = -1
+
+    With Sheets(Target)
+        
+        lngRowFr = ROWS_HEADER + 1
+        lngRowTo = .Cells.SpecialCells(xlCellTypeLastCell).Row
+        
+        lngColFr = COLS_HEADER + 1
+        lngColTo = pColumns
+        
+        vrtRange = .Range(.Cells(lngRowFr, lngColFr), .Cells(lngRowTo, lngColTo))
+                
+        Set pRet = New Collection
+                
+        On Error Resume Next
+        Do
+            lngrow = lngrow + 1
+            pRet.Add Item:=CStr(Format(vrtRange(lngrow, pColumns), "0000000")), Key:=Format(vrtRange(lngrow, 1), FORMAT_KOUZA_NO)
+        
+        Loop Until .Cells(lngrow, COL_BRAKE) = STR_BRAKE
+        On Error GoTo ErrHandler
+        
+    End With
+
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    fncGetUserSheetData = 0
+    Exit Function
+    
+ErrHandler:
+    fncGetUserSheetData = -1
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+
+'*************************************************************************
+'関数名　　：ユーザーシートのデータ取得
+'
+'引　　数　：ARG1   I   AAA     Strinng あああ
+'
+'戻り値　　：なし
+'
+'機能説明　：ユーザーが管理するシートからデータを取得する。
+'
+'更新履歴　：2006/06/09 SRA H.Anpo    新規作成
+'
+'*************************************************************************
+Public Function fncGetUserSheetData2(ByVal Target As String, ByRef pRet As Collection, _
+                               ByVal pColumns As Integer) As Long
+
+    Const PROCEDURE_NAME As String = "fncGetUserSheetData"
+
+
+    On Error GoTo ErrHandler
+
+    Const ROWS_HEADER       As Long = 1
+    Const COLS_HEADER       As Long = 0
+    Const COL_BRAKE         As Long = 1
+    Const STR_BRAKE         As String = USER_SHEET_END
+    Const FORMAT_KOUZA_NO   As String = "0000000"
+    
+    Dim lngrow      As Long
+    Dim lngRowFr    As Long
+    Dim lngRowTo    As Long
+    Dim lngColFr    As Long
+    Dim lngColTo    As Long
+    Dim vrtRange    As Variant
+    Dim strWk       As String
+    
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    fncGetUserSheetData2 = -1
+
+    With Sheets(Target)
+        
+        lngRowFr = ROWS_HEADER + 1
+        lngRowTo = .Cells.SpecialCells(xlCellTypeLastCell).Row
+        
+        lngColFr = COLS_HEADER + 1
+        lngColTo = 3
+        
+        vrtRange = .Range(.Cells(lngRowFr, lngColFr), .Cells(lngRowTo, lngColTo))
+                
+        Set pRet = New Collection
+                
+        On Error Resume Next
+        Do
+            lngrow = lngrow + 1
+            
+            strWk = ""
+            strWk = strWk & Left(CStr(vrtRange(lngrow, 2)) & Space(1), 1)
+            strWk = strWk & Left(CStr(vrtRange(lngrow, 3)) & Space(1), 1)
+            
+            pRet.Add Item:=strWk, Key:=Format(vrtRange(lngrow, 1), FORMAT_KOUZA_NO)
+        
+        Loop Until .Cells(lngrow, COL_BRAKE) = STR_BRAKE
+        On Error GoTo ErrHandler
+        
+    End With
+
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    fncGetUserSheetData2 = 0
+    Exit Function
+    
+ErrHandler:
+    fncGetUserSheetData2 = -1
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+
+'*************************************************************************
+'関数名　　：ユーザーシートのデータ取得
+'
+'引　　数　：ARG1   I   AAA     Strinng あああ
+'
+'戻り値　　：なし
+'
+'機能説明　：ユーザーが管理するシートからデータを取得する。
+'
+'更新履歴　：2006/02/08 SRA T.Tanaka    新規作成
+'
+'*************************************************************************
+Public Function fncGetCollectionItem(ByRef Target As Collection, _
+                                     ByVal pKey As String, ByRef pItem As String) As Boolean
+
+    Const PROCEDURE_NAME As String = "fncGetCollectionItem"
+
+    On Error GoTo ErrHandler
+  
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+
+    fncGetCollectionItem = False
+    pItem = vbNullString
+    pItem = Target(pKey)
+    fncGetCollectionItem = True
+        
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+
+    Exit Function
+ErrHandler:
+
+    'Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+
+'*************************************************************************
+'関数名　　：fncGetCollectionItem3
+'
+'引　　数　：ARG1   I   AAA     Strinng あああ
+'
+'戻り値　　：なし
+'
+'機能説明　：ユーザーが管理するシートからデータを取得する。
+'
+'更新履歴　：2006/12/12 SRA Iida    新規作成
+'
+'*************************************************************************
+Public Function fncGetCollectionItem3(ByRef Target As Collection, _
+                                     ByVal pKey As String, ByRef pItem As Variant) As Boolean
+
+    Const PROCEDURE_NAME As String = "fncGetCollectionItem3"
+
+    On Error GoTo ErrHandler
+  
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+
+    fncGetCollectionItem3 = False
+    pItem = vbNullString
+    pItem = Target(pKey)
+    fncGetCollectionItem3 = True
+        
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    fncGetCollectionItem3 = True
+    Exit Function
+    
+ErrHandler:
+    fncGetCollectionItem3 = False
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+End Function
+
+
+'*************************************************************************
+'関数名　　：ユーザーシートのデータ取得
+'
+'引　　数　：ARG1   I   AAA     Strinng あああ
+'
+'戻り値　　：なし
+'
+'機能説明　：ユーザーが管理するシートからデータを取得する。
+'
+'更新履歴　：2006/06/09 SRA H.Anpo    新規作成
+'
+'*************************************************************************
+Public Function fncGetCollectionItem2(ByRef Target As Collection, _
+                                     ByVal pKey As String) As Integer
+
+    Const PROCEDURE_NAME As String = "fncGetCollectionItem"
+
+    On Error GoTo ErrHandler
+  
+    Dim intCnt As Integer
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+
+    fncGetCollectionItem2 = D_KOZA_TUJO
+    For intCnt = 1 To 2
+        If Trim(Mid(Target(pKey), intCnt, 1)) = "○" Then
+            fncGetCollectionItem2 = fncGetCollectionItem2 + intCnt
+        End If
+    Next
+        
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+
+    Exit Function
+ErrHandler:
+
+    'Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+
+'*************************************************************************
+'関数名　　：ｄｂデータ取得
+'
+'引　　数　：ARG1   I   AAA     Strinng あああ
+'
+'戻り値　　：なし
+'
+'機能説明　：ｄｂ⇒コレクション　　ユーザーが管理するシートからデータを取得する。
+'
+'更新履歴　：2006/02/0９ SRA T.Tanaka    新規作成
+'
+'*************************************************************************
+Public Function fncSetCollection(ByRef Target As ADODB.Recordset, ByRef pRet As Collection, _
+                               ByVal pColumns As Integer)
+
+    Const PROCEDURE_NAME As String = "fncSetCollection"
+
+    On Error GoTo ErrHandler
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+
+    With Target
+                
+        Set pRet = New Collection
+                
+        .MoveFirst
+        Do Until .EOF
+            pRet.Add Item:=CStr(.Fields(pColumns).Value), Key:=CStr(.Fields(0).Value)
+            .MoveNext
+        Loop
+                
+    End With
+
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+
+    Exit Function
+ErrHandler:
+
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+
+'*************************************************************************
+'関数名　　：ｄｂデータ取得
+'
+'引　　数　：Target   I   RECORDSET
+'
+'戻り値　　：なし
+'
+'機能説明　：ｄｂ⇒コレクション　　対象の口座情報を管理する。
+'
+'更新履歴　 2006/12/09 SRA IIDA    新規作成
+'
+'*************************************************************************
+Public Function fncSetKouza(ByRef Target As ADODB.Recordset, ByRef pRet As Collection) As Boolean
+
+    Const PROCEDURE_NAME As String = "fncSetKouza"
+
+    On Error GoTo ErrHandler
+    
+    Dim lngj As Long
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+
+    With Target
+                
+        Set pRet = New Collection
+                
+        .MoveFirst
+        Do Until .EOF
+            ReDim arrData(.Fields.Count)
+            For lngj = 0 To .Fields.Count - 1
+                arrData(lngj) = Trim(.Fields(lngj))
+            Next
+            pRet.Add Item:=arrData, Key:=CStr(fncReplaceFandNo(Trim(.Fields("SINTAKU_BANK_PRTCD"))))
+            .MoveNext
+        Loop
+                
+    End With
+
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    fncSetKouza = True
+    Exit Function
+ErrHandler:
+
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+            
+'*************************************************************************
+'関数名　　：ファンドＮＯ変換
+'
+'引　　数　：ARG1   I   FundNo     Strinng ファンドＮＯ
+'
+'戻り値　　：変換後のファンドＮＯ
+'
+'機能説明　：MTBJ:400000000形式以外のファンドＮＯを変換する。
+'           TCSB:#00000000形式に変換する。
+'           JTSB:無変換。
+'
+'更新履歴　：2006/02/14 SRA T.Tanaka    新規作成
+'　　　　　：2006/05/09 SRA H.Anpo      TCSB,JTSB対応
+'
+'*************************************************************************
+Public Function fncReplaceFandNo(ByVal FundNo As String)
+
+    Const PROCEDURE_NAME As String = "fncSetCollection"
+
+    On Error GoTo ErrHandler
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+  
+    '=== 2006/05/09 Modified By Anpo Start
+'    If FUNDNO_BASE > CCur(FundNo) Then
+'        FundNo = CStr(FUNDNO_BASE + CCur(FundNo))
+'    End If
+    
+    If Sheets(SHEET_MAIN).cmbBank.Value = LIST_ITEM_MSB Then
+        If FUNDNO_BASE > CCur(FundNo) Then
+            FundNo = CStr(FUNDNO_BASE + CCur(FundNo))
+        End If
+    ElseIf Sheets(SHEET_MAIN).cmbBank.Value = LIST_ITEM_JTS Then
+        FundNo = FundNo
+    ElseIf Sheets(SHEET_MAIN).cmbBank.Value = LIST_ITEM_TCB Then
+        FundNo = "#" & Format(FundNo, "00000000")
+    End If
+    '=== 2006/05/09 Modified By Anpo End
+    
+    'FundNo = Format(FundNo, FUNDNO_BASE)
+    
+    fncReplaceFandNo = FundNo
+
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+
+    Exit Function
+ErrHandler:
+
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    
+End Function
+
+'*************************************************************************
+'関数名　　：VWDT001D 検索条件の取得
+'
+'引　　数　：なし
+'
+'戻り値　　：SQL文
+'
+'機能説明　：
+'
+'更新履歴　：2006/11/28 SRA Iida    新規作成
+'　　　　　：2013/04/10 GUT 王青龍 顧問バック更改対応
+
+'*************************************************************************
+Public Function fncGetConVWDT001D() As String
+
+    Const PROCEDURE_NAME As String = "fncGetConVWDT001D"
+
+    On Error GoTo ErrHandler
+    
+    Dim strbuf As String
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+
+    strbuf = ""
+    strbuf = strbuf & " WHERE "
+'------------<顧問バック更改対応 2013/04/10 GUT王青龍 START> ------------
+'    strbuf = strbuf & "     SETTEI_KBN = '1' "
+    strbuf = strbuf & "     SETTEI_KBN = '0' "
+    strbuf = strbuf & " AND GENGO = '0' "
+'------------<顧問バック更改対応 2013/04/10 GUT王青龍 END> ------------
+    strbuf = strbuf & " AND (CALLOFF_DATE = 0 OR "
+    strbuf = strbuf & "      CALLOFF_DATE > " & glngDate & ")"
+    
+    fncGetConVWDT001D = strbuf
+
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+
+    Exit Function
+ErrHandler:
+
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+
+'*************************************************************************
+'関数名　　：fncSetCollection3
+'
+'引　　数　：Target   I　データ
+'
+'戻り値　　：なし
+'
+'機能説明　：コレクションSET　　ユーザーが管理するシートからデータを取得する。
+'
+'更新履歴　：2006/12/14 SRA iida    新規作成
+'
+'*************************************************************************
+Public Function fncSetCollection3(ByRef Target As ADODB.Recordset, ByRef pRet As Collection) As Balloon
+
+    Const PROCEDURE_NAME As String = "fncSetCollection3"
+
+    On Error GoTo ErrHandler
+    
+    Dim lngj      As Long
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    fncSetCollection3 = False
+
+    With Target
+                
+        Set pRet = New Collection
+        
+        Do Until Target.EOF = True
+            ReDim arrData(.Fields.Count)
+            For lngj = 0 To .Fields.Count - 1
+                arrData(lngj) = .Fields(lngj)
+            Next
+            pRet.Add Item:=arrData, Key:=Trim(Format(.Fields(2), "0000000"))
+            Target.MoveNext
+        Loop
+    End With
+
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    fncSetCollection3 = True
+    Exit Function
+    
+ErrHandler:
+    fncSetCollection3 = False
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+
+'<2006/11/28 DEL S Iida> テーブル変更
+''*************************************************************************
+''関数名　　：ＫＫ０１検索条件の取得
+''
+''引　　数　：なし
+''
+''戻り値　　：ファンドコード以外の条件節
+''
+''機能説明　：ファンドコード・口座番号が１対１になるように条件を設定
+''
+''更新履歴　：2006/02/14 SRA T.Tanaka    新規作成
+'
+''*************************************************************************
+'Public Function fncGetConKK01() As String
+'
+'    Const PROCEDURE_NAME As String = "fncGetConKK01"
+'
+'    On Error GoTo ErrHandler
+'
+'    Dim strBuf As String
+'
+'    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+'
+'    strBuf = ""
+'    strBuf = strBuf & " WHERE k.kouza_kaisetsu_kbn = '1' AND"
+'    strBuf = strBuf & " (heisa_ymd = 0 OR"
+'    strBuf = strBuf & "  heisa_ymd > " & glngDate & ")"
+'
+'    fncGetConKK01 = strBuf
+'
+'    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+'
+'    Exit Function
+'ErrHandler:
+'
+'    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+'End Function
+'<2006/11/28 DEL E Iida> テーブル変更
+
+'*************************************************************************
+Public Function gfunXlsWSSet(ByVal obj1 As Object, ByVal strWS As String) As Long
+
+    Dim i           As Integer
+    Dim j           As Integer
+    
+    gfunXlsWSSet = -1
+    
+    '存在するか？
+    j = 0
+    For i = 1 To obj1.Sheets.Count
+       If Sheets(i).Name = strWS Then
+            j = 1
+           Exit For
+       End If
+    Next
+    
+    If j = 0 Then
+        '存在してない
+       Exit Function
+    End If
+    
+    gfunXlsWSSet = 0
+    
+End Function
+'------------------------------------------------------------------------------
+'資産コードセット
+'------------------------------------------------------------------------------
+Public Function fncSetShisanCD() As Long
+
+    Const PROCEDURE_NAME As String = "fncGetShisanCD"
+
+    On Error GoTo ErrHandler
+    
+    Dim lngcnt    As Long
+    Dim lngi      As Long
+    Dim lngj      As Long
+    Dim lngk      As Long
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    fncSetShisanCD = -1
+
+    strKMKCD1 = Array(S1_KMK_CD1, S1_KMK_CD2, S1_KMK_CD3, S1_KMK_CD4, S1_KMK_CD5, S1_KMK_CD6, S1_KMK_CD7, S1_KMK_CD8, S1_KMK_CD9)
+    strKMKCD2 = Array(S2_KMK_CD1, S2_KMK_CD2, S2_KMK_CD3, S2_KMK_CD4, S2_KMK_CD5, S2_KMK_CD6, S2_KMK_CD7, S2_KMK_CD8, S2_KMK_CD9)
+    strKMKCD3 = Array(S3_KMK_CD1, S3_KMK_CD2, S3_KMK_CD3, S3_KMK_CD4, S3_KMK_CD5, S3_KMK_CD6, S3_KMK_CD7, S3_KMK_CD8, S3_KMK_CD9)
+    strAkmkCD = Array(strKMKCD1, strKMKCD2, strKMKCD3)
+    fncSetShisanCD = 0
+    Exit Function
+
+ErrHandler:
+    fncSetShisanCD = -1
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+
+End Function
+
+'*************************************************************************
+'関数名　　：資産コード取得
+'
+'引　　数　：ARG1   I   AAA     Strinng あああ
+'
+'戻り値　　：なし
+'
+'機能説明　：帳票科目コードから資産コードを取得する
+'
+'更新履歴　：2006/12/14 SRA iida    新規作成
+'
+'*************************************************************************
+Public Function fncGetShisanCD(ByVal V_SyuBR As String, ByVal V_KmkCD As String, ByRef v_arr As Variant) As Boolean
+
+    Const PROCEDURE_NAME As String = "fncGetShisanCD"
+
+    On Error GoTo ErrHandler
+    
+    Dim lngcnt    As Long
+    Dim vararr    As Variant
+    Dim strshisan As String
+    Dim lngi      As Long
+    Dim lngj      As Long
+    
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    fncGetShisanCD = False
+
+    lngj = 0
+    Select Case V_SyuBR
+        Case "00100010"
+            lngcnt = 0
+        Case "00200010"
+            lngcnt = 1
+        Case "00300010"
+            lngcnt = 2
+    End Select
+    
+    For lngi = 0 To 8
+        If InStr(strAkmkCD(lngcnt)(lngi), V_KmkCD) > 0 Then
+            Select Case lngi
+                Case 0
+                    strshisan = "0002"
+                Case 1
+                    strshisan = "0009"
+                Case 2
+                    strshisan = "0017"
+                Case 3
+                    strshisan = "0003"
+                Case 4
+                    strshisan = "0001"
+                Case 5
+                    strshisan = "0005"
+                Case 6
+                    strshisan = "0004"
+                Case 7
+                    strshisan = "0020"
+                Case 8
+                    strshisan = "0006"
+            End Select
+            lngj = lngj + 1
+            ReDim Preserve v_arr(lngj)
+            v_arr(lngj) = strshisan
+        End If
+    Next
+
+    If lngj = 0 Then
+        fncGetShisanCD = False
+    Else
+        fncGetShisanCD = True
+    End If
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    Exit Function
+    
+ErrHandler:
+    fncGetShisanCD = False
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+
+'*************************************************************************
+'関数名　　：fncUploadData Uploadデータの更新
+'
+'引　　数　：
+'          Target       :Uploadシート
+'          TargetRange  :Range
+'          xRow         :Row
+'
+'戻り値　　：
+'
+'機能説明　：指定したｱｯﾌﾟﾛｰﾄﾞｼｰﾄによりﾃﾞｰﾀ登録を行う
+'
+'更新履歴　：2006/12/07 SRA Iida    新規作成
+
+'*************************************************************************
+Public Function fncUploadData(ByVal Target As String, ByRef TargetRange As Variant, ByVal vRow As Long) As Long
+
+    Const PROCEDURE_NAME As String = "fncUploadData "
+
+On Error GoTo ErrHandler
+
+    Dim strsql                  As String
+    Dim lngCol                  As Long
+    Dim lngrow                  As Long
+    Dim lngcnt                  As Long
+    Dim strErrCode              As String
+    Dim blnret                  As Boolean
+    Dim recdata                 As ADODB.Recordset
+
+    fncUploadData = -1
+    
+    With Sheets(Target)
+        strsql = ""
+        strsql = "SELECT COUNT(*) FROM KYK_SHISAN_BETSU_SHINTAKU_JIKA "
+        strsql = strsql & " WHERE "
+        strsql = strsql & "      KOHZA_NO = " & "'" & Format(TargetRange(vRow, levsCUKouzaNo), "0000000") & "'" & " AND "
+        strsql = strsql & "      SHISAN_BUNRUI = " & "'" & TargetRange(vRow, levsCUSisanBr) & "'" & " AND "
+        strsql = strsql & "      SHISAN_CODE = " & "'" & Format(TargetRange(vRow, levsCUSisanCd), "0000") & "'" & " AND "
+        strsql = strsql & "      KIJUN_YMD = " & TargetRange(vRow, levsCUDate)
+        '
+        Set recdata = cnAdo.Execute(strsql)
+        
+        If recdata.Fields(0) = 0 Then
+            '追加
+            strsql = ""
+            strsql = "INSERT INTO KYK_SHISAN_BETSU_SHINTAKU_JIKA ( "
+            strsql = strsql & "KOHZA_NO,"
+            strsql = strsql & "SHISAN_BUNRUI,"
+            strsql = strsql & "SHISAN_CODE,"
+            strsql = strsql & "KIJUN_YMD,"
+            strsql = strsql & "JIKA,"
+            strsql = strsql & "TOHROKU_YMD,"
+            strsql = strsql & "KOHSHIN_YMD,"
+            strsql = strsql & "KOHSHIN_PGM_ID,"
+            strsql = strsql & "KOHSHIN_TANTOHSHA,"
+            strsql = strsql & "SAKUJO_FLG" & ")"
+            strsql = strsql & "VALUES"
+            strsql = strsql & "("
+            strsql = strsql & "'" & Format(TargetRange(vRow, levsCUKouzaNo), "0000000") & "'" & ","
+            strsql = strsql & "'" & TargetRange(vRow, levsCUSisanBr) & "'" & ","
+            strsql = strsql & "'" & Format(TargetRange(vRow, levsCUSisanCd), "0000") & "'" & ","
+            strsql = strsql & TargetRange(vRow, levsCUDate) & ","
+            strsql = strsql & TargetRange(vRow, levsCUJika) & ","
+            strsql = strsql & "SYSDATE,"
+            strsql = strsql & "SYSDATE,"
+            strsql = strsql & "'" & PGM_ID & "'" & ","
+            strsql = strsql & "'" & USER & "'" & ","
+            strsql = strsql & "'0'" & ")"
+        Else
+            '更新
+            strsql = ""
+            strsql = "UPDATE KYK_SHISAN_BETSU_SHINTAKU_JIKA SET "
+            strsql = strsql & "JIKA = " & TargetRange(vRow, levsCUJika) & ","
+            strsql = strsql & "TOHROKU_YMD = SYSDATE" & ","
+            strsql = strsql & "KOHSHIN_YMD = SYSDATE" & ","
+            strsql = strsql & "KOHSHIN_PGM_ID = " & "'" & PGM_ID & "'" & ","
+            strsql = strsql & "KOHSHIN_TANTOHSHA = " & "'" & USER & "'" & ","
+            strsql = strsql & "SAKUJO_FLG = " & "'0'"
+            strsql = strsql & " WHERE "
+            strsql = strsql & "      KOHZA_NO = " & "'" & Format(TargetRange(vRow, levsCUKouzaNo), "0000000") & "'" & " AND "
+            strsql = strsql & "      SHISAN_BUNRUI = " & "'" & TargetRange(vRow, levsCUSisanBr) & "'" & " AND "
+            strsql = strsql & "      SHISAN_CODE = " & "'" & Format(TargetRange(vRow, levsCUSisanCd), "0000") & "'" & " AND "
+            strsql = strsql & "      KIJUN_YMD = " & TargetRange(vRow, levsCUDate)
+        End If
+    End With
+        
+    recdata.Close
+    Set recdata = Nothing
+    
+    cnAdo.Execute (strsql)
+    
+    fncUploadData = 0
+    Exit Function
+        
+ErrHandler:
+
+    fncUploadData = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(MODULE_NAME, "fncUploadData", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+'-------------------------------------------------------------------------------
+' <FUNCTION>  Fn_ChngStr ： 文字列を変換方法によって変換する
+'
+' <INPUT>　　 v_str : 文字列  v_type : 変換方法
+'
+'             v_type 0:NULL→空白へ 1:"0"
+'
+' <OUTPUT>    変換後文字列
+'
+'更新履歴　：2006/12/07 SRA Iida    新規作成
+'-------------------------------------------------------------------------------
+Public Function Fn_ChngStr(ByVal v_str As Variant, Optional v_type As Integer = 0) As String
+    Dim strbuf As String
+    
+    strbuf = ""
+    If IsNull(v_str) = True Then
+        Select Case v_type
+            Case 0
+                strbuf = ""
+            Case 1
+                strbuf = "0"
+        End Select
+        Fn_ChngStr = strbuf
+    Else
+        Fn_ChngStr = v_str
+    End If
+    
+
+End Function
+

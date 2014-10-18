@@ -1,0 +1,204 @@
+Attribute VB_Name = "basCheck"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：契約管理システム・未収顧問料インターフェースファイル作成
+'
+'オブジェクト名：basCheck
+'
+'機能概要　：チェック機能
+'
+'更新履歴　：2006/08/02 SRA H.Anpo      新規作成
+'
+'*************************************************************************
+Private Const MODULE_NAME As String = "basCheck"
+
+'*************************************************************************
+'関数名　　：日付チェック
+'
+'引　　数　：ARG1   I   Target      String 入力テキスト
+'　　　　　：ARG2   I   Msg1        String メッセージ出力時の項目名
+'
+'戻り値　　：エラー番号
+'
+'機能説明　：YYYYMMDD形式の日付チェックを行う。
+'
+'更新履歴　：2006/07/05 SRA H.Anpo      新規作成
+'
+'*************************************************************************
+Public Function fncChkDateFormat(ByVal Target As String, _
+                            ByVal Msg1 As String) As Long
+
+    Const PROCEDURE_NAME As String = "fncChkDateFormat"
+
+On Error GoTo ErrHandler
+    
+    Dim strRet  As String
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Select Case Len(Target)
+        Case LEN_NULL
+            '7000 未入力です。
+            fncKsCmnMessageDisp MSGLVL_WARNNING, 7000, Msg1, , True
+            fncChkDateFormat = 7000
+            Exit Function
+            
+        Case LEN_DATE
+            If IsDate(Format(Target & "01", "####/##/##")) Then
+            Else
+                '形式不正
+                '7001 日付として認識できません。YYYYMM形式で入力して下さい。
+                fncKsCmnMessageDisp MSGLVL_WARNNING, 7001, Msg1, , True
+                fncChkDateFormat = 7001
+                Exit Function
+            End If
+            
+        Case Else
+            '桁数不正
+            '7002 入力桁数が不正です。
+            fncKsCmnMessageDisp MSGLVL_WARNNING, 7002, Msg1, MSG2_LEN_KIJYUNBI, True
+            fncChkDateFormat = 7002
+            Exit Function
+    End Select
+    
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+
+ErrHandler:
+    fncChkDateFormat = Err.Number
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+
+'*************************************************************************
+'関数名　　：フォルダーチェック
+'
+'引　　数　：ARG1   I   Target      String 入力テキスト
+'　　　　　：ARG2   I   Msg1        String メッセージ出力時の項目名
+'
+'戻り値　　：エラー番号
+'
+'機能説明　：金額のチェックを行う。
+'
+'更新履歴　：2006/07/05 SRA H.Anpo      新規作成
+'
+'*************************************************************************
+Public Function fncChkFolder(ByVal Target As String, _
+                            ByVal Msg1 As String) As Long
+
+    Const PROCEDURE_NAME As String = "fncChkFolder"
+
+On Error GoTo ErrHandler
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    fncChkFolder = 0
+    
+    If Trim(Target) = "" Then
+        '7006 未入力です。
+        fncKsCmnMessageDisp MSGLVL_WARNNING, 7006, Msg1, , True
+        fncChkFolder = 7006
+        Exit Function
+    End If
+    
+    If Dir(CStr(Target), vbDirectory) = "" Then
+        '形式不正
+        '7003 入力に誤りがあります。
+        fncKsCmnMessageDisp MSGLVL_WARNNING, 7003, Msg1, , True
+        fncChkFolder = 7003
+        Exit Function
+    End If
+    
+EndProcess:
+
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+ErrHandler:
+    fncChkFolder = Err.Number
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+
+'*************************************************************************
+'関数名　　：口座番号チェック
+'
+'引　　数　：ARG1   I   Target      String 入力テキスト(口座番号)
+'　　　　　：ARG2   I   Msg1        String メッセージ出力時の項目名
+'
+'戻り値　　：エラー番号
+'
+'機能説明　：口座番号のチェックを行う。
+'
+'更新履歴　：2007/11/19 SRA Y.Azuma    新規     (PH4)
+'        　  2007/12/20 SRA T.Ichikawa 修正     (PH4)　合算口座対応
+'        　  2008/01/21 SRA Y.Azuma    変更     (PH4)特殊文字バグ対応
+'*************************************************************************
+Public Function fncChkKohzaNo(ByVal Target As String, _
+                            ByVal Msg1 As String) As Long
+
+    Const PROCEDURE_NAME As String = "fncChkKohzaNo"
+
+On Error GoTo ErrHandler
+    
+    Dim strRet  As String
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Select Case Len(Target)
+            
+        Case LEN_KOHZA_NO
+            
+'------------<Added Start T.Ichikawa 2007/12/20> -----------------------
+            '合算口座の場合
+            If Left(Target, 1) = "G" Then
+'------------<Modify Start azuma 2008/01/21 (PH4)> ★★★☆-----------------------
+'                If fncGassanKohzaExist(Target) = 0 Then
+                If fncGassanKohzaExist(func_ChkQuoteshon(Target, "'")) = 0 Then
+'------------<Modify End   azuma 2008/01/21 (PH4)> ★★★☆-----------------------
+                Else
+                    '口座存在チェックエラー
+                    '7010 口座番号が存在しません。
+                    fncKsCmnMessageDisp MSGLVL_WARNNING, 7010, Msg1, , True
+                    fncChkKohzaNo = 7010
+                    Exit Function
+                End If
+            Else
+'------------<Added End   T.Ichikawa 2007/12/20> -----------------------
+
+'------------<Modify Start azuma 2008/01/21 (PH4)> ★★★☆-----------------------
+'                If gCom01_KozaNoExist(Target) Then
+                If gCom01_KozaNoExist(func_ChkQuoteshon(Target, "'")) Then
+'------------<Modify End   azuma 2008/01/21 (PH4)> ★★★☆-----------------------
+                Else
+                    '口座存在チェックエラー
+                    '7010 口座番号が存在しません。
+                    fncKsCmnMessageDisp MSGLVL_WARNNING, 7010, Msg1, , True
+                    fncChkKohzaNo = 7010
+                    Exit Function
+                End If
+'------------<Added Start T.Ichikawa 2007/12/20> -----------------------
+            End If
+'------------<Added End   T.Ichikawa 2007/12/20> -----------------------
+
+        Case Else
+            '桁数不正
+            '7011 入力桁数が不正です。
+            fncKsCmnMessageDisp MSGLVL_WARNNING, 7011, Msg1, MSG2_LEN_KOHZA_NO, True
+            fncChkKohzaNo = 7011
+            Exit Function
+            
+    End Select
+    
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+
+ErrHandler:
+    fncChkKohzaNo = Err.Number
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+
+
+

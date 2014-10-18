@@ -1,0 +1,797 @@
+Attribute VB_Name = "basExec"
+Option Explicit
+'*************************************************************************
+'
+'プロジェクト名：契約管理システム・未収顧問料インターフェースファイル作成
+'
+'オブジェクト名：basExec
+'
+'機能概要　：参照処理
+'
+'更新履歴　：2006/08/02 SRA H.Anpo      新規作成
+'
+'*************************************************************************
+Private Const MODULE_NAME As String = "basExec"
+
+'*************************************************************************
+'関数名　　：印刷情報設定
+'
+'引　　数　：ARG1   I   SetSheet    Excel.Worksheet ワークシート
+'　　　　　：ARG2   I   Kijyunbi    Long            最大行番号
+'
+'機能説明　：指定されたシートの印刷情報を設定する
+'
+'更新履歴　：2006/08/02 SRA H.Anpo    新規作成
+'
+'*************************************************************************
+Sub subPageSetupPrintArea( _
+            ByVal SetSheet As Excel.Worksheet, _
+            ByVal Kijyunbi As Long)
+            
+'    ActiveSheet.PageSetup.PrintArea = ""
+    With SetSheet.PageSetup
+'        .LeftHeader = ""
+'        .CenterHeader = "＊＊　未収顧問料　＊＊"
+'        .RightHeader = "" & Chr(10) & "" & Chr(10) & "基準日＜2005年01月31日＞"
+        .RightHeader = "" & Chr(10) & "" & Chr(10) & Format(Kijyunbi, "基準日＜####年##月##日＞")
+
+'        .LeftFooter = ""
+'        .CenterFooter = "&P/&N"
+'        .RightFooter = ""
+'        .LeftMargin = Application.InchesToPoints(0.78740157480315)
+'        .RightMargin = Application.InchesToPoints(0.78740157480315)
+'        .TopMargin = Application.InchesToPoints(0.984251968503937)
+'        .BottomMargin = Application.InchesToPoints(0.984251968503937)
+'        .HeaderMargin = Application.InchesToPoints(0.511811023622047)
+'        .FooterMargin = Application.InchesToPoints(0.511811023622047)
+'        .PrintHeadings = False
+'        .PrintGridlines = False
+'        .PrintComments = xlPrintNoComments
+'        .PrintQuality = 600
+'        .CenterHorizontally = False
+'        .CenterVertically = False
+'        .Orientation = xlLandscape
+'        .Draft = False
+'        .PaperSize = xlPaperA4
+'        .FirstPageNumber = xlAutomatic
+'        .Order = xlOverThenDown
+'        .BlackAndWhite = False
+'        .Zoom = 73
+    End With
+End Sub
+
+
+'*************************************************************************
+'関数名　　：未収管理情報取得
+'
+'引　　数　：ARG1   I   DstWorkbook Workbook    ワークブック
+'　　　　　：ARG2   I   MaxRow      Long        最大行番号
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：指定されたブックの運用中の口座シートに罫線を引く
+'
+'更新履歴　：2006/08/02 SRA H.Anpo    新規作成
+'更新履歴　：2009/03/10 SRA Y.Azuma   変更      未収顧問料IFの項目追加
+'
+'*************************************************************************
+Sub subKsCmnSetLine( _
+        ByVal DstWorkbook As Workbook, _
+        ByVal MaxRow As Long)
+'
+
+    With DstWorkbook.Sheets(SHEET_TEMP)
+    
+'------------<Modify Start azuma 2009/03/10 > 未収顧問料IFの項目追加---------------
+        .Range( _
+            "A" & ROWN_DATA_TOP & ":C" & MaxRow & _
+            ",F" & ROWN_DATA_TOP & ":H" & MaxRow & _
+            ",I" & ROWN_DATA_TOP & ":K" & MaxRow & _
+            ",L" & ROWN_DATA_TOP & ":N" & MaxRow & _
+            ",O" & ROWN_DATA_TOP & ":Q" & MaxRow & "").Select
+'        .Range( _
+'            "A" & ROWN_DATA_TOP & ":C" & MaxRow & _
+'            ",G" & ROWN_DATA_TOP & ":I" & MaxRow & _
+'            ",J" & ROWN_DATA_TOP & ":L" & MaxRow & _
+'            ",M" & ROWN_DATA_TOP & ":O" & MaxRow & "").Select
+'------------<Modify End   azuma 2009/03/10 > 未収顧問料IFの項目追加---------------
+        Selection.Borders(xlDiagonalDown).LineStyle = xlNone
+        Selection.Borders(xlDiagonalUp).LineStyle = xlNone
+        With Selection.Borders(xlEdgeLeft)
+            .LineStyle = xlContinuous
+            .Weight = xlThin
+            .ColorIndex = xlAutomatic
+        End With
+        With Selection.Borders(xlEdgeTop)
+            .LineStyle = xlContinuous
+            .Weight = xlThin
+            .ColorIndex = xlAutomatic
+        End With
+        With Selection.Borders(xlEdgeBottom)
+            .LineStyle = xlContinuous
+            .Weight = xlThin
+            .ColorIndex = xlAutomatic
+        End With
+        With Selection.Borders(xlEdgeRight)
+            .LineStyle = xlContinuous
+            .Weight = xlThin
+            .ColorIndex = xlAutomatic
+        End With
+        With Selection.Borders(xlInsideVertical)
+            .LineStyle = xlContinuous
+            .Weight = xlHairline
+            .ColorIndex = xlAutomatic
+        End With
+
+        If MaxRow > ROWN_DATA_TOP Then
+            '2行以上ある場合は行間の罫線を引く
+            With Selection.Borders(xlInsideHorizontal)
+                .LineStyle = xlContinuous
+                .Weight = xlHairline
+                .ColorIndex = xlAutomatic
+            End With
+        End If
+
+'------------<Modify Start azuma 2009/03/10 > 未収顧問料IFの項目追加---------------
+'        .Range("F" & ROWN_DATA_TOP & ":F" & MaxRow & "").Select
+'        Selection.Borders(xlDiagonalDown).LineStyle = xlNone
+'        Selection.Borders(xlDiagonalUp).LineStyle = xlNone
+'        With Selection.Borders(xlEdgeLeft)
+'            .LineStyle = xlContinuous
+'            .Weight = xlThin
+'            .ColorIndex = xlAutomatic
+'        End With
+'        With Selection.Borders(xlEdgeTop)
+'            .LineStyle = xlContinuous
+'            .Weight = xlThin
+'            .ColorIndex = xlAutomatic
+'        End With
+'        With Selection.Borders(xlEdgeBottom)
+'            .LineStyle = xlContinuous
+'            .Weight = xlThin
+'            .ColorIndex = xlAutomatic
+'        End With
+'        With Selection.Borders(xlEdgeRight)
+'            .LineStyle = xlContinuous
+'            .Weight = xlThin
+'            .ColorIndex = xlAutomatic
+'        End With
+'------------<Modify End   azuma 2009/03/10 > 未収顧問料IFの項目追加---------------
+
+        If MaxRow > ROWN_DATA_TOP Then
+            '2行以上ある場合は行間の罫線を引く
+            With Selection.Borders(xlInsideHorizontal)
+                .LineStyle = xlContinuous
+                .Weight = xlHairline
+                .ColorIndex = xlAutomatic
+            End With
+        End If
+        
+        .Range("D" & ROWN_DATA_TOP & ":E" & MaxRow & "").Select
+        Selection.Borders(xlDiagonalDown).LineStyle = xlNone
+        Selection.Borders(xlDiagonalUp).LineStyle = xlNone
+        With Selection.Borders(xlEdgeLeft)
+            .LineStyle = xlContinuous
+            .Weight = xlThin
+            .ColorIndex = xlAutomatic
+        End With
+        With Selection.Borders(xlEdgeTop)
+            .LineStyle = xlContinuous
+            .Weight = xlThin
+            .ColorIndex = xlAutomatic
+        End With
+        With Selection.Borders(xlEdgeBottom)
+            .LineStyle = xlContinuous
+            .Weight = xlThin
+            .ColorIndex = xlAutomatic
+        End With
+        With Selection.Borders(xlEdgeRight)
+            .LineStyle = xlContinuous
+            .Weight = xlThin
+            .ColorIndex = xlAutomatic
+        End With
+        With Selection.Borders(xlInsideVertical)
+            .LineStyle = xlContinuous
+            .Weight = xlHairline
+            .ColorIndex = xlAutomatic
+        End With
+        
+        If MaxRow > ROWN_DATA_TOP Then
+            '2行以上ある場合は行間の罫線を引く
+            With Selection.Borders(xlInsideHorizontal)
+                .LineStyle = xlContinuous
+                .Weight = xlHairline
+                .ColorIndex = xlAutomatic
+            End With
+        End If
+
+    End With
+
+End Sub
+
+'*************************************************************************
+'関数名　　：未収管理情報取得
+'
+'引　　数　：ARG1   I   lngKijyunbi Long    基準日
+'　　　　　：ARG2   O   vntRec()    Variant 取得データ格納配列
+'　　　　　：ARG3   O   lngRows     Long    取得データ数
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：未収管理情報を取得する
+'
+'更新履歴　：2006/08/02 SRA H.Anpo     新規作成
+'更新履歴　：2007/11/19 SRA Y.Azuma    変更     (PH4)口座番号追加
+'更新履歴　：2007/12/20 SRA T.Ichikawa 変更     (PH4)合算口座対応
+'更新履歴　：2009/03/10 SRA Y.Azuma    変更   　未収顧問料IFの項目追加
+'          : 2013/04/10 GUT 梁賀松 顧問バック更改対応
+'
+'*************************************************************************
+Function fncGetData( _
+            ByVal lngKijyunbi As Long, _
+            ByRef vntRec() As Variant, _
+            ByRef lngRows As Long, _
+            Optional strKohzaNo As String = "")
+
+    Const PROCEDURE_NAME As String = "fncGetData"
+    
+On Error GoTo ErrorHandler
+
+    Dim strRet      As String
+    Dim strKouza_no As String
+    Dim strSql      As String
+    Dim lngCols     As Long
+    Dim strErrCd    As String
+    Dim blnRet      As Boolean
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    fncGetData = 0
+    
+    strSql = ""
+    strSql = strSql & " SELECT"
+    strSql = strSql & "     VD1.SHOZOKU_BU,"                                '部店
+    strSql = strSql & "     KMK.KOHZA_NO,"                                  '口座番号
+    strSql = strSql & "     RTRIM(VD1.NAME_J),"                             '顧客名
+    
+'    strSQL = strSQL & "     KSK.SEIKYU_KIKAN_FROM SEIKYUSHO_KIKAN_FROM,"    '今期顧客計算期間FROM
+'    strSQL = strSQL & "     KSK.SEIKYU_KIKAN_TO SEIKYUSHO_KIKAN_TO,"        '今期顧客計算期間TO
+    strSql = strSql & "     KMK.KEISAN_KIKAN_FROM SEIKYUSHO_KIKAN_FROM,"    '今期顧客計算期間FROM
+    strSql = strSql & "     KMK.KEISAN_KIKAN_TO  SEIKYUSHO_KIKAN_TO,"       '今期顧客計算期間TO
+    
+'------------<Modify Start azuma 2009/03/10 > 未収顧問料IFの項目追加---------------
+                                                                            'NAM当月入金額
+    strSql = strSql & "     TO_CHAR(KMK.NAM_TOHGETSU_NYUKINGAKU_SUM),"      '合計
+    strSql = strSql & "     TO_CHAR(KMK.UCHI_T21_HOHSHU_GAKU),"             'うち自己設定投信委託者報酬額
+    strSql = strSql & "     TO_CHAR(KMK.UCHI_AB_KINGAKU),"                  'うち月末顧問料調整資産額
+                                                                            '顧問料金額
+    strSql = strSql & "     TO_CHAR(KMK.KOMONRYOH_MISHU_SEIKYUZUMI),"       '未収請求済金額
+    strSql = strSql & "     TO_CHAR(KMK.KOMONRYOH_MISHU_MISEIKYU),"         '未収未請求金額
+    strSql = strSql & "     TO_CHAR(KMK.KOMONRYOH_MISHU_SHOHKEI),"          '小計
+                                                                            '自己設定投信委託者報酬額
+    strSql = strSql & "     TO_CHAR(KMK.T21_MISHU_SEIKYUZUMI),"             '未収請求済金額
+    strSql = strSql & "     TO_CHAR(KMK.T21_MISHU_MISEIKYU),"               '未収未請求金額
+    strSql = strSql & "     TO_CHAR(KMK.T21_MISHU_SHOHKEI),"                '小計
+                                                                            '月末顧問料調整資産
+    strSql = strSql & "     TO_CHAR(KMK.AB_MISHU_SEIKYUZUMI),"              '未収請0求済金額
+    strSql = strSql & "     TO_CHAR(KMK.AB_MISHU_MISEIKYU),"                '未収未請求金額
+    strSql = strSql & "     TO_CHAR(KMK.AB_MISHU_SHOHKEI) "                 '小計
+
+'    strSql = strSql & "     KMK.NAM_TOHGETSU_NYUKINGAKU_SUM,"               'NAM当月入金額合計
+'                                                                            '顧問料金額
+'    strSql = strSql & "     KMK.KOMONRYOH_MISHU_SEIKYUZUMI,"                '未収請求済金額
+'    strSql = strSql & "     KMK.KOMONRYOH_MISHU_MISEIKYU,"                  '未収未請求金額
+'    strSql = strSql & "     KMK.KOMONRYOH_MISHU_SHOHKEI,"                   '小計
+'                                                                            '自己設定投信委託者報酬額
+'    strSql = strSql & "     KMK.T21_MISHU_SEIKYUZUMI,"                      '未収請求済金額
+'    strSql = strSql & "     KMK.T21_MISHU_MISEIKYU,"                        '未収未請求金額
+'    strSql = strSql & "     KMK.T21_MISHU_SHOHKEI,"                         '小計
+'                                                                            '月末顧問料調整資産
+'    strSql = strSql & "     KMK.AB_MISHU_SEIKYUZUMI,"                       '未収請0求済金額
+'    strSql = strSql & "     KMK.AB_MISHU_MISEIKYU,"                         '未収未請求金額
+'    strSql = strSql & "     KMK.AB_MISHU_SHOHKEI "                          '小計
+'------------<Modify End   azuma 2009/03/10 > 未収顧問料IFの項目追加---------------
+    strSql = strSql & " FROM"
+    strSql = strSql & "     KYK_MISHU_KANRI     KMK,"                       '未収管理
+    strSql = strSql & "     VW_DT001D           VD1"                        '口座属性
+'    strSQL = strSQL & "     KYK_SEIKYU_KIKAN    KSK"
+
+'------------<Added Start T.Ichikawa 2007/12/20> -----------------------
+    '合算口座の場合
+    If Left(Trim(strKohzaNo), 1) = "G" Then
+        strSql = strSql & "    ,KYK_GASSAN_KOHZA    KGK"                        '合算口座
+    End If
+'------------<Added End   T.Ichikawa 2007/12/20> -----------------------
+
+    strSql = strSql & " WHERE"
+    strSql = strSql & "     KMK.KOHZA_NO        = VD1.PRTCD"
+'------------<顧問バック更改対応 2013/04/10 GUT梁賀松 START> ------------
+'    strSql = strSql & " AND VD1.SETTEI_KBN      = '1'"                      '口座開設区分 1:国内本開設
+     strSql = strSql & " AND VD1.SETTEI_KBN      = '0'"
+     strSql = strSql & " AND VD1.GENGO      = '0'"
+'------------<顧問バック更改対応 2013/04/10 GUT梁賀松 END> ------------
+    
+'2006/11/09 Deleted By H.Anpo start
+'仕様変更対応　閉鎖された口座も出力対象とする
+'    strSql = strSql & " AND (VD1.CALLOFF_DATE   = 0 OR"
+'    strSql = strSql & "      VD1.CALLOFF_DATE   > KMK.KEISAN_TO_YMD )"
+'2006/11/09 Deleted By H.Anpo end
+
+'    strSQL = strSQL & " AND KMK.KOHZA_NO        = KSK.KOHZA_NO"
+'    strSQL = strSQL & " AND KMK.SEIKYU_KIKAN_ID = KSK.SEIKYU_KIKAN_ID"
+    strSql = strSql & " AND KMK.SAKUJO_FLG      = '0'"
+'    strSQL = strSQL & " AND KSK.SAKUJO_FLG      = '0'"
+'------------<顧問バック更改対応 2013/04/10 GUT梁賀松 START> ------------
+'    strSql = strSql & " AND VD1.DELT_FLG        = '0'"
+'------------<顧問バック更改対応 2013/04/10 GUT梁賀松 END> ------------
+    strSql = strSql & " AND KMK.KEISAN_TO_YMD   = " & lngKijyunbi
+    
+'------------<Modify Start azuma 2007/11/19 (PH4)> ★★★☆-----------------------
+    If Trim(strKohzaNo) <> "" Then
+
+'------------<Added Start T.Ichikawa 2007/12/20> -----------------------
+        '合算口座の場合
+        If Left(Trim(strKohzaNo), 1) = "G" Then
+            strSql = strSql & " AND KGK.GASSAN_OYA_KOHZA_NO = '" & strKohzaNo & "'"
+            strSql = strSql & " AND KMK.KOHZA_NO   = KGK.GASSAN_KO_KOHZA_NO"
+            strSql = strSql & " AND KGK.SAKUJO_FLG = '0'"
+        Else
+'------------<Added End   T.Ichikawa 2007/12/20> -----------------------
+
+            strSql = strSql & " AND KMK.KOHZA_NO   = '" & strKohzaNo & "'"
+'------------<Added Start T.Ichikawa 2007/12/20> -----------------------
+        End If
+'------------<Added End   T.Ichikawa 2007/12/20> -----------------------
+    End If
+'------------<Modify End   azuma 2007/11/19 (PH4)> ★★★☆-----------------------
+
+    
+    strSql = strSql & " ORDER BY"
+    strSql = strSql & "     KMK.KOHZA_NO"
+    
+    blnRet = fncKsCmnDoExequteSql(MainMenu.gcSELECT, strSql, vntRec, lngCols, lngRows, strErrCd)
+    If blnRet = False Then
+'------------<Modify Start azuma 2009/03/10 > 未収顧問料IFの項目追加(セル完全修飾対応)---------------
+'        fncGetData = strErrCd
+        fncGetData = -1
+        Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, "SQL実行でシステムエラーが発生しました。(" & strErrCd & ")")
+'------------<Modify End   azuma 2009/03/10 > 未収顧問料IFの項目追加(セル完全修飾対応)---------------
+        Exit Function
+    End If
+    
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+
+ErrorHandler:
+    fncGetData = Err.Number
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+
+End Function
+
+
+
+
+'*************************************************************************
+'関数名　　：新規ブック作成処理
+'
+'引　　数　：ARG1   I   SourceSheet Excel.Worksheet Templeteシート名
+'　　　　　：ARG2   I   DestName    String          新規ブック名
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：指定されたシートを含む新規ブックを作成する
+'
+'更新履歴　：2006/08/02 SRA H.Anpo    新規作成
+'
+'*************************************************************************
+Function fncMakeNewFile( _
+            ByVal SourceSheet As Excel.Worksheet, _
+            ByVal DestName As String) As Long
+
+    Const PROCEDURE_NAME As String = "fncMakeNewFile"
+    
+On Error GoTo ErrorHandler
+
+    fncMakeNewFile = 0
+    
+    'Templateシートをコピー
+    SourceSheet.Copy
+    '新規ブックを作成しコピーしたシートを貼り付け
+    ActiveWorkbook.SaveAs FileName:=DestName, _
+        FileFormat:=xlNormal, Password:="", WriteResPassword:="", _
+        ReadOnlyRecommended:=False, CreateBackup:=False
+        
+    Exit Function
+    
+ErrorHandler:
+    fncMakeNewFile = Err.Number
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    
+End Function
+
+'*************************************************************************
+'関数名　　：インターフェースファイル作成処理
+'
+'引　　数　：ARG1   I   PrintFlg    Boolean     印刷フラグ
+'　　　　　　                                   TRUE :印刷する
+'　　　　　　                                   FALSE:印刷しない
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：インターフェースファイルを作成する
+'
+'更新履歴　：2006/08/02 SRA H.Anpo    新規作成
+'更新履歴　：2007/11/19 SRA Y.Azuma    変更     (PH4)
+'更新履歴　：2007/12/25 SRA T.Ichikawa 変更     前受け管理テーブル検索処理追加
+'更新履歴　：2007/12/26 SRA T.Ichikawa 変更     印刷関連の処理を削除
+'更新履歴　：2009/03/10 SRA Y.Azuma    変更   　未収顧問料IFの項目追加
+'更新履歴　：2009/03/10 SRA Y.Azuma    変更     未収顧問料IFの項目追加(セル完全修飾対応)
+'
+'*************************************************************************
+'------------<Modify Start T.Ichikawa 2007/12/26 印刷フラグ削除> ★★★☆-----------------------
+'Function fncMakeIFfile(ByVal PrintFlg As Boolean) As Long
+Function fncMakeIFfile() As Long
+'------------<Modify End   T.Ichikawa 2007/12/26 印刷フラグ削除> ★★★☆-----------------------
+
+    Const PROCEDURE_NAME As String = "fncMakeIFfile"
+    
+On Error GoTo ErrorHandler
+    Dim lngRet      As Long
+    Dim strDestPath As String
+    Dim strFileName As String
+    Dim vntArray()  As Variant
+    Dim vntArray2() As Variant
+    Dim lngDataCnt  As Long
+    
+    Dim lngKijyunbi As Long     '基準日(YYYYMMDD)
+    Dim dtWdate     As Date
+    
+    Dim strBookName As String
+    
+    fncMakeIFfile = 0
+    
+    'データ取得
+    '基準日を取得
+'------------<Modify Start azuma 2009/03/10 > 未収顧問料IFの項目追加(セル完全修飾対応)---------------
+    With ThisWorkbook
+'        dtWdate = Format(Trim(Sheets(SHEET_MAIN).Range(RNG_KIJYUNBI).Value) & "01", "####/##/##")
+        dtWdate = Format(Trim(.Sheets(SHEET_MAIN).Range(RNG_KIJYUNBI).Value) & "01", "####/##/##")
+'------------<Modify End   azuma 2009/03/10 > 未収顧問料IFの項目追加(セル完全修飾対応)---------------
+        dtWdate = DateAdd("m", 1, dtWdate)
+        dtWdate = DateAdd("d", -1, dtWdate)
+        
+        lngKijyunbi = Val(Format(dtWdate, "YYYYMMDD"))
+        
+        '存在しない場合は処理終了
+'------------<Modify Start azuma 2009/03/10 > 未収顧問料IFの項目追加(セル完全修飾対応)---------------
+        lngRet = fncGetData( _
+                    lngKijyunbi, _
+                    vntArray, _
+                    lngDataCnt, _
+                    .Sheets(SHEET_MAIN).Range(RNG_KOHZA_NO).Value _
+                    )
+'    '------------<Modify Start azuma 2007/11/19 (PH4)> ★★★☆-----------------------
+'        lngRet = fncGetData( _
+'                    lngKijyunbi, _
+'                    vntArray, _
+'                    lngDataCnt, _
+'                    Sheets(SHEET_MAIN).Range(RNG_KOHZA_NO).Value _
+'                    )
+'    '    lngRet = fncGetData( _
+'    '                lngKijyunbi, _
+'    '                vntArray, _
+'    '                lngDataCnt _
+'    '                )
+'    '------------<Modify End   azuma 2007/11/19 (PH4)> ★★★☆-----------------------
+'------------<Modify End   azuma 2009/03/10 > 未収顧問料IFの項目追加(セル完全修飾対応)---------------
+        If lngRet <> 0 Then
+            fncMakeIFfile = lngRet
+            Exit Function
+        ElseIf lngDataCnt = 0 Then
+        
+    '------------<Added Start T.Ichikawa 2007/12/25> -----------------------
+            '前受け管理テーブル存在チェック
+'------------<Modify Start azuma 2009/03/10 > 未収顧問料IFの項目追加(セル完全修飾対応)---------------
+'            lngRet = fncMaeukeCheck(Sheets(SHEET_MAIN).Range(RNG_KOHZA_NO).Value, lngKijyunbi, lngDataCnt)
+            lngRet = fncMaeukeCheck(.Sheets(SHEET_MAIN).Range(RNG_KOHZA_NO).Value, lngKijyunbi, lngDataCnt)
+'------------<Modify End   azuma 2009/03/10 > 未収顧問料IFの項目追加(セル完全修飾対応)---------------
+            
+            '前受け管理テーブルにデータが存在した場合、"該当データが存在しません"を表示させない
+            If lngRet <> 0 Then
+                fncMakeIFfile = lngRet
+                Exit Function
+            ElseIf lngDataCnt <> 0 Then
+                Exit Function
+            Else
+    '------------<Added End   T.Ichikawa 2007/12/25> -----------------------
+                
+                '7005 該当データが存在しません。
+                fncKsCmnMessageDisp MSGLVL_WARNNING, 7005, MSG1_EXEC, , True
+                fncMakeIFfile = 7005
+                Exit Function
+                
+    '------------<Added Start T.Ichikawa 2007/12/25> -----------------------
+            End If
+    '------------<Added End   T.Ichikawa 2007/12/25> -----------------------
+        End If
+        
+        
+        '出力パス
+'------------<Modify Start azuma 2009/03/10 > 未収顧問料IFの項目追加(セル完全修飾対応)---------------
+'        strDestPath = Trim(CStr(Sheets(SHEET_MAIN).Range(RNG_FOLDER).Value))
+        strDestPath = Trim(CStr(.Sheets(SHEET_MAIN).Range(RNG_FOLDER).Value))
+'------------<Modify End   azuma 2009/03/10 > 未収顧問料IFの項目追加(セル完全修飾対応)---------------
+        '出力ファイル名
+        strFileName = "mishu_" & Format(Date, "YYYYMMDD") _
+                      & "_" & Format(Time, "HHMMSS") & ".xls"
+'------------<Modify Start azuma 2009/03/10 > 未収顧問料IFの項目追加(セル完全修飾対応)---------------
+    End With
+'------------<Modify End   azuma 2009/03/10 > 未収顧問料IFの項目追加(セル完全修飾対応)---------------
+    
+    'テンプレートシートから新規ブックを作成
+'------------<Modify Start azuma 2009/03/10 > 未収顧問料IFの項目追加(セル完全修飾対応)---------------
+'    strBookName = Application.ActiveWorkbook.Name
+    strBookName = ThisWorkbook.Name
+'------------<Modify End   azuma 2009/03/10 > 未収顧問料IFの項目追加(セル完全修飾対応)---------------
+    With Workbooks(strBookName)
+        'ブックの保護解除
+        Call gCom01_BookProtect(ThisWorkbook, False)
+        .Sheets(SHEET_TEMP).Visible = True
+    
+'------------<Modify Start azuma 2009/03/10 > 未収顧問料IFの項目追加(セル完全修飾対応)---------------
+'        lngRet = fncMakeNewFile( _
+'                    Sheets(SHEET_TEMP), _
+'                    strDestPath & "\" & strFileName _
+'                    )
+        lngRet = fncMakeNewFile( _
+                    .Sheets(SHEET_TEMP), _
+                    strDestPath & "\" & strFileName _
+                    )
+'------------<Modify End   azuma 2009/03/10 > 未収顧問料IFの項目追加(セル完全修飾対応)---------------
+        .Sheets(SHEET_TEMP).Visible = False
+        'ブックの保護
+        Call gCom01_BookProtect(ThisWorkbook, True)
+    End With
+    
+    If lngRet <> 0 Then
+        fncMakeIFfile = lngRet
+        Exit Function
+    End If
+    
+    '新規ブックにデータをセット
+    With Workbooks(strFileName)
+        '配列の添え字の階層を変更 array(X,Y) -> array(Y,X)
+        lngRet = fncKsCmnArrayIdxChange(vntArray, vntArray2)
+        If lngRet <> 0 Then
+            .Close SaveChanges:=True
+            fncMakeIFfile = lngRet
+            Exit Function
+        End If
+        
+        'シートにデータをセット
+'------------<Modify Start azuma 2009/03/10 > 未収顧問料IFの項目追加---------------
+        .Sheets(SHEET_TEMP).Range("A" & ROWN_DATA_TOP & ":Q" & (ROWN_DATA_TOP - 1) + lngDataCnt) = vntArray2
+'        .Sheets(SHEET_TEMP).Range("A" & ROWN_DATA_TOP & ":O" & (ROWN_DATA_TOP - 1) + lngDataCnt) = vntArray2
+'------------<Modify End   azuma 2009/03/10 > 未収顧問料IFの項目追加---------------
+        
+        '罫線をセット
+        subKsCmnSetLine Workbooks(strFileName), (ROWN_DATA_TOP - 1) + lngDataCnt
+        
+        '基準日をセット
+        subPageSetupPrintArea .Sheets(SHEET_TEMP), lngKijyunbi
+
+'2007/12/26 Deleted By T.Ichikawa Start
+'        '印刷処理
+'        If PrintFlg = True Then
+'            ActiveWindow.SelectedSheets.PrintPreview
+'        End If
+'2007/12/26 Deleted By T.Ichikawa End
+        
+        .Sheets(SHEET_TEMP).Range("A1").Select
+
+        .Close SaveChanges:=True
+    
+    End With
+    
+    Exit Function
+    
+ErrorHandler:
+    fncMakeIFfile = Err.Number
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+
+End Function
+
+'''*************************************************************************
+'''関数名　　：計算処理
+'''
+'''引　　数　：なし
+'''
+'''戻り値　　：Long       エラー番号
+'''
+'''機能説明　：JAVAプロシジャーを呼出し計算処理を実行する
+'''
+'''更新履歴　：2006/08/02 SRA H.Anpo    新規作成
+'''
+'''*************************************************************************
+''Function fncExecKeisan() As Long
+''
+''    Const PROCEDURE_NAME As String = "fncExecKeisan"
+''
+''On Error GoTo ErrorHandler
+''
+''    Dim lngRet  As Long
+''
+''    'FTP実行用
+''    Dim strServer   As String   '取得元のIPアドレス
+''    Dim strUserId   As String   '取得元のユーザーID
+''    Dim strPasswd   As String   '取得元のパスワード
+''    Dim strSrcPath  As String   '取得元のパス(ディレクトリ)
+''    Dim strDstPath  As String   '取得先のパス(フォルダ)
+''    Dim strFileNm   As String   '取得ファイル名
+''
+''    fncExecKeisan = 0
+''
+''    '未収計算処理のストアドプロシジャーを呼出す
+''
+''    'エラー情報ファイルをFTPで取得する
+''    strServer = "172.57.22.117"                 '取得元のIPアドレス
+''    strUserId = "kykbt1"                        '取得元のユーザーID
+''    strPasswd = "kykbt1"                        '取得元のパスワード
+''    strSrcPath = "/export/home/kykbt1/sra/anpo" '取得元のパス(ディレクトリ)
+''    strDstPath = "C:\anpo\ftp_test"             '取得先のパス(フォルダ)
+''    strFileNm = "Calc.java"                     '取得ファイル名
+''
+''    lngRet = subComRunFtpCommand( _
+''                strServer, _
+''                strUserId, _
+''                strPasswd, _
+''                strSrcPath, _
+''                strDstPath, _
+''                strFileNm)
+''    If lngRet <> 0 Then
+''        If lngRet = -1 Then
+''            'FTPコマンド実行エラー
+''            MsgBox "FTPコマンド実行エラー"
+''        Else
+''            Err.Raise lngRet
+''        End If
+''        fncExecKeisan = lngRet
+''        Exit Function
+''    End If
+''
+''    Exit Function
+''
+''ErrorHandler:
+''    fncExecKeisan = Err.Number
+''    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+''
+''End Function
+
+
+
+
+
+'*************************************************************************
+'関数名　　：実行ボタン処理
+'
+'引　　数　：なし
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：インターフェースファイルを作成択する
+'
+'更新履歴　：2006/08/02 SRA H.Anpo    新規作成
+'更新履歴　：2007/11/19 SRA Y.Azuma   変更     (PH4)
+'更新履歴　：2008/03/25 SRA市川       変更
+'更新履歴　：2009/03/10 SRA Y.Azuma   変更     未収顧問料IFの項目追加(セル完全修飾対応)
+'
+'*************************************************************************
+Function fncExec() As Long
+    
+    Const PROCEDURE_NAME As String = "fncExec"
+
+On Error GoTo ErrorHandler
+
+    Dim lngRet          As Long
+
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    fncExec = 0
+    
+'------------<Modify Start azuma 2009/03/10 > 未収顧問料IFの項目追加(セル完全修飾対応)---------------
+'    With Sheets(SHEET_MAIN)
+    With ThisWorkbook.Sheets(SHEET_MAIN)
+'------------<Modify End   azuma 2009/03/10 > 未収顧問料IFの項目追加(セル完全修飾対応)---------------
+    
+'-----------<Added オンラインおよびオンラインバッチ起動時の定時バッチチェック対応 2008/03/25 SRA市川 Start > -----------
+    
+'-----------<Added オンラインおよびオンラインバッチ起動時の定時バッチチェック対応 2008/03/25 SRA市川 End   > -----------
+
+        '入力チェック
+        '基準年月チェック
+        lngRet = fncChkDateFormat(.Range(RNG_KIJYUNBI).Value, MSG1_KIJYUNBI)
+        If lngRet <> 0 Then
+            .Range(RNG_KIJYUNBI).Select
+            fncExec = lngRet
+            Exit Function
+        End If
+        
+'------------<Modify Start azuma 2007/11/19 (PH4)> ★★★☆-----------------------
+        '口座番号チェック　※入力がある場合のみチェックを行う
+        If Trim(.Range(RNG_KOHZA_NO)) <> "" Then
+        
+            'ゼロパディング
+            If Len(.Range(RNG_KOHZA_NO)) < LEN_KOHZA_NO Then
+                .Range(RNG_KOHZA_NO) = Right(String(LEN_KOHZA_NO, "0") & .Range(RNG_KOHZA_NO), LEN_KOHZA_NO)
+            End If
+        
+            lngRet = fncChkKohzaNo(.Range(RNG_KOHZA_NO).Value, MSG1_KOHZA_NO)
+            If lngRet <> 0 Then
+                .Range(RNG_KOHZA_NO).Select
+                fncExec = lngRet
+                Exit Function
+            End If
+        End If
+        
+'------------<Modify End   azuma 2007/11/19 (PH4)> ★★★☆-----------------------
+        
+        '保存フォルダチェック
+        lngRet = fncChkFolder(.Range(RNG_FOLDER).Value, MSG1_FOLDER)
+        If lngRet <> 0 Then
+            .Range(RNG_FOLDER).Select
+            fncExec = lngRet
+            Exit Function
+        End If
+    
+        '計算処理
+        If .chkKeisan.Value = True Then
+            '未収顧問料計算処理をCALL(ストアドJAVA)
+            frmKeisan.Show vbModal
+            If frmKeisan.JavaRetCd <> 0 Then
+                fncExec = frmKeisan.JavaRetCd
+                Unload frmKeisan
+                Exit Function
+            End If
+            Unload frmKeisan
+        Else
+            Application.DisplayAlerts = False
+            'ERRORシートを削除
+            On Error Resume Next
+'------------<Modify Start azuma 2009/03/10 > 未収顧問料IFの項目追加(セル完全修飾対応)---------------
+'            Sheets(SHEET_ERROR).Delete
+            .Sheets(SHEET_ERROR).Delete
+'------------<Modify End   azuma 2009/03/10 > 未収顧問料IFの項目追加(セル完全修飾対応)---------------
+            On Error GoTo ErrorHandler
+            Application.DisplayAlerts = True
+        End If
+        
+        'インターフェースファイル作成処理
+'------------<Modify Start T.Ichikawa 2007/12/26 印刷フラグ削除> ★★★☆-----------------------
+'        lngRet = fncMakeIFfile(False)
+        lngRet = fncMakeIFfile
+'------------<Modify End   T.Ichikawa 2007/12/26 印刷フラグ削除> ★★★☆-----------------------
+        If lngRet <> 0 Then
+            fncExec = lngRet
+            Exit Function
+        End If
+        
+    End With
+    
+    Application.ScreenUpdating = True
+    
+    '3004 正常終了メッセージ
+    fncKsCmnMessageDisp MSGLVL_INFO, 7004, "", , True
+
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+
+ErrorHandler:
+    fncExec = Err.Number
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    
+End Function
+
+
+

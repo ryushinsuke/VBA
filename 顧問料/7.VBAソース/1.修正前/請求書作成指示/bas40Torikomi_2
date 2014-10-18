@@ -1,0 +1,776 @@
+Attribute VB_Name = "bas40Torikomi_2"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：国内顧問料計算システム・請求書作成指示
+'
+'オブジェクト名：bas40Torikomi_2
+'
+'機能概要　：合算系請求書作成サブ
+'
+'更新履歴　：2006/09/21 SRA 東       新規作成
+'
+'*************************************************************************
+Const MODULE_NAME = "bas40Torikomi_2"
+
+
+
+'*************************************************************************
+'関数名　　：親口座計算書・期間顧問料のデータシート行追加関数
+'
+'引　　数　：
+'           strFileName     I       対象ファイル名
+'           lngRateMdfSeq   I       料率変更番号
+'           Sisan()         I       資産配列の
+'           lngSisan        I       資産配列の添え字
+'           strKohzaList()  I       処理対象口座配列配列
+'           lngKKCnt        I       処理対象口座配列配列の添え字
+'
+'戻り値　　：なし
+'
+'機能説明　：
+'
+'更新履歴　：2006/09/25 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Sub sub_GKeisanOya_Kikan(ByVal strFileName As String _
+                         , ByVal lngRateMdfSeq As Long _
+                         , ByRef Sisan() As Variant _
+                         , ByVal lngSisan As Long _
+                         , ByRef strKohzaList() As String _
+                         , ByVal lngKKCnt As Long)
+                     
+On Error GoTo ErrHandler
+                     
+    Const PROCEDURE_NAME = "sub_GKeisanOya_Kikan"
+    Dim lngStartRow         As Long
+    Dim lngEndRow           As Long
+'    Dim strData()           As String       '行増幅の条件データ格納配列
+    Dim lngStart            As Long
+    Dim lngOffSet           As Long
+
+'*******************************************************
+'* 関数開始　                                        　*
+'*******************************************************
+
+
+    '貼付前の最終行を取得
+    lngStart = func_GetEndRow(strFileName, DATASHEET_DATA)
+
+'------------<Modify Start azuma 2006/11/08 連No.91> -----------------------
+    
+    lngOffSet = func_GetCurrentOffset(strFileName _
+                                    , DATASHEET_INC_KIKAN & Format(lngRateMdfSeq, "000") & _
+                                      DATASHEET_G_OYA_KEISAN_KIKAN _
+                                    , lngStart)
+'------------<Modify End   azuma 2006/11/08 連No.91> -----------------------
+
+    '「親口座計算書・期間顧問料」の貼付
+    '－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－
+    Call sub_AddSheetItemRow(strFileName _
+                           , DATASHEET_G_OYA_KEISAN_KIKAN _
+                           , lngKKCnt _
+                           , DATASHEET_INC_KIKAN & DATASHEET_INC_XXX _
+                           , DATASHEET_INC_KIKAN & Format(lngRateMdfSeq, "000") _
+                           , CStr(lngOffSet) _
+                           , lngStartRow _
+                           , lngEndRow)
+'    Call sub_AddSheetItemRow(strFileName _
+'                           , DATASHEET_G_OYA_KEISAN_KIKAN _
+'                           , lngKKCnt _
+'                           , DATASHEET_INC_KIKAN & DATASHEET_INC_XXX _
+'                           , DATASHEET_INC_KIKAN & Format(lngRateMdfSeq, "000") _
+'                           , lngKKCnt - 1 _
+'                           , lngStartRow _
+'                           , lngEndRow)
+    
+'    ReDim strData(0, 0)
+'
+'
+'    strData(0, 0) = Sisan(lngSisan, 3)     '「料率適用期間To」を設定する。
+    
+    
+    '「親口座計算書・期間顧問料」の条件への貼付け
+    Call sub_SetJoukenData(strFileName, Sisan(), lngSisan, lngStartRow, False)
+    
+    lngEndRow = func_GetEndRow(strFileName, DATASHEET_DATA)
+    
+    '*** ()で囲まれた文字列の置換
+    Call sub_ReplaceKeyItem(strFileName, strKohzaList(), lngKKCnt, lngStart + 1, lngEndRow)
+    
+    '－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－
+
+    Exit Sub
+
+ErrHandler:
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "sub_GKeisanOya_Kikan", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+
+
+End Sub
+
+
+'*************************************************************************
+'関数名　　：親算定基礎のデータシート行追加関数
+'
+'引　　数　：
+'           strFileName     I       対象ファイル名
+'           lngRateMdfSeq   I       料率変更番号
+'           SisanOya()      I       資産配列
+'           lngSisan        I       資産配列の添え字
+'           strKohzaList()  I       処理対象口座配列配列
+'           lngKKCnt        I       処理対象口座配列配列の添え字
+'
+'戻り値　　：なし
+'
+'機能説明　：
+'
+'更新履歴　：2006/09/25 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Sub sub_GOyaSantei(ByVal strFileName As String _
+                         , ByVal lngRateMdfSeq As Long _
+                         , ByRef SisanOya() As Variant _
+                         , ByVal lngSisan As Long _
+                         , ByRef strKohzaList() As String _
+                         , ByVal lngKKCnt As Long _
+                         , ByRef lngErrorCnt As Long _
+                         , ByVal strKikanNo As String)
+                     
+On Error GoTo ErrHandler
+                     
+    Const PROCEDURE_NAME = "sub_GOyaSantei"
+    Dim lngStartRow         As Long
+    Dim lngEndRow           As Long
+    Dim strData()           As String       '行増幅の条件データ格納配列
+    Dim lngRet              As Long
+    Dim lngEnd              As Long
+    Dim lngStart            As Long
+
+'*******************************************************
+'* 関数開始　                                        　*
+'*******************************************************
+
+
+    '貼付前の最終行を取得
+    lngStart = func_GetEndRow(strFileName, DATASHEET_DATA)
+
+    
+    '「親算定基礎」の貼付
+    '－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－
+    '行増幅数の取得(基準月)
+    lngRet = func_GetKeisanKiso(SisanOya() _
+                        , lngSisan _
+                        , strKohzaList() _
+                        , lngKKCnt _
+                        , strData(), True)
+    If lngRet = 0 Then
+        'エラー情報構造体セット
+        With gusrErr
+            .ModuleId = MODULE_NAME         'モージュールID
+            .Procedure = PROCEDURE_NAME     'プロシージャID
+            .MsgCode = ERR_MSGCD_VB         'メッセージ区分
+            .ErrNum = Err.Number            'システムエラーコード
+            .ErrDescript = Err.Description  'システムエラー内容
+            .KohzaNo = strKohzaList(lngKKCnt, KOHZALIST_KOHZA_NO)
+            .MsgNaiyou = "親口座算定基礎のデータ取得が０件"   'メッセージ内容(ブックファイル名)
+            .MsgSyousai = "親口座番号の計算基礎取得が０件か又は" & vbCrLf & _
+                          "計算基礎数値取得関数(func_GetKeisanKiso)でシステムエラーが発生しています。" & vbCrLf & _
+                          "システム管理者に連絡して下さい。" & vbCrLf & _
+                          "テンプレート　：DATASHEET_KISO_SUCHI1" & vbCrLf & _
+                          "テーブル　　　：KYK_KEISAN_KISO_SUCHI" & vbCrLf & _
+                          "口座番号　　　：" & strKohzaList(0, KOHZALIST_KOHZA_NO) & vbCrLf & _
+                          "請求期間ID　　：" & strKohzaList(0, KOHZALIST_SEIKYU_KIKAN_ID) & vbCrLf & _
+                          "資産分類　　　：" & SisanOya(lngSisan, 0) & vbCrLf & _
+                          "資産コード　　：" & SisanOya(lngSisan, 1) & vbCrLf & _
+                          "料率適用期間ID：" & SisanOya(lngSisan, 4)                              'メッセージ詳細
+            
+            'エラーシート書き込み
+            
+            Call fncWriteErrSheet(ERROR_SHEETNAME)
+        End With
+        lngErrorCnt = lngErrorCnt + 1
+        Exit Sub
+    End If
+                        
+'------------<Modify Start azuma 2006/11/01 連No.69> -----------------------
+    Call sub_AddSheetItemRow(strFileName _
+                           , DATASHEET_G_OYA_SANTEI _
+                           , lngKKCnt _
+                           , DATASHEET_INC_KIKAN & DATASHEET_INC_XXX _
+                           , DATASHEET_INC_KIKAN & Format(strKikanNo, "000") _
+                           , "" _
+                           , lngStartRow _
+                           , lngEndRow)
+'    Call sub_AddSheetItemRow(strFileName _
+'                           , DATASHEET_G_OYA_SANTEI _
+'                           , lngKKCnt _
+'                           , DATASHEET_INC_KIKAN & DATASHEET_INC_XXX _
+'                           , DATASHEET_INC_KIKAN & Format(lngRateMdfSeq, "000") _
+'                           , "" _
+'                           , lngStartRow _
+'                           , lngEndRow)
+    
+    
+    'MULTI項目へ期間の貼付
+    Call sub_FillinMultItem(strFileName _
+                           , DATASHEET_DATA _
+                           , lngStartRow + 1 _
+                           , lngStartRow + 1 _
+                           , DATASHEET_RESULT_COL _
+                           , strKikanNo)
+'------------<Modify End   azuma 2006/11/01 連No.69> -----------------------
+    
+    
+    '行増幅と値設定
+    Call sub_RowIncrement(strFileName _
+                        , lngStartRow _
+                        , lngEndRow _
+                        , DATASHEET_INC_KIKAN & DATASHEET_INC_XXX & DATASHEET_INC_KIJUN & DATASHEET_INC_XX _
+                        , strData())
+    
+    '「親算定基礎」の条件への貼付け
+    Call sub_SetJoukenData(strFileName, SisanOya(), lngSisan, lngStartRow, False)
+    
+    lngEnd = func_GetEndRow(strFileName, DATASHEET_DATA)
+    
+    '*** ()で囲まれた文字列の置換
+    Call sub_ReplaceKeyItem(strFileName, strKohzaList(), 0, lngStart + 1, lngEnd)
+    
+    '－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－
+
+    Exit Sub
+
+ErrHandler:
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "sub_GOyaSantei", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+'Resume
+
+
+End Sub
+
+'*************************************************************************
+'関数名　　：合算算定基礎のデータシート行追加関数
+'
+'引　　数　：
+'           strFileName     I       対象ファイル名
+'           lngRateMdfSeq   I       料率変更番号
+'           lngSanteiCnt    I       算定資産順
+'           Sisan()         I       資産配列の
+'           lngSisan        I       資産配列の添え字
+'           strKohzaList()  I       処理対象口座配列配列
+'           lngKKCnt        I       処理対象口座配列配列の添え字
+'           strSyorui()     O       作成書類
+'
+'戻り値　　：なし
+'
+'機能説明　：
+'
+'更新履歴　：2006/09/25 SRA Y.Azuma    新規作成
+'更新履歴　：2007/03/29 SRA Y.Azuma    変更     (PH3)PH3請求書作成の対応
+'更新履歴　：2007/06/04 SRA Y.Azuma    変更     (PH3)連結　元本平残の子口座毎の基礎数値未出力対応
+'
+'*************************************************************************
+Public Sub sub_GKeisanKiso(ByVal strFileName As String _
+                         , ByVal lngRateMdfSeq As Long _
+                         , ByVal lngSanteiCnt As Long _
+                         , ByRef Sisan() As Variant _
+                         , ByVal lngSisan As Long _
+                         , ByRef strKohzaList() As String _
+                         , ByVal lngKKCnt As Long _
+                         , ByRef lngErrorCnt As Long _
+                         , ByVal strKikanNo As String)
+                     
+On Error GoTo ErrHandler
+                     
+    Const PROCEDURE_NAME = "sub_GKeisanKiso"
+    Dim lngStartRow         As Long
+    Dim lngEndRow           As Long
+    Dim strKeisanKiso()     As String       '計算基礎数値のデータ格納配列
+    Dim strSisanJika()      As String       '資産時価ビューのデータ格納配列
+    Dim blnZentai           As Boolean      '適用期間内の合計で出力する場合
+    Dim lngRet              As Long
+    Dim lngLocalKohzaCnt    As Long
+    Dim lngStart            As Long
+
+'*******************************************************
+'* 関数開始　                                        　*
+'*******************************************************
+
+    blnZentai = True
+
+
+'------------<Modify Start azuma 2007/06/04 (PH3)> -----------------------
+    If CStr(Sisan(lngSisan, SISANLIST_KISO_SUCHI_KEISAN_HOHHOH)) = KISO_SUCHI_GETSU_MATSU Or _
+       CStr(Sisan(lngSisan, SISANLIST_KISO_SUCHI_KEISAN_HOHHOH)) = KISO_SUCHI_ZENGETSU_MATSU Or _
+       CStr(Sisan(lngSisan, SISANLIST_KISO_SUCHI_KEISAN_HOHHOH)) = KISO_SUCHI_SEKISU Then
+'    If CStr(Sisan(lngSisan, SISANLIST_KISO_SUCHI_KEISAN_HOHHOH)) = KISO_SUCHI_GETSU_MATSU Or _
+'       CStr(Sisan(lngSisan, SISANLIST_KISO_SUCHI_KEISAN_HOHHOH)) = KISO_SUCHI_ZENGETSU_MATSU Then
+'------------<Modify End   azuma 2007/06/04 (PH3)> -----------------------
+    '月末・前月末
+                    
+    
+        '「月末時価平残」の貼付
+        '－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－
+        '行増幅数の取得
+        '行増幅数の取得(基準月)
+        lngRet = func_GetKeisanKiso(Sisan() _
+                            , lngSisan _
+                            , strKohzaList() _
+                            , lngKKCnt _
+                            , strKeisanKiso())
+        If lngRet = 0 Then
+            'エラー情報構造体セット
+            With gusrErr
+                .ModuleId = MODULE_NAME         'モージュールID
+                .Procedure = PROCEDURE_NAME     'プロシージャID
+                .MsgCode = ERR_MSGCD_VB         'メッセージ区分
+                .ErrNum = Err.Number            'システムエラーコード
+                .ErrDescript = Err.Description  'システムエラー内容
+                .KohzaNo = strKohzaList(lngKKCnt, KOHZALIST_KOHZA_NO)
+                .MsgNaiyou = "計算基礎数値のデータ取得結果０件"   'メッセージ内容(ブックファイル名)
+                .MsgSyousai = "月末時価平残で計算基礎数値の取得結果が０件か又は" & vbCrLf & _
+                              "計算基礎数値取得関数(func_GetKeisanKiso)でシステムエラーが発生しています。" & vbCrLf & _
+                              "システム管理者に連絡して下さい。" & vbCrLf & _
+                              "テンプレート　：" & DATASHEET_G_KISO_SUCHI2 & vbCrLf & _
+                              "テーブル　　　：KYK_KEISAN_KISO_SUCHI" & vbCrLf & _
+                              "口座番号　　　：" & strKohzaList(lngKKCnt, KOHZALIST_KOHZA_NO) & vbCrLf & _
+                              "請求期間ID　　：" & strKohzaList(lngKKCnt, KOHZALIST_SEIKYU_KIKAN_ID) & vbCrLf & _
+                              "資産分類　　　：" & Sisan(lngSisan, SISANLIST_SHISAN_BUNRUI) & vbCrLf & _
+                              "資産コード　　：" & Sisan(lngSisan, SISANLIST_SHISAN_CODE) & vbCrLf & _
+                              "料率適用期間ID：" & Sisan(lngSisan, SISANLIST_RATE_KIKAN_ID)                              'メッセージ詳細
+                
+                'エラーシート書き込み
+                
+                Call fncWriteErrSheet(ERROR_SHEETNAME)
+            End With
+            lngErrorCnt = lngErrorCnt + 1
+            Exit Sub
+        End If
+        
+        
+        '「月末時価平残・口座」の貼付
+        '－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－
+        For lngLocalKohzaCnt = 1 To UBound(strKohzaList)
+            
+            '貼付前の最終行を取得
+            lngStart = func_GetEndRow(strFileName, DATASHEET_DATA)
+            
+            Call sub_AddSheetItemRow(strFileName _
+                                   , DATASHEET_G_KISO_SUCHI2_KOHZA _
+                                   , lngKKCnt _
+                                   , DATASHEET_INC_KOHZA & DATASHEET_INC_XX & DATASHEET_INC_KIKAN & DATASHEET_INC_XXX _
+                                   , DATASHEET_INC_KOHZA & Format(lngKKCnt, "00") & DATASHEET_INC_KIKAN & Format(lngRateMdfSeq, "000") _
+                                   , CStr(lngLocalKohzaCnt - 1) _
+                                   , lngStartRow _
+                                   , lngEndRow)
+'            lngSisan = 0
+            '条件への貼付け
+            Call sub_SetJoukenData(strFileName, Sisan(), 0, lngStartRow)
+            
+            lngEndRow = func_GetEndRow(strFileName, DATASHEET_DATA)
+            '*** ()で囲まれた文字列の置換
+            Call sub_ReplaceKeyItem(strFileName, strKohzaList(), lngLocalKohzaCnt, lngStart + 1, lngEndRow)
+        Next lngLocalKohzaCnt
+        '－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－
+        
+        Call sub_AddSheetItemRow(strFileName _
+                               , DATASHEET_G_KISO_SUCHI2 _
+                               , lngKKCnt _
+                               , DATASHEET_INC_KOHZA & DATASHEET_INC_XX & DATASHEET_INC_KIKAN & DATASHEET_INC_XXX _
+                               , DATASHEET_INC_KOHZA & Format(lngKKCnt, "00") & DATASHEET_INC_KIKAN & Format(lngRateMdfSeq, "000") _
+                               , "" _
+                               , lngStartRow _
+                               , lngEndRow)
+        
+'------------<Modify Start azuma 2006/11/01 連No.69> -----------------------
+        'MULTI項目へ期間の貼付
+        Call sub_FillinMultItem(strFileName _
+                               , DATASHEET_DATA _
+                               , lngStartRow + 1 _
+                               , lngStartRow + 1 _
+                               , DATASHEET_RESULT_COL _
+                               , strKikanNo)
+'------------<Modify End   azuma 2006/11/01 連No.69> -----------------------
+        
+        '　行増幅と値設定
+        Call sub_RowIncrement(strFileName _
+                            , lngStartRow _
+                            , lngEndRow _
+                            , DATASHEET_INC_KIKAN & DATASHEET_INC_XXX & DATASHEET_INC_KIJUN & DATASHEET_INC_XX _
+                            , strKeisanKiso())
+        
+        '「算定基礎(月末)」の条件への貼付け
+        Call sub_SetJoukenData(strFileName, Sisan(), lngSisan, lngStartRow, blnZentai)
+        
+'        strSyorui(3, 1) = "1"   '書類作成フラグ設定
+        '－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－
+'------------<Modify Start azuma 2007/03/29 (PH3)> -----------------------
+    ElseIf CStr(Sisan(lngSisan, SISANLIST_KISO_SUCHI_KEISAN_HOHHOH)) = KISO_SUCHI_GETSU_NAKA Or _
+           CStr(Sisan(lngSisan, SISANLIST_KISO_SUCHI_KEISAN_HOHHOH)) = KISO_SUCHI_ZENGETSU_NAKA Then
+
+'    Else
+'------------<Modify End   azuma 2007/03/29 (PH3)> -----------------------
+    '月中・前月中
+        '「月中時価平残」の貼付
+        '－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－
+        '行増幅数の取得(算定月)
+        lngRet = func_GetKeisanKiso(Sisan() _
+                            , lngSisan _
+                            , strKohzaList() _
+                            , lngKKCnt _
+                            , strKeisanKiso())
+        If lngRet = 0 Then
+            'エラー情報構造体セット
+            With gusrErr
+                .ModuleId = MODULE_NAME         'モージュールID
+                .Procedure = PROCEDURE_NAME     'プロシージャID
+                .MsgCode = ERR_MSGCD_VB         'メッセージ区分
+                .ErrNum = Err.Number            'システムエラーコード
+                .ErrDescript = Err.Description  'システムエラー内容
+                .KohzaNo = strKohzaList(lngKKCnt, KOHZALIST_KOHZA_NO)
+                .MsgNaiyou = "計算基礎数値のデータ取得結果０件"   'メッセージ内容(ブックファイル名)
+                .MsgSyousai = "月中時価平残で計算基礎数値の取得結果が０件か又は" & vbCrLf & _
+                              "計算基礎数値取得関数(func_GetKeisanKiso)でシステムエラーが発生しています。" & vbCrLf & _
+                              "システム管理者に連絡して下さい。" & vbCrLf & _
+                              "テンプレート　：" & DATASHEET_G_KISO_SUCHI2 & vbCrLf & _
+                              "テーブル　　　：KYK_KEISAN_KISO_SUCHI" & vbCrLf & _
+                              "口座番号　　　：" & strKohzaList(lngKKCnt, KOHZALIST_KOHZA_NO) & vbCrLf & _
+                              "請求期間ID　　：" & strKohzaList(lngKKCnt, KOHZALIST_SEIKYU_KIKAN_ID) & vbCrLf & _
+                              "資産分類　　　：" & Sisan(lngSisan, SISANLIST_SHISAN_BUNRUI) & vbCrLf & _
+                              "資産コード　　：" & Sisan(lngSisan, SISANLIST_SHISAN_CODE) & vbCrLf & _
+                              "料率適用期間ID：" & Sisan(lngSisan, SISANLIST_RATE_KIKAN_ID)                              'メッセージ詳細
+                
+                'エラーシート書き込み
+                
+                Call fncWriteErrSheet(ERROR_SHEETNAME)
+            End With
+            lngErrorCnt = lngErrorCnt + 1
+            Exit Sub
+        End If
+
+        '行増幅数の取得(基準月)
+        lngRet = func_GetSisanJika(Sisan() _
+                            , lngSisan _
+                            , strKohzaList() _
+                            , lngKKCnt _
+                            , strSisanJika())
+        If lngRet = 0 Then
+            'エラー情報構造体セット
+            With gusrErr
+                .ModuleId = MODULE_NAME         'モージュールID
+                .Procedure = PROCEDURE_NAME     'プロシージャID
+                .MsgCode = ERR_MSGCD_VB         'メッセージ区分
+                .ErrNum = Err.Number            'システムエラーコード
+                .ErrDescript = Err.Description  'システムエラー内容
+                .KohzaNo = strKohzaList(lngKKCnt, KOHZALIST_KOHZA_NO)
+                .MsgNaiyou = "資産時価のデータ取得結果０件"   'メッセージ内容(ブックファイル名)
+                .MsgSyousai = "月中時価平残で資産時価の取得結果が０件か又は" & vbCrLf & _
+                              "V資産時価取得関数(func_GetSisanJika)でシステムエラーが発生しています。" & vbCrLf & _
+                              "システム管理者に連絡して下さい。" & vbCrLf & _
+                              "テンプレート　：" & DATASHEET_G_KISO_SUCHI1 & vbCrLf & _
+                              "テーブル　    ：KYK_VW_SHISAN_JIKA" & vbCrLf & _
+                              "口座番号　　　：" & strKohzaList(lngKKCnt, KOHZALIST_KOHZA_NO) & vbCrLf & _
+                              "請求期間ID　　：" & strKohzaList(lngKKCnt, KOHZALIST_SEIKYU_KIKAN_ID) & vbCrLf & _
+                              "資産分類　　　：" & Sisan(lngSisan, SISANLIST_SHISAN_BUNRUI) & vbCrLf & _
+                              "資産コード　　：" & Sisan(lngSisan, SISANLIST_SHISAN_CODE) & vbCrLf & _
+                              "料率適用期間ID：" & Sisan(lngSisan, SISANLIST_RATE_KIKAN_ID)                              'メッセージ詳細
+                
+                'エラーシート書き込み
+                
+                Call fncWriteErrSheet(ERROR_SHEETNAME)
+            End With
+            lngErrorCnt = lngErrorCnt + 1
+            Exit Sub
+        End If
+        
+        '「月中時価平残・口座」の貼付
+        '－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－
+        For lngLocalKohzaCnt = 1 To UBound(strKohzaList)
+            '貼付前の最終行を取得
+            lngStart = func_GetEndRow(strFileName, DATASHEET_DATA)
+            Call sub_AddSheetItemRow(strFileName _
+                                   , DATASHEET_G_KISO_SUCHI1_KOHZA _
+                                   , lngKKCnt _
+                                   , DATASHEET_INC_KOHZA & DATASHEET_INC_XX & DATASHEET_INC_KIKAN & DATASHEET_INC_XXX _
+                                   , DATASHEET_INC_KOHZA & Format(lngKKCnt, "00") & DATASHEET_INC_KIKAN & Format(lngRateMdfSeq, "000") _
+                                   , CStr(lngLocalKohzaCnt - 1) _
+                                   , lngStartRow _
+                                   , lngEndRow)
+'            lngSisan = 0
+            '条件への貼付け
+            Call sub_SetJoukenData(strFileName, Sisan(), 0, lngStartRow)
+            '*** ()で囲まれた文字列の置換
+            Call sub_ReplaceKeyItem(strFileName, strKohzaList(), lngLocalKohzaCnt, lngStart + 1, lngEndRow)
+        Next lngLocalKohzaCnt
+        '－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－
+
+        Call sub_AddSheetItemRow(strFileName _
+                               , DATASHEET_G_KISO_SUCHI1 _
+                               , lngKKCnt _
+                               , DATASHEET_INC_KOHZA & DATASHEET_INC_XX & DATASHEET_INC_KIKAN & DATASHEET_INC_XXX _
+                               , DATASHEET_INC_KOHZA & Format(lngKKCnt, "00") & DATASHEET_INC_KIKAN & Format(lngRateMdfSeq, "000") _
+                               , "" _
+                               , lngStartRow _
+                               , lngEndRow)
+        
+'------------<Modify Start azuma 2006/11/01 連No.69> -----------------------
+        'MULTI項目へ期間の貼付
+        Call sub_FillinMultItem(strFileName _
+                               , DATASHEET_DATA _
+                               , lngStartRow + 1 _
+                               , lngStartRow + 1 _
+                               , DATASHEET_RESULT_COL _
+                               , strKikanNo)
+'------------<Modify End   azuma 2006/11/01 連No.69> -----------------------
+        
+        '　行増幅と値設定(基準月)
+        Call sub_RowIncrement(strFileName _
+                            , lngStartRow _
+                            , lngEndRow _
+                            , DATASHEET_INC_KIKAN & DATASHEET_INC_XXX & DATASHEET_INC_KIJUN & DATASHEET_INC_XX _
+                            , strSisanJika())
+        
+        
+        '　行増幅と値設定(算定月)
+        Call sub_RowIncrement(strFileName _
+                            , lngStartRow _
+                            , lngEndRow _
+                            , DATASHEET_INC_KIKAN & DATASHEET_INC_XXX & DATASHEET_INC_SANTEI & DATASHEET_INC_XX _
+                            , strKeisanKiso())
+                            
+        '「算定基礎(月中)」の条件への貼付け
+        Call sub_SetJoukenData(strFileName, Sisan(), lngSisan, lngStartRow, blnZentai)
+                            
+        '－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－
+    End If
+
+    Exit Sub
+
+ErrHandler:
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "sub_GKeisanKiso", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+
+
+End Sub
+
+'*************************************************************************
+'関数名　　：親計算書のデータシート行追加関数
+'
+'引　　数　：
+'           strFileName     I       対象ファイル名
+'           lngRateMdfSeq   I       料率変更番号
+'           Sisan()         I       資産配列の
+'           lngSisan        I       資産配列の添え字
+'           strKohzaList()  I       処理対象口座配列配列
+'           lngKKCnt        I       処理対象口座配列配列の添え字
+'
+'戻り値　　：なし
+'
+'機能説明　：
+'
+'更新履歴　：2006/09/21 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Sub sub_OyaKeisan(ByVal strFileName As String _
+                         , ByVal lngRateMdfSeq As Long _
+                         , ByRef Sisan() As Variant _
+                         , ByVal lngSisan As Long _
+                         , ByRef strKohzaList() As String _
+                         , ByVal lngKKCnt As Long _
+                         , ByRef lngErrorCnt As Long)
+                     
+On Error GoTo ErrHandler
+                     
+    Const PROCEDURE_NAME = "sub_OyaKeisan"
+    Dim lngStartRow         As Long
+    Dim lngEndRow           As Long
+    Dim strKeisanMeisai()   As String       '顧問料計算結果明細のデータ格納配列
+    Dim lngRet              As Long
+    Dim lngStart            As Long
+
+'*******************************************************
+'* 関数開始　                                        　*
+'*******************************************************
+    '貼付前の最終行を取得
+    lngStart = func_GetEndRow(strFileName, DATASHEET_DATA)
+
+    '＠段階数分の行増幅
+    lngRet = func_GetKeisanMeisai(Sisan() _
+                        , lngSisan _
+                        , strKohzaList() _
+                        , 0 _
+                        , strKeisanMeisai() _
+                        , True)
+    If lngRet = 0 Then
+        'エラー情報構造体セット
+        With gusrErr
+            .ModuleId = MODULE_NAME         'モージュールID
+            .Procedure = PROCEDURE_NAME     'プロシージャID
+            .MsgCode = ERR_MSGCD_VB         'メッセージ区分
+            .ErrNum = Err.Number            'システムエラーコード
+            .ErrDescript = Err.Description  'システムエラー内容
+            .KohzaNo = strKohzaList(lngKKCnt, KOHZALIST_KOHZA_NO)
+            .MsgNaiyou = "計算結果明細のデータ取得結果０件"   'メッセージ内容
+            .MsgSyousai = "親口座計算書で計算結果明細の取得結果が０件か又は" & vbCrLf & _
+                          "顧問料計算結果明細取得関数(func_GetKeisanMeisai)でシステムエラーが発生しています。" & vbCrLf & _
+                          "システム管理者に連絡して下さい。" & vbCrLf & _
+                          "テンプレート　：" & DATASHEET_G_OYA_KEISAN & vbCrLf & _
+                          "テーブル　　　：KYK_KOMONRYOH_KEISAN_MEISAI" & vbCrLf & _
+                          "口座番号　　　：" & strKohzaList(lngKKCnt, KOHZALIST_KOHZA_NO) & vbCrLf & _
+                          "請求期間ID　　：" & strKohzaList(lngKKCnt, KOHZALIST_SEIKYU_KIKAN_ID) & vbCrLf & _
+                          "資産分類　　　：0" & vbCrLf & _
+                          "資産コード　　：0000" & vbCrLf & _
+                          "計算FROM日　　：" & strKohzaList(lngKKCnt, KOHZALIST_SEIKYUSHO_KIKAN_FROM) & vbCrLf & _
+                          "計算TO日　　　：" & strKohzaList(lngKKCnt, KOHZALIST_SEIKYUSHO_KIKAN_TO) & vbCrLf & _
+                          "料率適用期間ID：" & Sisan(lngSisan, SISANLIST_RATE_KIKAN_ID)                              'メッセージ詳細
+            
+            'エラーシート書き込み
+            
+            Call fncWriteErrSheet(ERROR_SHEETNAME)
+        End With
+        lngErrorCnt = lngErrorCnt + 1
+        Exit Sub
+    End If
+    
+    Call sub_AddSheetItemRow(strFileName _
+                           , DATASHEET_G_OYA_KEISAN _
+                           , lngKKCnt _
+                           , DATASHEET_INC_KIKAN & DATASHEET_INC_XXX _
+                           , DATASHEET_INC_KIKAN & Format(lngRateMdfSeq, "000") _
+                           , "0" _
+                           , lngStartRow _
+                           , lngEndRow)
+                         
+    '　行増幅と値設定
+    Call sub_RowIncrement(strFileName _
+                        , lngStartRow _
+                        , lngEndRow _
+                        , DATASHEET_INC_DANKAI & DATASHEET_INC_XX _
+                        , strKeisanMeisai())
+    
+    '＠条件への貼付け
+    Call sub_SetJoukenData(strFileName _
+                         , Sisan() _
+                         , lngSisan _
+                         , lngStartRow _
+                         , True)
+    lngEndRow = func_GetEndRow(strFileName, DATASHEET_DATA)
+
+    '*** ()で囲まれた文字列の置換
+    Call sub_ReplaceKeyItem(strFileName, strKohzaList(), 0, lngStart + 1, lngEndRow)
+            
+
+
+    Exit Sub
+
+ErrHandler:
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "sub_OyaKeisan", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+
+
+End Sub
+
+
+'*************************************************************************
+'関数名　　：オフセット値取得関数
+'
+'引　　数　：
+'           strFileName     I       対象ファイル名
+'           lngRateMdfSeq   I       料率変更番号
+'           Sisan()         I       資産配列の
+'           lngSisan        I       資産配列の添え字
+'           strKohzaList()  I       処理対象口座配列配列
+'           lngKKCnt        I       処理対象口座配列配列の添え字
+'
+'戻り値　　：なし
+'
+'機能説明　：
+'
+'更新履歴　：2006/11/08 SRA Y.Azuma    新規作成
+'更新履歴　：2007/03/29 SRA Y.Azuma    変更     (PH3)「N11計算表・全体」で
+'                                               使用する為Public化
+'
+'*************************************************************************
+Public Function func_GetCurrentOffset(ByVal strFileName As String _
+                                     , ByVal strSearchKey _
+                                     , ByVal lngEnd As Long) As Long
+On Error GoTo ErrHandler
+
+    Dim lngResult   As Long
+    Dim strResult   As String
+    Dim lngRowCnt   As Long
+    Dim strBuff     As String
+
+    func_GetCurrentOffset = 0
+    
+    With Workbooks(strFileName).Worksheets(DATASHEET_DATA)
+
+    
+        For lngRowCnt = lngEnd To 1 Step -1
+            strBuff = ""
+            strBuff = .Range(DATASHEET_SHEETHEAD_COL & lngRowCnt).Value _
+                    & .Range(DATASHEET_SHEETNAME_COL & lngRowCnt).Value
+                    
+            If strBuff = strSearchKey Then
+                strResult = .Range(DATASHEET_OFFSET_COL & lngRowCnt).Value
+                If IsNumeric(strResult) = True Then
+                    lngResult = CLng(strResult) + 1
+                Else
+                    lngResult = 0
+                End If
+                Exit For
+            End If
+                    
+        Next
+        
+        If lngRowCnt <= 1 Then
+            lngResult = 0
+        End If
+    
+    
+    End With
+
+    func_GetCurrentOffset = lngResult
+Exit Function
+ErrHandler:
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "sub_OyaKeisan", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+
+End Function
+

@@ -1,0 +1,315 @@
+Attribute VB_Name = "bas40UchiwakeSho"
+Option Explicit
+
+
+'*************************************************************************
+'
+'プロジェクト名：国内顧問料計算システム・請求書作成指示
+'
+'オブジェクト名：bas40UchiwakeSho
+'
+'機能概要　：平残・断面系請求書作成サブ・フェーズ３対応(内訳書作成)
+'
+'更新履歴　：2007/03/29 SRA 東       新規作成
+'
+'*************************************************************************
+Const MODULE_NAME = "bas40UchiwakeSho"
+
+
+'*************************************************************************
+'関数名　　：投資顧問料内訳書データシート作成メイン関数
+'
+'引　　数　：
+'           strFileName     I       対象ファイル名
+'           lngRateMdfSeq   I       料率変更番号
+'           Sisan()         I       資産配列の
+'           lngSisan        I       資産配列の添え字
+'           strKohzaList()  I       処理対象口座配列配列
+'           lngKKCnt        I       処理対象口座配列配列の添え字
+'           lngErrorCnt     O       エラー件数
+'
+'戻り値　　：なし
+'
+'機能説明　：投資顧問料内訳書を作成するメイン関数
+'
+'更新履歴　：2007/03/29 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Sub sub_UchiwakeSyoMain(ByVal strFileName As String _
+                             , ByVal lngRateMdfSeq As Long _
+                             , ByRef Sisan() As Variant _
+                             , ByVal lngSisan As Long _
+                             , ByRef strKohzaList() As String _
+                             , ByVal lngKKCnt As Long _
+                             , ByRef lngErrorCnt As Long)
+On Error GoTo ErrHandler
+    
+    Const PROCEDURE_NAME = "sub_UchiwakeSyoMain"
+                             
+    Dim strSheetName        As String       'シート名　(行増幅時使用)
+    Dim strOffSet           As String       'オフセット(行増幅時使用)
+    Dim strChikanMae        As String
+    Dim strChikanAto        As String
+    Dim strCell             As String
+    Dim lngStartRow         As Long         '追加した行の始まり
+    Dim lngEndRow           As Long         '追加した行の終わり
+    Dim strMsgSyousai       As String       'エラー詳細用
+
+    strMsgSyousai = ""
+
+'*******************************************************
+'* 関数開始　                                        　*
+'*******************************************************
+
+    '「投資資産内訳書」の貼付
+    '－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－
+    strSheetName = DATASHEET_UCHIWAKE_SHO  '投資資産内訳書
+    strMsgSyousai = DATASHEET_UCHIWAKE_SHO
+    strOffSet = ""
+    strCell = DATASHEET_SHEETHEAD_COL
+    strChikanMae = DATASHEET_INC_KOHZA & DATASHEET_INC_XX & DATASHEET_INC_KIKAN & DATASHEET_INC_XXX & DATASHEET_INC_HIKAE
+    strChikanAto = DATASHEET_INC_KOHZA & Format(lngKKCnt, "00") & DATASHEET_INC_KIKAN & Format(lngRateMdfSeq, "000")
+    Call sub_AddSheetItemRow(strFileName _
+                           , strSheetName _
+                           , lngKKCnt _
+                           , strChikanMae _
+                           , strChikanAto _
+                           , strOffSet _
+                           , lngStartRow _
+                           , lngEndRow, strCell, 2, 2)
+    '条件への貼付け
+    Call sub_SetJoukenData(strFileName _
+                         , Sisan() _
+                         , lngSisan _
+                         , lngStartRow _
+                         , True)
+    
+    '------(控)分の作成------
+    strMsgSyousai = DATASHEET_UCHIWAKE_SHO & DATASHEET_INC_HIKAE
+    strChikanMae = DATASHEET_INC_KOHZA & DATASHEET_INC_XX & DATASHEET_INC_KIKAN & DATASHEET_INC_XXX & DATASHEET_INC_HIKAE
+    strChikanAto = DATASHEET_INC_KOHZA & Format(lngKKCnt, "00") & DATASHEET_INC_KIKAN & Format(lngRateMdfSeq, "000") & DATASHEET_INC_HIKAE
+    Call sub_AddSheetItemRow(strFileName _
+                           , strSheetName _
+                           , lngKKCnt _
+                           , strChikanMae _
+                           , strChikanAto _
+                           , strOffSet _
+                           , lngStartRow _
+                           , lngEndRow, strCell, 1, 1)
+    '条件への貼付け
+    Call sub_SetJoukenData(strFileName _
+                         , Sisan() _
+                         , lngSisan _
+                         , lngStartRow _
+                         , True)
+    '－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－
+    
+    
+    '「投資資産内訳書・料率」の貼付
+    '－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－
+    strMsgSyousai = DATASHEET_UCHIWAKE_SHO_RITSU
+    Call sub_UchiwakeShoRate(strFileName _
+                            , DATASHEET_UCHIWAKE_SHO_RITSU _
+                            , CStr(Sisan(lngSisan, SISANLIST_RATE_CODE)) _
+                            , lngRateMdfSeq _
+                            , Sisan() _
+                            , lngSisan _
+                            , strKohzaList() _
+                            , lngKKCnt _
+                            , "0" _
+                            , lngErrorCnt)
+    
+    '------(控)分の作成------
+    strMsgSyousai = DATASHEET_UCHIWAKE_SHO_RITSU & DATASHEET_INC_HIKAE
+    Call sub_UchiwakeShoRate(strFileName _
+                            , DATASHEET_UCHIWAKE_SHO_RITSU _
+                            , CStr(Sisan(lngSisan, SISANLIST_RATE_CODE)) _
+                            , lngRateMdfSeq _
+                            , Sisan() _
+                            , lngSisan _
+                            , strKohzaList() _
+                            , lngKKCnt _
+                            , "1" _
+                            , lngErrorCnt)
+    
+    '－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－
+    
+                
+    Exit Sub
+
+ErrHandler:
+On Error Resume Next
+    With gusrErr
+        .ModuleId = MODULE_NAME         'モージュールID
+        .Procedure = PROCEDURE_NAME     'プロシージャID
+        .MsgCode = ERR_MSGCD_VB         'メッセージ区分
+        .ErrNum = Err.Number            'システムエラーコード
+        .ErrDescript = Err.Description  'システムエラー内容
+        .KohzaNo = strKohzaList(lngKKCnt, KOHZALIST_KOHZA_NO)
+        .MsgNaiyou = "投資顧問料内訳書データシート作成メイン関数でシステムエラー"        'メッセージ内容(ブックファイル名)
+        'メッセージ詳細
+        .MsgSyousai = "「投資資産内訳書」の作成(sub_UchiwakeSyoMain)でシステムエラーが発生しました。" & _
+             vbCrLf & "システム管理者に連絡して下さい。" & _
+             vbCrLf & "作成中書類名   :" & strMsgSyousai & _
+             vbCrLf & "ファイル名     :" & strFileName & _
+             vbCrLf & "口座番号       :" & strKohzaList(lngKKCnt, KOHZALIST_KOHZA_NO) & _
+             vbCrLf & "請求期間ID     :" & strKohzaList(lngKKCnt, KOHZALIST_SEIKYU_KIKAN_ID) & _
+             vbCrLf & "資産分類       :" & Sisan(lngSisan, SISANLIST_SHISAN_BUNRUI) & _
+             vbCrLf & "資産コード     :" & Sisan(lngSisan, SISANLIST_SHISAN_CODE)
+        'エラーシート書き込み
+        Call fncWriteErrSheet(ERROR_SHEETNAME)
+    End With
+    lngErrorCnt = lngErrorCnt + 1
+    
+
+End Sub
+
+
+'*************************************************************************
+'関数名　　：「投資顧問料内訳書・料率」のデータシート行追加関数
+'
+'引　　数　：
+'           strFileName     I       対象ファイル名
+'           strTemplateName I       作成テンプレートのシート名
+'           strRyoritsuCd   I       料率コード
+'           lngRateMdfSeq   I       料率変更番号
+'           Sisan()         I       資産配列の
+'           lngSisan        I       資産配列の添え字
+'           strKohzaList()  I       処理対象口座配列配列
+'           lngKKCnt        I       処理対象口座配列配列の添え字
+'           strHikae        I       控フラグ　(0:通常で作成する　1:「控」で作成する)
+'           lngErrorCnt     O       エラー件数
+'
+'戻り値　　：なし
+'
+'機能説明　：「投資顧問料内訳書・料率」のデータシート貼り付けと行増幅を行う
+'
+'更新履歴　：2007/03/29 SRA Y.Azuma    新規作成
+'更新履歴　：2007/05/24 SRA Y.Azuma    変更     (PH3)連結　料率コードの型を変更
+'
+'*************************************************************************
+Public Sub sub_UchiwakeShoRate(ByVal strFileName As String _
+                         , ByVal strTemplateName As String _
+                         , ByVal strRyoritsuCd As String _
+                         , ByVal lngRateMdfSeq As Long _
+                         , ByRef Sisan() As Variant _
+                         , ByVal lngSisan As Long _
+                         , ByRef strKohzaList() As String _
+                         , ByVal lngKKCnt As Long _
+                         , ByVal strHikae As String _
+                         , ByRef lngErrorCnt As Long)
+                     
+On Error GoTo ErrHandler
+                     
+    Const PROCEDURE_NAME = "sub_UchiwakeShoRate"
+    Dim lngStartRow         As Long
+    Dim lngEndRow           As Long
+    Dim strData()           As String       '料率段階のデータ格納配列
+    Dim lngRet              As Long
+    Dim lngDelStRow         As Long         '削除開始行
+    Dim lngDElEnRow         As Long         '削除終了行
+    Dim strChikanMae        As String       '置換前文字列
+    Dim strChikanAto        As String       '置換後文字列
+
+'*******************************************************
+'* 関数開始　                                        　*
+'*******************************************************
+    strChikanMae = ""
+    strChikanAto = ""
+    Erase strData
+    
+    '控作成の判定
+    If strHikae = "1" Then
+    '「控」で作成する。
+        lngDelStRow = 0
+        lngDElEnRow = 0
+        strChikanMae = DATASHEET_INC_KOHZA & DATASHEET_INC_XX & DATASHEET_INC_KIKAN & DATASHEET_INC_XXX & DATASHEET_INC_HIKAE
+        strChikanAto = DATASHEET_INC_KOHZA & Format(lngKKCnt, "00") & DATASHEET_INC_KIKAN & Format(lngRateMdfSeq, "000") & DATASHEET_INC_HIKAE
+    Else
+    '通常で作成する。
+        lngDelStRow = 0
+        lngDElEnRow = 0
+        strChikanMae = DATASHEET_INC_KOHZA & DATASHEET_INC_XX & DATASHEET_INC_KIKAN & DATASHEET_INC_XXX & DATASHEET_INC_HIKAE
+        strChikanAto = DATASHEET_INC_KOHZA & Format(lngKKCnt, "00") & DATASHEET_INC_KIKAN & Format(lngRateMdfSeq, "000")
+    End If
+
+
+    '＠段階数分の行増幅
+'------------<Modify Start azuma 2007/04/17 (PH3)> -----------------------
+    lngRet = sub_Ryoritsu(strRyoritsuCd, strKohzaList(), lngKKCnt, strData())
+'    lngRet = sub_Ryoritsu(strRyoritsuCd, strData())
+'------------<Modify End   azuma 2007/04/17 (PH3)> -----------------------
+    
+    If lngRet = 0 Then
+        'エラー情報構造体セット
+        With gusrErr
+            .ModuleId = MODULE_NAME         'モージュールID
+            .Procedure = PROCEDURE_NAME     'プロシージャID
+            .MsgCode = ERR_MSGCD_VB         'メッセージ区分
+            .ErrNum = Err.Number            'システムエラーコード
+            .ErrDescript = Err.Description  'システムエラー内容
+            .KohzaNo = strKohzaList(lngKKCnt, KOHZALIST_KOHZA_NO)
+            .MsgNaiyou = "料率段階取得結果が０件"   'メッセージ内容(ブックファイル名)
+            .MsgSyousai = "料率段階取得結果が０件または" & vbCrLf & _
+                          "料率段階取得(sub_Ryoritsu)関数でシステムエラーが発生しています。" & vbCrLf & _
+                          "システム管理者に連絡して下さい。" & vbCrLf & _
+                          "テンプレート　：" & strTemplateName & vbCrLf & _
+                          "テーブル　    ：KYK_RATE" & vbCrLf & _
+                          "料率コード　  ：" & strRyoritsuCd & vbCrLf & _
+                          "口座番号      ：" & strKohzaList(lngKKCnt, KOHZALIST_KOHZA_NO) & vbCrLf & _
+                          "請求期間ID    ：" & strKohzaList(lngKKCnt, KOHZALIST_SEIKYU_KIKAN_ID) & vbCrLf & _
+                          "料率適用期間ID：" & Sisan(lngSisan, SISANLIST_RATE_KIKAN_ID)                              'メッセージ詳細
+            
+            'エラーシート書き込み
+            
+            Call fncWriteErrSheet(ERROR_SHEETNAME)
+        End With
+        lngErrorCnt = lngErrorCnt + 1
+        Exit Sub
+    End If
+    
+    Call sub_AddSheetItemRow(strFileName _
+                           , strTemplateName _
+                           , lngKKCnt _
+                           , strChikanMae _
+                           , strChikanAto _
+                           , "0" _
+                           , lngStartRow _
+                           , lngEndRow _
+                           , "" _
+                           , lngDelStRow _
+                           , lngDElEnRow)
+                         
+    '　行増幅と値設定
+    Call sub_RowIncrement(strFileName _
+                        , lngStartRow _
+                        , lngEndRow _
+                        , DATASHEET_INC_RATE_DANKAI & DATASHEET_INC_XX _
+                        , strData())
+    
+    
+    '＠条件への貼付け
+    Call sub_SetJoukenData(strFileName _
+                         , Sisan() _
+                         , lngSisan _
+                         , lngStartRow _
+                         , True)
+
+    Erase strData
+
+    Exit Sub
+
+ErrHandler:
+
+    Erase strData
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "sub_UchiwakeShoRate", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Sub
+
+

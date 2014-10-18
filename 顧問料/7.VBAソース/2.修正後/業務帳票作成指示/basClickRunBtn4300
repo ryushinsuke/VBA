@@ -1,0 +1,1481 @@
+Attribute VB_Name = "basClickRunBtn4300"
+Option Explicit
+
+'*************************************************************************
+'プロジェクト名：新契約管理システム・業務帳票作成指示
+'オブジェクト名：basClickRunBtn4300
+'機能概要　：協会新基準
+'更新履歴　：2007/11/20 SRA T.Ichikawa     新規作成
+'        　：2008/03/03 SRA 安保     レスポンス改善
+'          ：2011/03/22 SRA 矢口     協会報告帳票のレイアウト変更対応
+'
+'*************************************************************************
+
+Const MODULE_NAME = "basClickRunBtn4300"
+
+Private Const cBaseFile = gc帳票Base43
+Private Const cPreFName = gc帳票名43
+
+'2011/03/22 協会報告帳票のレイアウト変更対応 mod SRA矢口 Start
+Private Const cDATA_TYPE = "'201', '202', '203', '204', '208', '209'"     '海外年金取得用
+'Private Const cDATA_TYPE = "'201', '202', '203', '204'"     '海外年金取得用
+'2011/03/22 協会報告帳票のレイアウト変更対応 mod SRA矢口 End
+
+'別紙様式第２号① 構造体
+Private Type typS1
+    Seq                 As Variant  '連番
+    Nenkin_Cnt          As Variant  '海外年金内訳件数
+    Nenkin_Kin          As Variant  '海外年金内訳金額
+End Type
+
+'別紙様式第２号② 構造体
+Private Type typS2_1
+    Data_Type           As Variant  '協会区分
+    Ichinin_Cnt         As Variant  '投資一任契約件数
+    Ichinin_Kin         As Variant  '投資一任契約時価金額
+    Jogen_Cnt           As Variant  '投資助言契約件数
+    Jogen_Kin           As Variant  '投資助言契約時価金額
+End Type
+
+'別紙様式第２号②(再掲) 構造体
+Private Type typS2_2
+    Saikei_Seq          As Variant  '(再掲) 連番
+    Saikei_Zokusei      As Variant  '(再掲) 属性
+    Saikei_Upper_Cnt    As Variant  '(再掲) 上段 件数
+    Saikei_Upper_Kin    As Variant  '(再掲) 上段 金額
+    Saikei_Lower_Cnt    As Variant  '(再掲) 下段 件数
+    Saikei_Lower_Kin    As Variant  '(再掲) 下段 金額
+End Type
+
+'別紙様式第３号(２． ファンド種類別契約資産状況) 構造体
+Private Type typS3_1
+    Zokusei_4           As Variant  '属性４
+    Ichinin_Cnt         As Variant  '一任契約件数
+    Ichinin_Kin         As Variant  '一任契約時価金額
+End Type
+
+'別紙様式第３号(３． 契約規模別分布状況) 構造体
+Private Type typS3_2
+    Seq                 As Variant  '連番
+    Rate_Cnt            As Variant  '一任契約件数
+    Rate_Kin            As Variant  '一任契約時価金額
+End Type
+
+Dim glngSessionID       As Long     'ORACLEセッションID(ワークテーブル用)
+
+'*************************************************************************
+'関数名　　：協会新基準表(帳票作成)
+'引　　数　：
+'           objTarget        I           対象のシート
+'戻り値　　：
+'機能説明　：
+'更新履歴　：2007/11/20 SRA             新規作成
+'更新履歴　：2007/12/04 SRA Y.Azuma    変更     (PH4)印刷エラー対策
+'        　：2013/04/11 GUT 趙 顧問バック更改対応
+'
+'*************************************************************************
+Public Function fncClickRunBtn4300(ByRef objTarget As Object) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncClickRunBtn4300"
+
+On Error GoTo ErrSection
+
+    Dim strDay          As String
+    Dim strOutFName     As String
+    Dim strOutFNameOnly As String
+    
+    Dim inData1()       As typS1                '別紙様式第２号①       データ取得用
+    Dim inData2_1()     As typS2_1              '別紙様式第２号②       データ取得用
+    Dim inData2_2()     As typS2_2              '別紙様式第２号②(再掲) データ取得用
+    Dim inData3_1()     As typS3_1              '別紙様式第３号         データ取得用
+    Dim inData3_2()     As typS3_2              '別紙様式第３号         データ取得用
+    
+    Dim strKjnLastYmd   As String   '基準月末日
+    Dim strKjnFirstYmd  As String   '基準月初日
+    Dim strZenLastYmd   As String   '前月末日
+    Dim wDate           As Date     '日付編集用WORK
+    Dim strWhereString  As String   'ワークテーブル作成SQLのWHERE文編集用
+    
+    Call subBeginProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    fncClickRunBtn4300 = False
+   
+    With objTarget
+        'マウスポインターをWAITにする
+        ThisWorkbook.Application.Cursor = xlWait
+
+        ' 作成選択の場合
+        If .chkMake.Value = True Then
+        
+            strDay = Trim(.Range("基準年月4300").Value)
+
+            '基準年月の月初日取得
+            strKjnFirstYmd = strDay & "01"
+
+            '基準年月の前月末日取得
+            wDate = Mid(strKjnFirstYmd, 1, 4) & "/" & Mid(strKjnFirstYmd, 5, 2) & "/" & Mid(strKjnFirstYmd, 7, 2)
+            wDate = DateAdd("d", -1, wDate)
+            strZenLastYmd = Format(wDate, "YYYYMMDD")
+            
+            '基準年月の月末日取得
+            wDate = Mid(strKjnFirstYmd, 1, 4) & "/" & Mid(strKjnFirstYmd, 5, 2) & "/" & Mid(strKjnFirstYmd, 7, 2)
+            wDate = DateAdd("m", 1, wDate)
+            wDate = DateAdd("d", -1, wDate)
+            strKjnLastYmd = Format(wDate, "YYYYMMDD")
+            
+            'オラクルSessionID取得
+            If fncGetSessionID(glngSessionID) = False Then
+                GoTo RtnErrSection
+            End If
+            
+            strWhereString = "WHERE KIJYUN_YMD = " & strKjnLastYmd
+'------------<顧問バック更改対応 2013/04/11 GUT 趙 START> ------------
+'            strWhereString = strWhereString & " AND TRIM(SETTEI_KBN) IN ('1', '2')"
+            strWhereString = strWhereString & " AND TRIM(SETTEI_KBN) = '0'"
+'------------<顧問バック更改対応 2013/04/11 GUT 趙 END> ------------
+            
+            'V経営帳票のデータをワークテーブルにINSERT
+'=== 2008/03/03 レスポンス改善 Modified By H.Anpo Start
+'            If fncInsertTempTable(glngSessionID, strWhereString) = False Then
+            If fncInsertTempTable4300(glngSessionID, strWhereString) = False Then
+'=== 2008/03/03 レスポンス改善 Modified By H.Anpo End
+                GoTo RtnErrSection
+            End If
+
+            ' データ取得
+            If fncGetDBData4300(strKjnLastYmd, inData1(), inData2_1(), inData2_2(), inData3_1(), inData3_2()) = False Then
+                GoTo RtnErrSection
+            End If
+        
+            'ワークテーブルDELETE
+            If fncDeleteTempTable(glngSessionID) = False Then
+                GoTo RtnErrSection
+            End If
+        
+            ' 帳票ファイル取得
+            If fncGetFile4300(strDay, strOutFName) = False Then
+                GoTo RtnErrSection
+            End If
+'------------<Modify Start azuma 2007/12/04 (PH4)> ★★★☆-----------------------
+            strOutFNameOnly = strOutFName
+'------------<Modify End   azuma 2007/12/04 (PH4)> ★★★☆-----------------------
+        
+            ' フォルダをつける。
+            strOutFName = .Range("保存フォルダ").Value & "\" & strOutFName
+            
+            ' ファイルコピー
+            If fncCopyBook(cBaseFile, strOutFName) = False Then
+                GoTo RtnErrSection
+            End If
+            
+            ' ファイル作成
+            If fncMakeBook4300(strOutFName, strKjnLastYmd, inData1(), inData2_1(), inData2_2(), inData3_1(), inData3_2()) = False Then
+                ' ファイル削除
+                Call fncDeleteFile(strOutFName)
+
+                GoTo RtnErrSection
+            End If
+
+'------------<Modify Start azuma 2007/12/04 (PH4)> ★★★☆-----------------------
+            If .chkPrint.Value = True Then
+                Call ToukeiChouhyouPrint(strOutFNameOnly)
+            End If
+            
+            Workbooks(strOutFNameOnly).Close SaveChanges:=True
+'------------<Modify End   azuma 2007/12/04 (PH4)> ★★★☆-----------------------
+        
+        End If
+    
+        ' 印刷選択の場合
+'------------<Modify Start azuma 2007/12/04 (PH4)> ★★★☆-----------------------
+        If .chkMake.Value = False And .chkPrint.Value = True Then
+'        If .chkPrint.Value = True Then
+'------------<Modify End   azuma 2007/12/04 (PH4)> ★★★☆-----------------------
+            ' ファイル印刷
+            If fncPrintBook(cPreFName, .Range("保存フォルダ").Value) = False Then
+                GoTo RtnErrSection
+            End If
+        End If
+    
+        'マウスポインターを戻す
+        ThisWorkbook.Application.Cursor = xlDefault
+        
+    End With
+   
+    fncClickRunBtn4300 = True
+    
+    Erase inData1
+    Erase inData2_1
+    Erase inData2_2
+    Erase inData3_1
+    Erase inData3_2
+    
+    Call subEndProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                     *
+'*******************************************************
+ErrSection:
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+'*******************************************************
+'* リターンエラーセクション                              *
+'*******************************************************
+RtnErrSection:
+                
+    'ワークテーブルDELETE
+    If fncDeleteTempTable(glngSessionID) = False Then
+        GoTo RtnErrSection
+    End If
+                
+    'マウスポインターを戻す
+    ThisWorkbook.Application.Cursor = xlDefault
+                
+    fncClickRunBtn4300 = False
+    Erase inData1
+    Erase inData2_1
+    Erase inData2_2
+    Erase inData3_1
+    Erase inData3_2
+    
+End Function
+
+'*************************************************************************
+'関数名　　：統計情報 協会新基準(帳票ファイル取得)
+'引　　数　：
+'           strDay             I           基準日
+'           strOutFName        O           出力ファイル名
+'戻り値　　：処理結果
+'機能説明　：協会新基準を出力するファイルを取得する。
+'更新履歴　：2007/11/20 SRA             新規作成
+'
+'*************************************************************************
+Public Function fncGetFile4300(ByVal strDay As String, _
+                               ByRef strOutFName As String) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncGetFile4300"
+
+On Error GoTo ErrSection
+
+    Dim strDate         As String
+    Dim strTime         As String
+
+    strOutFName = ""
+    
+    fncGetFile4300 = False
+    
+    Call gfunc_GetSvDateTime(strDate, strTime)
+       
+    ' 出力帳票ファイル
+    strOutFName = cPreFName
+    strOutFName = strOutFName & "_" & strDate
+    strOutFName = strOutFName & "_" & strTime
+    strOutFName = strOutFName & "-(" & strDay
+    strOutFName = strOutFName & ")"
+    strOutFName = strOutFName & ".xls"
+    
+    fncGetFile4300 = True
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncGetFile4300 = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+End Function
+
+'*************************************************************************
+'関数名　　：統計情報 協会新基準(帳票データ取得)
+'引　　数　：
+'           strKjnLastYmd      I           基準年月(YYYYMM)
+'           inData1()          O           別紙様式第２号①       取得データ
+'           inData2_1()        O           別紙様式第２号②       取得データ
+'           inData2_2()        O           別紙様式第２号②(再掲) 取得データ
+'           inData3_1()        O           別紙様式第３号         取得データ
+'           inData3_2()        O           別紙様式第３号         取得データ
+'戻り値　　：処理結果
+'機能説明　：協会新基準のデータを取得する。
+'
+'*************************************************************************
+Public Function fncGetDBData4300( _
+    ByVal strKjnLastYmd As String, _
+    ByRef inData1() As typS1, _
+    ByRef inData2_1() As typS2_1, _
+    ByRef inData2_2() As typS2_2, _
+    ByRef inData3_1() As typS3_1, _
+    ByRef inData3_2() As typS3_2 _
+) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncGetDBData4300"
+
+On Error GoTo ErrSection
+
+    Dim strSql      As String
+    Dim vData()     As Variant
+    Dim lngCol      As Long
+    Dim lngRow      As Long
+    Dim lngRowCnt   As Long
+    Dim lngColCnt   As Long
+    Dim blnRet      As Boolean
+    
+    fncGetDBData4300 = False
+    
+    blnRet = False
+            
+    '別紙様式第２号① データ取得
+    blnRet = fncGetS1Data(strKjnLastYmd, inData1())
+    If blnRet <> True Then
+'        Exit Function
+    End If
+    
+    '別紙様式第２号② データ取得
+    blnRet = fncGetS2_1Data(strKjnLastYmd, inData2_1())
+    If blnRet <> True Then
+        Exit Function
+    End If
+    
+    '別紙様式第２号②(再掲) データ取得
+    blnRet = fncGetS2_2Data(strKjnLastYmd, inData2_2())
+    If blnRet <> True Then
+'        Exit Function
+    End If
+    
+    '別紙様式第３号(２． ファンド種類別契約資産状況) データ取得
+    blnRet = fncGetS3_1Data(strKjnLastYmd, inData3_1())
+    If blnRet <> True Then
+'        Exit Function
+    End If
+    
+    '別紙様式第３号(３． 契約規模別分布状況) データ取得
+    blnRet = fncGetS3_2Data(strKjnLastYmd, inData3_2())
+    If blnRet <> True Then
+        Exit Function
+    End If
+    
+    fncGetDBData4300 = True
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncGetDBData4300 = False
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- エラーログ出力 End  ---------------------------------
+
+    Erase vData
+'    Erase strData
+   
+End Function
+
+'*************************************************************************
+'関数名　　：別紙様式第２号① データ取得
+'引　　数　：
+'           strLastDay         I           基準年月末日(YYYYMMDD)
+'           inData()           O           取得データ
+'戻り値　　：処理結果
+'機能説明　：別紙様式第２号① のデータを取得する
+'更新履歴　：2007/11/20 SRA T.Ichikawa   新規
+'          ：2011/03/22 SRA 矢口     協会報告帳票のレイアウト変更対応
+'        　：2013/04/15 GUT 趙 顧問バック更改対応
+'
+'*************************************************************************
+Public Function fncGetS1Data( _
+    ByVal strKjnLastYmd As String, _
+    ByRef inData() As typS1) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncGetS1Data"
+
+On Error GoTo ErrSection
+
+    Dim strSql      As String
+    Dim vData()     As Variant
+    Dim lngCol      As Long
+    Dim lngRow      As Long
+    Dim lngRowCnt   As Long
+    Dim lngColCnt   As Long
+    
+    Dim i           As Long
+    
+    fncGetS1Data = False
+    
+    ReDim inData(0)
+    
+    '別紙様式第２号① データ取得
+    strSql = ""
+    strSql = strSql & "SELECT" & vbCrLf
+    strSql = strSql & "    '1' SEQ," & vbCrLf
+    strSql = strSql & "    COUNT(PRTCD) CNT," & vbCrLf
+    strSql = strSql & "    NVL(SUM(JPY_JIKA_TOTAL_KAIGAI),0) KAIGAI_KIN" & vbCrLf
+    strSql = strSql & "FROM" & vbCrLf
+    strSql = strSql & "    KYK_WK_KEIEI_CHOUHYOU" & vbCrLf
+    strSql = strSql & "WHERE" & vbCrLf
+    strSql = strSql & "    KIJYUN_YMD = '" & strKjnLastYmd & "'" & vbCrLf
+    strSql = strSql & "AND SESSION_ID = " & glngSessionID & "" & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 START> ------------
+'    strSql = strSql & "AND TRIM(SETTEI_KBN) = '2'" & vbCrLf
+    strSql = strSql & "AND TRIM(SETTEI_KBN) = '0'" & vbCrLf
+    strSql = strSql & "AND TRIM(GENGO) = '1'" & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 END> ------------
+    strSql = strSql & "AND TRIM(CNT_TYPE) IN ('1','2')" & vbCrLf
+    strSql = strSql & "AND TRIM(DATA_TYPE) IN (" & cDATA_TYPE & ")" & vbCrLf
+    strSql = strSql & "AND TRIM(KOKYAKU_KUNI) = 'USA'" & vbCrLf
+    strSql = strSql & "GROUP BY" & vbCrLf
+    strSql = strSql & "    KIJYUN_YMD" & vbCrLf
+    strSql = strSql & "UNION" & vbCrLf
+    strSql = strSql & "SELECT" & vbCrLf
+    strSql = strSql & "    '2' SEQ," & vbCrLf
+    strSql = strSql & "    COUNT(PRTCD) CNT," & vbCrLf
+    strSql = strSql & "    NVL(SUM(JPY_JIKA_TOTAL_KAIGAI),0) KAIGAI_KIN" & vbCrLf
+    strSql = strSql & "FROM" & vbCrLf
+    strSql = strSql & "    KYK_WK_KEIEI_CHOUHYOU" & vbCrLf
+    strSql = strSql & "WHERE" & vbCrLf
+    strSql = strSql & "    KIJYUN_YMD = '" & strKjnLastYmd & "'" & vbCrLf
+    strSql = strSql & "AND SESSION_ID = " & glngSessionID & "" & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 START> ------------
+'    strSql = strSql & "AND TRIM(SETTEI_KBN) = '2'" & vbCrLf
+    strSql = strSql & "AND TRIM(SETTEI_KBN) = '0'" & vbCrLf
+    strSql = strSql & "AND TRIM(GENGO) = '1'" & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 END> ------------
+    strSql = strSql & "AND TRIM(CNT_TYPE) IN ('1','2')" & vbCrLf
+    strSql = strSql & "AND TRIM(DATA_TYPE) IN (" & cDATA_TYPE & ")" & vbCrLf
+'2011/03/22 協会報告帳票のレイアウト変更対応 mod SRA矢口 Start
+    strSql = strSql & "AND TRIM(KOKYAKU_CHIIKI_1) = '02'" & vbCrLf
+'    strSql = strSql & "AND TRIM(KOKYAKU_KUNI) = 'GBR'" & vbCrLf
+'2011/03/22 協会報告帳票のレイアウト変更対応 mod SRA矢口 End
+    strSql = strSql & "GROUP BY" & vbCrLf
+    strSql = strSql & "    KIJYUN_YMD" & vbCrLf
+    strSql = strSql & "UNION" & vbCrLf
+    strSql = strSql & "SELECT" & vbCrLf
+    strSql = strSql & "    '3' SEQ," & vbCrLf
+    strSql = strSql & "    COUNT(PRTCD) CNT," & vbCrLf
+    strSql = strSql & "    NVL(SUM(JPY_JIKA_TOTAL_KAIGAI),0) KAIGAI_KIN" & vbCrLf
+    strSql = strSql & "FROM" & vbCrLf
+    strSql = strSql & "    KYK_WK_KEIEI_CHOUHYOU" & vbCrLf
+    strSql = strSql & "WHERE" & vbCrLf
+    strSql = strSql & "    KIJYUN_YMD = '" & strKjnLastYmd & "'" & vbCrLf
+    strSql = strSql & "AND SESSION_ID = " & glngSessionID & "" & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 START> ------------
+'    strSql = strSql & "AND TRIM(SETTEI_KBN) = '2'" & vbCrLf
+    strSql = strSql & "AND TRIM(SETTEI_KBN) = '0'" & vbCrLf
+    strSql = strSql & "AND TRIM(GENGO) = '1'" & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 END> ------------
+    strSql = strSql & "AND TRIM(CNT_TYPE) IN ('1','2')" & vbCrLf
+    strSql = strSql & "AND TRIM(DATA_TYPE) IN (" & cDATA_TYPE & ")" & vbCrLf
+'2011/03/22 協会報告帳票のレイアウト変更対応 mod SRA矢口 Start
+'    strSql = strSql & "AND TRIM(KOKYAKU_KUNI) != 'GBR'" & vbCrLf
+'    strSql = strSql & "AND TRIM(KOKYAKU_KUNI) != 'USA'" & vbCrLf
+'    strSql = strSql & "AND TRIM(KOKYAKU_CHIIKI_1) = '02'" & vbCrLf
+    strSql = strSql & "AND TRIM(KOKYAKU_CHIIKI_1) = '00'" & vbCrLf
+'2011/03/22 協会報告帳票のレイアウト変更対応 mod SRA矢口 End
+    strSql = strSql & "GROUP BY" & vbCrLf
+    strSql = strSql & "    KIJYUN_YMD" & vbCrLf
+    strSql = strSql & "UNION" & vbCrLf
+    strSql = strSql & "SELECT" & vbCrLf
+    strSql = strSql & "    '4' SEQ," & vbCrLf
+    strSql = strSql & "    COUNT(PRTCD) CNT," & vbCrLf
+    strSql = strSql & "    NVL(SUM(JPY_JIKA_TOTAL_KAIGAI),0) KAIGAI_KIN" & vbCrLf
+    strSql = strSql & "FROM" & vbCrLf
+    strSql = strSql & "    KYK_WK_KEIEI_CHOUHYOU" & vbCrLf
+    strSql = strSql & "WHERE" & vbCrLf
+    strSql = strSql & "    KIJYUN_YMD = '" & strKjnLastYmd & "'" & vbCrLf
+    strSql = strSql & "AND SESSION_ID = " & glngSessionID & "" & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 START> ------------
+'    strSql = strSql & "AND TRIM(SETTEI_KBN) = '2'" & vbCrLf
+    strSql = strSql & "AND TRIM(SETTEI_KBN) = '0'" & vbCrLf
+    strSql = strSql & "AND TRIM(GENGO) = '1'" & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 END> ------------
+    strSql = strSql & "AND TRIM(CNT_TYPE) IN ('1','2')" & vbCrLf
+    strSql = strSql & "AND TRIM(DATA_TYPE) IN (" & cDATA_TYPE & ")" & vbCrLf
+    strSql = strSql & "AND TRIM(KOKYAKU_KUNI) != 'USA'" & vbCrLf
+    strSql = strSql & "AND TRIM(KOKYAKU_KUNI) != 'GBR'" & vbCrLf
+    strSql = strSql & "AND TRIM(KOKYAKU_CHIIKI_1) != '02'" & vbCrLf
+'2011/03/22 協会報告帳票のレイアウト変更対応 Add SRA矢口 Start
+    strSql = strSql & "AND TRIM(KOKYAKU_CHIIKI_1) != '00'" & vbCrLf
+'2011/03/22 協会報告帳票のレイアウト変更対応 Add SRA矢口 End
+    strSql = strSql & "GROUP BY" & vbCrLf
+    strSql = strSql & "    KIJYUN_YMD" & vbCrLf
+    strSql = strSql & "ORDER BY" & vbCrLf
+    strSql = strSql & "    SEQ" & vbCrLf
+    
+    'データ取得
+    Call gclsDB.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow)
+    If lngRow > 0 Then
+    
+        ReDim inData(lngRow)
+        
+        For i = 0 To lngRow - 1
+        
+            '取得データを配列に設定
+            With inData(i)
+                .Seq = CStr(vData(0, i))            '連番
+                .Nenkin_Cnt = CStr(vData(1, i))     '海外年金内訳件数
+                .Nenkin_Kin = CStr(vData(2, i))     '海外年金内訳金額
+            End With
+        Next i
+        
+        fncGetS1Data = True
+'    Else
+'        ' 該当データが存在しません。
+'        Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3001, cPreFName, "")
+    End If
+    
+    Erase vData
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncGetS1Data = False
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- エラーログ出力 End  ---------------------------------
+
+    Erase vData
+   
+End Function
+
+'*************************************************************************
+'関数名　　：別紙様式第２号② データ取得
+'引　　数　：
+'           strLastDay         I           基準年月末日(YYYYMMDD)
+'           inData()           O           取得データ
+'戻り値　　：処理結果
+'機能説明　：別紙様式第２号② のデータを取得する
+'更新履歴　：2007/11/20 SRA T.Ichikawa   新規
+'        　：2013/04/15 GUT 趙 顧問バック更改対応
+'
+'*************************************************************************
+Public Function fncGetS2_1Data( _
+    ByVal strKjnLastYmd As String, _
+    ByRef inData() As typS2_1) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncGetS2_1Data"
+
+On Error GoTo ErrSection
+
+    Dim strSql      As String
+    Dim vData()     As Variant
+    Dim lngCol      As Long
+    Dim lngRow      As Long
+    Dim lngRowCnt   As Long
+    Dim lngColCnt   As Long
+    
+    Dim i           As Long
+    
+    fncGetS2_1Data = False
+    
+    ReDim inData(0)
+    
+    '別紙様式第２号② データ取得
+    strSql = ""
+    strSql = strSql & "SELECT" & vbCrLf
+    strSql = strSql & "    DATA_TYPE," & vbCrLf
+    strSql = strSql & "    NVL(SUM(DECODE(CNT_TYPE,'1',1,0)),0)," & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 START> ------------
+'    strSql = strSql & "    NVL(SUM(DECODE(CNT_TYPE,'1',DECODE(TRIM(SETTEI_KBN),1,JPY_JIKA_TOTAL_KOKUNAI,JPY_JIKA_TOTAL_KAIGAI),0)),0)," & vbCrLf
+    strSql = strSql & "    NVL(SUM(DECODE(CNT_TYPE,'1',DECODE(TRIM(SETTEI_KBN)||TRIM(GENGO),'00',JPY_JIKA_TOTAL_KOKUNAI,JPY_JIKA_TOTAL_KAIGAI),0)),0)," & vbCrLf
+    strSql = strSql & "    NVL(SUM(DECODE(CNT_TYPE,'2',1,0)),0)," & vbCrLf
+'    strSql = strSql & "    NVL(SUM(DECODE(CNT_TYPE,'2',DECODE(TRIM(SETTEI_KBN),1,JPY_JIKA_TOTAL_KOKUNAI,JPY_JIKA_TOTAL_KAIGAI),0)),0)" & vbCrLf
+    strSql = strSql & "    NVL(SUM(DECODE(CNT_TYPE,'2',DECODE(TRIM(SETTEI_KBN)||TRIM(GENGO),'00',JPY_JIKA_TOTAL_KOKUNAI,JPY_JIKA_TOTAL_KAIGAI),0)),0)" & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 END> ------------
+    strSql = strSql & "FROM" & vbCrLf
+    strSql = strSql & "    KYK_WK_KEIEI_CHOUHYOU" & vbCrLf
+    strSql = strSql & "WHERE" & vbCrLf
+    strSql = strSql & "    KIJYUN_YMD = '" & strKjnLastYmd & "'" & vbCrLf
+    strSql = strSql & "AND SESSION_ID = " & glngSessionID & "" & vbCrLf
+    strSql = strSql & "GROUP BY" & vbCrLf
+    strSql = strSql & "    DATA_TYPE" & vbCrLf
+    strSql = strSql & "ORDER BY" & vbCrLf
+    strSql = strSql & "    DATA_TYPE" & vbCrLf
+    
+    'データ取得
+    Call gclsDB.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow)
+    If lngRow > 0 Then
+    
+        ReDim inData(lngRow)
+        
+        For i = 0 To lngRow - 1
+        
+            '取得データを配列に設定
+            With inData(i)
+                .Data_Type = CStr(vData(0, i))      '協会区分
+                .Ichinin_Cnt = CStr(vData(1, i))    '投資一任契約件数
+                .Ichinin_Kin = CStr(vData(2, i))    '投資一任契約時価金額
+                .Jogen_Cnt = CStr(vData(3, i))      '投資助言契約件数
+                .Jogen_Kin = CStr(vData(4, i))      '投資助言契約時価金額
+            End With
+        Next i
+        
+        fncGetS2_1Data = True
+    Else
+        ' 該当データが存在しません。
+        Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3001, cPreFName, "")
+    End If
+    
+    Erase vData
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncGetS2_1Data = False
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- エラーログ出力 End  ---------------------------------
+
+    Erase vData
+   
+End Function
+
+'*************************************************************************
+'関数名　　：別紙様式第２号②(再掲) データ取得
+'引　　数　：
+'           strLastDay         I           基準年月末日(YYYYMMDD)
+'           inData()           O           取得データ
+'戻り値　　：処理結果
+'機能説明　：別紙様式第２号②(再掲) のデータを取得する
+'更新履歴　：2007/11/20 SRA T.Ichikawa   新規
+'        　：2013/04/15 GUT 趙 顧問バック更改対応
+'
+'*************************************************************************
+Public Function fncGetS2_2Data( _
+    ByVal strKjnLastYmd As String, _
+    ByRef inData() As typS2_2) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncGetS2_2Data"
+
+On Error GoTo ErrSection
+
+    Dim strSql      As String
+    Dim vData()     As Variant
+    Dim lngCol      As Long
+    Dim lngRow      As Long
+    Dim lngRowCnt   As Long
+    Dim lngColCnt   As Long
+    
+    Dim i           As Long
+    
+    fncGetS2_2Data = False
+    
+    ReDim inData(0)
+    
+    '別紙様式第２号②(再掲) データ取得
+    strSql = ""
+    strSql = strSql & "SELECT" & vbCrLf
+    strSql = strSql & "    '1' SEQ," & vbCrLf
+    strSql = strSql & "    ZOKUSEI_5 ZOKUSEI," & vbCrLf
+    strSql = strSql & "    NVL(SUM(DECODE(ZOKUSEI_5,'1',1,0)),0) ITI_CNT," & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 START> ------------
+'    strSql = strSql & "    NVL(SUM(DECODE(ZOKUSEI_5,'1',DECODE(TRIM(SETTEI_KBN),1,JPY_JIKA_TOTAL_KOKUNAI,JPY_JIKA_TOTAL_KAIGAI),0)),0) ITI_KIN," & vbCrLf
+    strSql = strSql & "    NVL(SUM(DECODE(ZOKUSEI_5,'1',DECODE(TRIM(SETTEI_KBN)||TRIM(GENGO),'00',JPY_JIKA_TOTAL_KOKUNAI,JPY_JIKA_TOTAL_KAIGAI),0)),0) ITI_KIN," & vbCrLf
+    strSql = strSql & "    NVL(SUM(DECODE(ZOKUSEI_5,'2',1,0)),0) JYO_CNT," & vbCrLf
+'    strSql = strSql & "    NVL(SUM(DECODE(ZOKUSEI_5,'2',DECODE(TRIM(SETTEI_KBN),1,JPY_JIKA_TOTAL_KOKUNAI,JPY_JIKA_TOTAL_KAIGAI),0)),0) JYO_KIN" & vbCrLf
+    strSql = strSql & "    NVL(SUM(DECODE(ZOKUSEI_5,'2',DECODE(TRIM(SETTEI_KBN)||TRIM(GENGO),'00',JPY_JIKA_TOTAL_KOKUNAI,JPY_JIKA_TOTAL_KAIGAI),0)),0) JYO_KIN" & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 END> ------------
+    strSql = strSql & "FROM" & vbCrLf
+    strSql = strSql & "    KYK_WK_KEIEI_CHOUHYOU" & vbCrLf
+    strSql = strSql & "WHERE" & vbCrLf
+    strSql = strSql & "    KIJYUN_YMD = '" & strKjnLastYmd & "'" & vbCrLf
+    strSql = strSql & "AND SESSION_ID = " & glngSessionID & "" & vbCrLf
+    strSql = strSql & "AND TRIM(ZOKUSEI_5) IN ('1','2')" & vbCrLf
+    strSql = strSql & "GROUP BY" & vbCrLf
+    strSql = strSql & "    ZOKUSEI_5" & vbCrLf
+    strSql = strSql & "UNION" & vbCrLf
+    strSql = strSql & "SELECT" & vbCrLf
+    strSql = strSql & "    '2' SEQ," & vbCrLf
+    strSql = strSql & "    ZOKUSEI_6 ZOKUSEI," & vbCrLf
+    strSql = strSql & "    NVL(SUM(DECODE(ZOKUSEI_6,'1',1,0)),0) ITI_CNT," & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 START> ------------
+'    strSql = strSql & "    NVL(SUM(DECODE(ZOKUSEI_6,'1',DECODE(TRIM(SETTEI_KBN),1,JPY_JIKA_TOTAL_KOKUNAI,JPY_JIKA_TOTAL_KAIGAI),0)),0) ITI_KIN," & vbCrLf
+    strSql = strSql & "    NVL(SUM(DECODE(ZOKUSEI_6,'1',DECODE(TRIM(SETTEI_KBN)||TRIM(GENGO),'00',JPY_JIKA_TOTAL_KOKUNAI,JPY_JIKA_TOTAL_KAIGAI),0)),0) ITI_KIN," & vbCrLf
+    strSql = strSql & "    NVL(SUM(DECODE(ZOKUSEI_6,'2',1,0)),0) JYO_CNT," & vbCrLf
+'    strSql = strSql & "    NVL(SUM(DECODE(ZOKUSEI_6,'2',DECODE(TRIM(SETTEI_KBN),1,JPY_JIKA_TOTAL_KOKUNAI,JPY_JIKA_TOTAL_KAIGAI),0)),0) JYO_KIN" & vbCrLf
+    strSql = strSql & "    NVL(SUM(DECODE(ZOKUSEI_6,'2',DECODE(TRIM(SETTEI_KBN)||TRIM(GENGO),'00',JPY_JIKA_TOTAL_KOKUNAI,JPY_JIKA_TOTAL_KAIGAI),0)),0) JYO_KIN" & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 END> ------------
+    strSql = strSql & "FROM" & vbCrLf
+    strSql = strSql & "    KYK_WK_KEIEI_CHOUHYOU" & vbCrLf
+    strSql = strSql & "WHERE" & vbCrLf
+    strSql = strSql & "    KIJYUN_YMD = '" & strKjnLastYmd & "'" & vbCrLf
+    strSql = strSql & "AND SESSION_ID = " & glngSessionID & "" & vbCrLf
+    strSql = strSql & "AND TRIM(ZOKUSEI_6) IN ('1', '2')" & vbCrLf
+    strSql = strSql & "GROUP BY" & vbCrLf
+    strSql = strSql & "    ZOKUSEI_6" & vbCrLf
+    strSql = strSql & "UNION" & vbCrLf
+    strSql = strSql & "SELECT" & vbCrLf
+    strSql = strSql & "    '3' SEQ," & vbCrLf
+    strSql = strSql & "    ZOKUSEI_20 ZOKUSEI," & vbCrLf
+    strSql = strSql & "    NVL(SUM(DECODE(ZOKUSEI_20,'1',DECODE(CNT_TYPE,'1',1,0),0)),0) ITI_CNT," & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 START> ------------
+'    strSql = strSql & "    NVL(SUM(DECODE(ZOKUSEI_20,'1',DECODE(CNT_TYPE,'1',DECODE(TRIM(SETTEI_KBN),1,JPY_JIKA_TOTAL_KOKUNAI,JPY_JIKA_TOTAL_KAIGAI),0),0)),0) ITI_KIN," & vbCrLf
+    strSql = strSql & "    NVL(SUM(DECODE(ZOKUSEI_20,'1',DECODE(CNT_TYPE,'1',DECODE(TRIM(SETTEI_KBN)||TRIM(GENGO),'00',JPY_JIKA_TOTAL_KOKUNAI,JPY_JIKA_TOTAL_KAIGAI),0),0)),0) ITI_KIN," & vbCrLf
+    strSql = strSql & "    NVL(SUM(DECODE(ZOKUSEI_20,'1',DECODE(CNT_TYPE,'2',1,0),0)),0) JYO_CNT," & vbCrLf
+'    strSql = strSql & "    NVL(SUM(DECODE(ZOKUSEI_20,'1',DECODE(CNT_TYPE,'2',DECODE(TRIM(SETTEI_KBN),1,JPY_JIKA_TOTAL_KOKUNAI,JPY_JIKA_TOTAL_KAIGAI),0),0)),0) JYO_KIN" & vbCrLf
+    strSql = strSql & "    NVL(SUM(DECODE(ZOKUSEI_20,'1',DECODE(CNT_TYPE,'2',DECODE(TRIM(SETTEI_KBN)||TRIM(GENGO),'00',JPY_JIKA_TOTAL_KOKUNAI,JPY_JIKA_TOTAL_KAIGAI),0),0)),0) JYO_KIN" & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 END> ------------
+    strSql = strSql & "FROM" & vbCrLf
+    strSql = strSql & "    KYK_WK_KEIEI_CHOUHYOU" & vbCrLf
+    strSql = strSql & "WHERE" & vbCrLf
+    strSql = strSql & "    KIJYUN_YMD = '" & strKjnLastYmd & "'" & vbCrLf
+    strSql = strSql & "AND SESSION_ID = " & glngSessionID & "" & vbCrLf
+    strSql = strSql & "AND TRIM(ZOKUSEI_20) = '1'" & vbCrLf
+    strSql = strSql & "GROUP BY" & vbCrLf
+    strSql = strSql & "    ZOKUSEI_20" & vbCrLf
+    strSql = strSql & "ORDER BY" & vbCrLf
+    strSql = strSql & "    SEQ," & vbCrLf
+    strSql = strSql & "    ZOKUSEI" & vbCrLf
+    
+    'データ取得
+    Call gclsDB.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow)
+    If lngRow > 0 Then
+    
+        ReDim inData(lngRow)
+        
+        For i = 0 To lngRow - 1
+        
+            '取得データを配列に設定
+            With inData(i)
+                .Saikei_Seq = CStr(vData(0, i))         '(再掲) 連番
+                .Saikei_Zokusei = CStr(vData(1, i))     '(再掲) 属性
+                .Saikei_Upper_Cnt = CStr(vData(2, i))   '(再掲) 上段 件数
+                .Saikei_Upper_Kin = CStr(vData(3, i))   '(再掲) 上段 金額
+                .Saikei_Lower_Cnt = CStr(vData(4, i))   '(再掲) 下段 件数
+                .Saikei_Lower_Kin = CStr(vData(5, i))   '(再掲) 下段 金額
+            End With
+        Next i
+        
+        fncGetS2_2Data = True
+    End If
+    
+    Erase vData
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncGetS2_2Data = False
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- エラーログ出力 End  ---------------------------------
+
+    Erase vData
+   
+End Function
+
+'*************************************************************************
+'関数名　　：別紙様式第３号 データ取得
+'引　　数　：
+'           strLastDay         I           基準年月末日(YYYYMMDD)
+'           inData()           O           取得データ
+'戻り値　　：処理結果
+'機能説明　：別紙様式第３号(２． ファンド種類別契約資産状況) のデータを取得する
+'更新履歴　：2007/11/20 SRA T.Ichikawa   新規
+'        　：2013/04/15 GUT 趙 顧問バック更改対応
+'
+'*************************************************************************
+Public Function fncGetS3_1Data( _
+    ByVal strKjnLastYmd As String, _
+    ByRef inData() As typS3_1) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncGetS3_1Data"
+
+On Error GoTo ErrSection
+
+    Dim strSql      As String
+    Dim vData()     As Variant
+    Dim lngCol      As Long
+    Dim lngRow      As Long
+    Dim lngRowCnt   As Long
+    Dim lngColCnt   As Long
+    
+    Dim i           As Long
+    
+    fncGetS3_1Data = False
+    
+    ReDim inData(0)
+    
+    '別紙様式第３号 データ取得
+    strSql = ""
+    strSql = strSql & "SELECT" & vbCrLf
+    strSql = strSql & "    TRIM(ZOKUSEI_4)," & vbCrLf
+    strSql = strSql & "    COUNT(ZOKUSEI_4) CNT," & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 START> ------------
+'    strSql = strSql & "    NVL(SUM(DECODE(TRIM(SETTEI_KBN),1,JPY_JIKA_TOTAL_KOKUNAI,JPY_JIKA_TOTAL_KAIGAI)),0) KIN" & vbCrLf
+    strSql = strSql & "    NVL(SUM(DECODE(TRIM(SETTEI_KBN)||TRIM(GENGO),'00',JPY_JIKA_TOTAL_KOKUNAI,JPY_JIKA_TOTAL_KAIGAI)),0) KIN" & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 END> ------------
+    strSql = strSql & "FROM" & vbCrLf
+    strSql = strSql & "    KYK_WK_KEIEI_CHOUHYOU" & vbCrLf
+    strSql = strSql & "WHERE" & vbCrLf
+    strSql = strSql & "    KIJYUN_YMD = '" & strKjnLastYmd & "'" & vbCrLf
+    strSql = strSql & "AND SESSION_ID = " & glngSessionID & "" & vbCrLf
+    strSql = strSql & "AND TRIM(CNT_TYPE) = '1'" & vbCrLf
+    strSql = strSql & "GROUP BY" & vbCrLf
+    strSql = strSql & "    ZOKUSEI_4" & vbCrLf
+    strSql = strSql & "ORDER BY" & vbCrLf
+    strSql = strSql & "    ZOKUSEI_4" & vbCrLf
+    
+    'データ取得
+    Call gclsDB.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow)
+    If lngRow > 0 Then
+    
+        ReDim inData(lngRow)
+        
+        For i = 0 To lngRow - 1
+        
+            '取得データを配列に設定
+            With inData(i)
+                .Zokusei_4 = CStr(vData(0, i))      '属性４
+                .Ichinin_Cnt = CStr(vData(1, i))    '一任契約件数
+                .Ichinin_Kin = CStr(vData(2, i))    '一任契約時価金額
+            End With
+        Next i
+        
+        fncGetS3_1Data = True
+'    Else
+'        ' 該当データが存在しません。
+'        Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3001, cPreFName, "")
+    End If
+    
+    Erase vData
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncGetS3_1Data = False
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- エラーログ出力 End  ---------------------------------
+
+    Erase vData
+   
+End Function
+
+'*************************************************************************
+'関数名　　：別紙様式第３号 データ取得
+'引　　数　：
+'           strLastDay         I           基準年月末日(YYYYMMDD)
+'           inData()           O           取得データ
+'戻り値　　：処理結果
+'機能説明　：別紙様式第３号(３． 契約規模別分布状況) のデータを取得する
+'更新履歴　：2007/11/20 SRA T.Ichikawa   新規
+'        　：2013/04/15 GUT 趙 顧問バック更改対応
+'
+'*************************************************************************
+Public Function fncGetS3_2Data( _
+    ByVal strKjnLastYmd As String, _
+    ByRef inData() As typS3_2) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncGetS3_2Data"
+
+On Error GoTo ErrSection
+
+    Dim strSql      As String
+    Dim vData()     As Variant
+    Dim lngCol      As Long
+    Dim lngRow      As Long
+    Dim lngRowCnt   As Long
+    Dim lngColCnt   As Long
+    
+    Dim i           As Long
+    
+    fncGetS3_2Data = False
+    
+    ReDim inData(0)
+    
+    '別紙様式第３号 データ取得
+    strSql = ""
+    strSql = strSql & "SELECT" & vbCrLf
+    strSql = strSql & "    1 SEQ," & vbCrLf
+    strSql = strSql & "    COUNT(*) ICHININ_CNT," & vbCrLf
+    strSql = strSql & "    NVL(SUM(KWKC.JIKA),0) SUM_JIKA" & vbCrLf
+    strSql = strSql & "FROM" & vbCrLf
+    strSql = strSql & "   (SELECT" & vbCrLf
+    strSql = strSql & "        SETTEI_KBN," & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 START> ------------
+'    strSql = strSql & "        NVL(DECODE(TRIM(SETTEI_KBN), '1', JPY_JIKA_TOTAL_KOKUNAI, JPY_JIKA_TOTAL_KAIGAI),0) JIKA" & vbCrLf
+    strSql = strSql & "        NVL(DECODE(TRIM(SETTEI_KBN)||TRIM(GENGO),'00', JPY_JIKA_TOTAL_KOKUNAI, JPY_JIKA_TOTAL_KAIGAI),0) JIKA" & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 END> ------------
+    strSql = strSql & "    FROM" & vbCrLf
+    strSql = strSql & "        KYK_WK_KEIEI_CHOUHYOU" & vbCrLf
+    strSql = strSql & "    WHERE" & vbCrLf
+    strSql = strSql & "        KIJYUN_YMD = '" & strKjnLastYmd & "'" & vbCrLf
+    strSql = strSql & "    AND SESSION_ID = " & glngSessionID & "" & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 START> ------------
+'    strSql = strSql & "    AND TRIM(SETTEI_KBN) IN ('1', '2')" & vbCrLf
+    strSql = strSql & "    AND TRIM(SETTEI_KBN) = '0'" & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 END> ------------
+    strSql = strSql & "    AND TRIM(CNT_TYPE) = '1'" & vbCrLf
+    strSql = strSql & "   ) KWKC" & vbCrLf
+    strSql = strSql & "WHERE" & vbCrLf
+    strSql = strSql & "    KWKC.JIKA < 1000" & vbCrLf
+    strSql = strSql & "UNION ALL" & vbCrLf
+    strSql = strSql & "SELECT" & vbCrLf
+    strSql = strSql & "    2 SEQ," & vbCrLf
+    strSql = strSql & "    COUNT(*) ICHININ_CNT," & vbCrLf
+    strSql = strSql & "    NVL(SUM(KWKC.JIKA),0) SUM_JIKA" & vbCrLf
+    strSql = strSql & "FROM" & vbCrLf
+    strSql = strSql & "   (SELECT" & vbCrLf
+    strSql = strSql & "        SETTEI_KBN," & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 START> ------------
+'    strSql = strSql & "        NVL(DECODE(TRIM(SETTEI_KBN), '1', JPY_JIKA_TOTAL_KOKUNAI, JPY_JIKA_TOTAL_KAIGAI),0) JIKA" & vbCrLf
+    strSql = strSql & "        NVL(DECODE(TRIM(SETTEI_KBN)||TRIM(GENGO),'00', JPY_JIKA_TOTAL_KOKUNAI, JPY_JIKA_TOTAL_KAIGAI),0) JIKA" & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 END> ------------
+    strSql = strSql & "    FROM" & vbCrLf
+    strSql = strSql & "        KYK_WK_KEIEI_CHOUHYOU" & vbCrLf
+    strSql = strSql & "    WHERE" & vbCrLf
+    strSql = strSql & "        KIJYUN_YMD = '" & strKjnLastYmd & "'" & vbCrLf
+    strSql = strSql & "    AND SESSION_ID = " & glngSessionID & "" & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 START> ------------
+'    strSql = strSql & "    AND TRIM(SETTEI_KBN) IN ('1', '2')" & vbCrLf
+    strSql = strSql & "    AND TRIM(SETTEI_KBN) = '0'" & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 END> ------------
+    strSql = strSql & "    AND TRIM(CNT_TYPE) = '1'" & vbCrLf
+    strSql = strSql & "   ) KWKC" & vbCrLf
+    strSql = strSql & "WHERE" & vbCrLf
+    strSql = strSql & "    KWKC.JIKA >= 1000" & vbCrLf
+    strSql = strSql & "AND KWKC.JIKA < 5000" & vbCrLf
+    strSql = strSql & "UNION ALL" & vbCrLf
+    strSql = strSql & "SELECT" & vbCrLf
+    strSql = strSql & "    3 SEQ," & vbCrLf
+    strSql = strSql & "    COUNT(*) ICHININ_CNT," & vbCrLf
+    strSql = strSql & "    NVL(SUM(KWKC.JIKA),0) SUM_JIKA" & vbCrLf
+    strSql = strSql & "FROM" & vbCrLf
+    strSql = strSql & "   (SELECT" & vbCrLf
+    strSql = strSql & "        SETTEI_KBN," & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 START> ------------
+'    strSql = strSql & "        NVL(DECODE(TRIM(SETTEI_KBN), '1', JPY_JIKA_TOTAL_KOKUNAI, JPY_JIKA_TOTAL_KAIGAI),0) JIKA" & vbCrLf
+    strSql = strSql & "        NVL(DECODE(TRIM(SETTEI_KBN)||TRIM(GENGO),'00', JPY_JIKA_TOTAL_KOKUNAI, JPY_JIKA_TOTAL_KAIGAI),0) JIKA" & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 END> ------------
+    strSql = strSql & "    FROM" & vbCrLf
+    strSql = strSql & "        KYK_WK_KEIEI_CHOUHYOU" & vbCrLf
+    strSql = strSql & "    WHERE" & vbCrLf
+    strSql = strSql & "        KIJYUN_YMD = '" & strKjnLastYmd & "'" & vbCrLf
+    strSql = strSql & "    AND SESSION_ID = " & glngSessionID & "" & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 START> ------------
+'    strSql = strSql & "    AND TRIM(SETTEI_KBN) IN ('1', '2')" & vbCrLf
+    strSql = strSql & "    AND TRIM(SETTEI_KBN) = '0'" & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 END> ------------
+    strSql = strSql & "    AND TRIM(CNT_TYPE) = '1'" & vbCrLf
+    strSql = strSql & "   ) KWKC" & vbCrLf
+    strSql = strSql & "WHERE" & vbCrLf
+    strSql = strSql & "    KWKC.JIKA >= 5000" & vbCrLf
+    strSql = strSql & "AND KWKC.JIKA < 10000" & vbCrLf
+    strSql = strSql & "UNION ALL" & vbCrLf
+    strSql = strSql & "SELECT" & vbCrLf
+    strSql = strSql & "    4 SEQ," & vbCrLf
+    strSql = strSql & "    COUNT(*) ICHININ_CNT," & vbCrLf
+    strSql = strSql & "    NVL(SUM(KWKC.JIKA),0) SUM_JIKA" & vbCrLf
+    strSql = strSql & "FROM" & vbCrLf
+    strSql = strSql & "   (SELECT" & vbCrLf
+    strSql = strSql & "        SETTEI_KBN," & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 START> ------------
+'    strSql = strSql & "        NVL(DECODE(TRIM(SETTEI_KBN), '1', JPY_JIKA_TOTAL_KOKUNAI, JPY_JIKA_TOTAL_KAIGAI),0) JIKA" & vbCrLf
+    strSql = strSql & "        NVL(DECODE(TRIM(SETTEI_KBN)||TRIM(GENGO),'00', JPY_JIKA_TOTAL_KOKUNAI, JPY_JIKA_TOTAL_KAIGAI),0) JIKA" & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 END> ------------
+    strSql = strSql & "    FROM" & vbCrLf
+    strSql = strSql & "        KYK_WK_KEIEI_CHOUHYOU" & vbCrLf
+    strSql = strSql & "    WHERE" & vbCrLf
+    strSql = strSql & "        KIJYUN_YMD = '" & strKjnLastYmd & "'" & vbCrLf
+    strSql = strSql & "    AND SESSION_ID = " & glngSessionID & "" & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 START> ------------
+'    strSql = strSql & "    AND TRIM(SETTEI_KBN) IN ('1', '2')" & vbCrLf
+    strSql = strSql & "    AND TRIM(SETTEI_KBN) = '0'" & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 END> ------------
+    strSql = strSql & "    AND TRIM(CNT_TYPE) = '1'" & vbCrLf
+    strSql = strSql & "   ) KWKC" & vbCrLf
+    strSql = strSql & "WHERE" & vbCrLf
+    strSql = strSql & "    KWKC.JIKA >= 10000" & vbCrLf
+    strSql = strSql & "AND KWKC.JIKA < 50000" & vbCrLf
+    strSql = strSql & "UNION ALL" & vbCrLf
+    strSql = strSql & "SELECT" & vbCrLf
+    strSql = strSql & "    5 SEQ," & vbCrLf
+    strSql = strSql & "    COUNT(*) ICHININ_CNT," & vbCrLf
+    strSql = strSql & "    NVL(SUM(KWKC.JIKA),0) SUM_JIKA" & vbCrLf
+    strSql = strSql & "FROM" & vbCrLf
+    strSql = strSql & "   (SELECT" & vbCrLf
+    strSql = strSql & "        SETTEI_KBN," & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 START> ------------
+'    strSql = strSql & "        NVL(DECODE(TRIM(SETTEI_KBN), '1', JPY_JIKA_TOTAL_KOKUNAI, JPY_JIKA_TOTAL_KAIGAI),0) JIKA" & vbCrLf
+    strSql = strSql & "        NVL(DECODE(TRIM(SETTEI_KBN)||TRIM(GENGO),'00', JPY_JIKA_TOTAL_KOKUNAI, JPY_JIKA_TOTAL_KAIGAI),0) JIKA" & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 END> ------------
+    strSql = strSql & "    FROM" & vbCrLf
+    strSql = strSql & "        KYK_WK_KEIEI_CHOUHYOU" & vbCrLf
+    strSql = strSql & "    WHERE" & vbCrLf
+    strSql = strSql & "        KIJYUN_YMD = '" & strKjnLastYmd & "'" & vbCrLf
+    strSql = strSql & "    AND SESSION_ID = " & glngSessionID & "" & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 START> ------------
+'    strSql = strSql & "    AND TRIM(SETTEI_KBN) IN ('1', '2')" & vbCrLf
+    strSql = strSql & "    AND TRIM(SETTEI_KBN) = '0'" & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 END> ------------
+    strSql = strSql & "    AND TRIM(CNT_TYPE) = '1'" & vbCrLf
+    strSql = strSql & "   ) KWKC" & vbCrLf
+    strSql = strSql & "WHERE" & vbCrLf
+    strSql = strSql & "    KWKC.JIKA >= 50000" & vbCrLf
+    strSql = strSql & "AND KWKC.JIKA < 100000" & vbCrLf
+    strSql = strSql & "UNION ALL" & vbCrLf
+    strSql = strSql & "SELECT" & vbCrLf
+    strSql = strSql & "    6 SEQ," & vbCrLf
+    strSql = strSql & "    COUNT(*) ICHININ_CNT," & vbCrLf
+    strSql = strSql & "    NVL(SUM(KWKC.JIKA),0) SUM_JIKA" & vbCrLf
+    strSql = strSql & "FROM" & vbCrLf
+    strSql = strSql & "   (SELECT" & vbCrLf
+    strSql = strSql & "        SETTEI_KBN," & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 START> ------------
+'    strSql = strSql & "        NVL(DECODE(TRIM(SETTEI_KBN), '1', JPY_JIKA_TOTAL_KOKUNAI, JPY_JIKA_TOTAL_KAIGAI),0) JIKA" & vbCrLf
+    strSql = strSql & "        NVL(DECODE(TRIM(SETTEI_KBN)||TRIM(GENGO),'00', JPY_JIKA_TOTAL_KOKUNAI, JPY_JIKA_TOTAL_KAIGAI),0) JIKA" & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 END> ------------
+    strSql = strSql & "    FROM" & vbCrLf
+    strSql = strSql & "        KYK_WK_KEIEI_CHOUHYOU" & vbCrLf
+    strSql = strSql & "    WHERE" & vbCrLf
+    strSql = strSql & "        KIJYUN_YMD = '" & strKjnLastYmd & "'" & vbCrLf
+    strSql = strSql & "    AND SESSION_ID = " & glngSessionID & "" & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 START> ------------
+'    strSql = strSql & "    AND TRIM(SETTEI_KBN) IN ('1', '2')" & vbCrLf
+    strSql = strSql & "    AND TRIM(SETTEI_KBN) = '0'" & vbCrLf
+'------------<顧問バック更改対応 2013/04/15 GUT 趙 END> ------------
+    strSql = strSql & "    AND TRIM(CNT_TYPE) = '1'" & vbCrLf
+    strSql = strSql & "   ) KWKC" & vbCrLf
+    strSql = strSql & "WHERE" & vbCrLf
+    strSql = strSql & "    KWKC.JIKA >= 100000" & vbCrLf
+    strSql = strSql & "ORDER BY" & vbCrLf
+    strSql = strSql & "    SEQ" & vbCrLf
+    
+    'データ取得
+    Call gclsDB.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow)
+    If lngRow > 0 Then
+    
+        ReDim inData(lngRow)
+        
+        For i = 0 To lngRow - 1
+        
+            '取得データを配列に設定
+            With inData(i)
+                .Seq = CStr(vData(0, i))        '連番
+                .Rate_Cnt = CStr(vData(1, i))   '一任契約件数
+                .Rate_Kin = CStr(vData(2, i))   '一任契約時価金額
+            End With
+        Next i
+        
+        fncGetS3_2Data = True
+    Else
+        ' 該当データが存在しません。
+        Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3001, cPreFName, "")
+    End If
+    
+    Erase vData
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncGetS3_2Data = False
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- エラーログ出力 End  ---------------------------------
+
+    Erase vData
+   
+End Function
+
+'*************************************************************************
+'関数名　　：統計情報 協会新基準(帳票作成)
+'引　　数　：
+'           strOutFName        I           出力ファイル名
+'           strKjnLastYmd      I           基準日(月末日)
+'           inData1()          O           別紙様式第２号①         出力データ
+'           inData2_1()        O           別紙様式第２号②         出力データ
+'           inData2_2()        O           別紙様式第２号②(再掲)   出力データ
+'           inData3_1()        O           別紙様式第３号           出力データ
+'           inData3_2()        O           別紙様式第３号           出力データ
+'戻り値　　：処理結果
+'機能説明　：統計情報 協会新基準のBOOKを作成する。
+'更新履歴　：2007/12/04 SRA Y.Azuma    変更     (PH4)印刷エラー対策
+'          ：2011/03/22 SRA 矢口     協会報告帳票のレイアウト変更対応
+'
+'*************************************************************************
+Public Function fncMakeBook4300( _
+    ByVal strOutFName As String, _
+    ByVal strKjnLastYmd As String, _
+    ByRef inData1() As typS1, _
+    ByRef inData2_1() As typS2_1, _
+    ByRef inData2_2() As typS2_2, _
+    ByRef inData3_1() As typS3_1, _
+    ByRef inData3_2() As typS3_2 _
+    ) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncMakeBook4300"
+
+On Error GoTo ErrSection
+
+    Dim i               As Long
+    Dim j               As Long
+    
+    Call subBeginProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    ' ファイルOpen
+    Workbooks.Open Filename:=strOutFName
+    
+    fncMakeBook4300 = False
+    
+Application.DisplayAlerts = False
+    
+    With Workbooks(Workbooks.Count).Worksheets("別紙様式第２号①")
+        'シートにデータをセット
+        
+    '============================================
+    '  別紙様式第２号①
+    '============================================
+        For i = 0 To 3
+            If UBound(inData1) < i Then
+                Exit For
+            End If
+            '米国
+            If inData1(i).Seq = "1" Then
+                .Range("S1_USA_CNT").Value = inData1(i).Nenkin_Cnt
+                .Range("S1_USA_KIN").Value = inData1(i).Nenkin_Kin
+'2011/03/22 協会報告帳票のレイアウト変更対応 mod SRA矢口 Start
+            '欧州
+            ElseIf inData1(i).Seq = "2" Then
+                .Range("S1_EUROPE_CNT").Value = inData1(i).Nenkin_Cnt
+                .Range("S1_EUROPE_KIN").Value = inData1(i).Nenkin_Kin
+            'アジア
+            ElseIf inData1(i).Seq = "3" Then
+                .Range("S1_ASIA_CNT").Value = inData1(i).Nenkin_Cnt
+                .Range("S1_ASIA_KIN").Value = inData1(i).Nenkin_Kin
+'            '英国
+'            ElseIf inData1(i).Seq = "2" Then
+'                .Range("S1_GBR_CNT").Value = inData1(i).Nenkin_Cnt
+'                .Range("S1_GBR_KIN").Value = inData1(i).Nenkin_Kin
+'            '欧州（除く英国）
+'            ElseIf inData1(i).Seq = "3" Then
+'                .Range("S1_EUROPE_CNT").Value = inData1(i).Nenkin_Cnt
+'                .Range("S1_EUROPE_KIN").Value = inData1(i).Nenkin_Kin
+'2011/03/22 協会報告帳票のレイアウト変更対応 mod SRA矢口 End
+            'その他
+            ElseIf inData1(i).Seq = "4" Then
+                .Range("S1_SONO_CNT").Value = inData1(i).Nenkin_Cnt
+                .Range("S1_SONO_KIN").Value = inData1(i).Nenkin_Kin
+            End If
+        
+        Next i
+                
+    End With
+    
+    With Workbooks(Workbooks.Count).Worksheets("別紙様式第２号②")
+        'シートにデータをセット
+        
+    '============================================
+    '  別紙様式第２号②
+    '============================================
+        '基準日
+        .Range("S2_KIJYUN_YMD").Value = "'" & strKjnLastYmd
+        
+        '国内
+        For i = 101 To 114
+            '配列が空になったら処理終了
+            If UBound(inData2_1) < j Then
+                Exit For
+            End If
+            
+            If i = Right(inData2_1(j).Data_Type, 3) Then
+                .Cells(.Range("S2_Data_Type" & i).Row, .Range("S2_ICHININ_CNT").Column).Value = inData2_1(j).Ichinin_Cnt
+                .Cells(.Range("S2_Data_Type" & i).Row, .Range("S2_ICHININ_KIN").Column).Value = inData2_1(j).Ichinin_Kin
+                .Cells(.Range("S2_Data_Type" & i).Row, .Range("S2_JOGEN_CNT").Column).Value = inData2_1(j).Jogen_Cnt
+                .Cells(.Range("S2_Data_Type" & i).Row, .Range("S2_JOGEN_KIN").Column).Value = inData2_1(j).Jogen_Kin
+                j = j + 1
+            End If
+        Next i
+        
+        '海外
+'2011/03/22 協会報告帳票のレイアウト変更対応 mod SRA矢口 Start
+        For i = 201 To 209
+'        For i = 201 To 207
+'2011/03/22 協会報告帳票のレイアウト変更対応 mod SRA矢口 End
+            If UBound(inData2_1) < j Then
+                Exit For
+            End If
+            If i = Right(inData2_1(j).Data_Type, 3) Then
+'2011/03/22 協会報告帳票のレイアウト変更対応 mod SRA矢口 Start
+                '協会区分が202(年金（英国）)または、203(年金（欧州除英国）)の場合、編集処理を行わない
+                If (i <> 202) And (i <> 203) Then
+                    .Cells(.Range("S2_Data_Type" & i).Row, .Range("S2_ICHININ_CNT").Column).Value = inData2_1(j).Ichinin_Cnt
+                    .Cells(.Range("S2_Data_Type" & i).Row, .Range("S2_ICHININ_KIN").Column).Value = inData2_1(j).Ichinin_Kin
+                    .Cells(.Range("S2_Data_Type" & i).Row, .Range("S2_JOGEN_CNT").Column).Value = inData2_1(j).Jogen_Cnt
+                    .Cells(.Range("S2_Data_Type" & i).Row, .Range("S2_JOGEN_KIN").Column).Value = inData2_1(j).Jogen_Kin
+                End If
+'2011/03/22 協会報告帳票のレイアウト変更対応 mod SRA矢口 Start
+                j = j + 1
+            End If
+        Next i
+
+        For i = 0 To UBound(inData2_2) - 1
+            '(再掲)再委任(委任)
+            If inData2_2(i).Saikei_Seq = "1" Then
+                '国内運用機関
+                If inData2_2(i).Saikei_Zokusei = "1" Then
+                    .Range("S2_ININ_KOKU_CNT").Value = inData2_2(i).Saikei_Upper_Cnt
+                    .Range("S2_ININ_KOKU_KIN").Value = inData2_2(i).Saikei_Upper_Kin
+                '海外運用機関
+                ElseIf inData2_2(i).Saikei_Zokusei = "2" Then
+                    .Range("S2_ININ_KAI_CNT").Value = inData2_2(i).Saikei_Lower_Cnt
+                    .Range("S2_ININ_KAI_KIN").Value = inData2_2(i).Saikei_Lower_Kin
+                End If
+            '(再掲)助言(受)
+            ElseIf inData2_2(i).Saikei_Seq = "2" Then
+                '国内運用機関
+                If inData2_2(i).Saikei_Zokusei = "1" Then
+                    .Range("S2_JOGEN_KOKU_CNT").Value = inData2_2(i).Saikei_Upper_Cnt
+                    .Range("S2_JOGEN_KOKU_KIN").Value = inData2_2(i).Saikei_Upper_Kin
+                '海外運用機関
+                ElseIf inData2_2(i).Saikei_Zokusei = "2" Then
+                    .Range("S2_JOGEN_KAI_CNT").Value = inData2_2(i).Saikei_Lower_Cnt
+                    .Range("S2_JOGEN_KAI_KIN").Value = inData2_2(i).Saikei_Lower_Kin
+                End If
+            '(再掲)ラップ口座
+            ElseIf inData2_2(i).Saikei_Seq = "3" Then
+                .Range("S2_WRAP_ICHININ_CNT").Value = inData2_2(i).Saikei_Upper_Cnt
+                .Range("S2_WRAP_ICHININ_KIN").Value = inData2_2(i).Saikei_Upper_Kin
+                .Range("S2_WRAP_JOGEN_CNT").Value = inData2_2(i).Saikei_Lower_Cnt
+                .Range("S2_WRAP_JOGEN_KIN").Value = inData2_2(i).Saikei_Lower_Kin
+            End If
+        
+        Next i
+                
+    End With
+    
+    j = 0
+    
+    With Workbooks(Workbooks.Count).Worksheets("別紙様式第３号")
+        'シートにデータをセット
+        
+    '============================================
+    '  別紙様式第３号
+    '============================================
+        '基準日
+        .Range("S3_KIJYUN_YMD").Value = Mid(strKjnLastYmd, 1, 4) & "/" & Mid(strKjnLastYmd, 5, 2) & "/" & Mid(strKjnLastYmd, 7, 2)
+    
+        '２． ファンド種類別契約資産状況
+        For i = 1 To 9
+            If UBound(inData3_1) < j Then
+                Exit For
+            End If
+            
+            If i = inData3_1(j).Zokusei_4 Then
+                .Cells(.Range("S3_FUND_CNT").Row, .Range("S3_FUND_" & i).Column).Value = inData3_1(j).Ichinin_Cnt
+                .Cells(.Range("S3_FUND_KIN").Row, .Range("S3_FUND_" & i).Column).Value = inData3_1(j).Ichinin_Kin
+                j = j + 1
+            End If
+        
+        Next i
+        
+        j = 0
+        
+        '３． 契約規模別分布状況
+        For i = 1 To 6
+            If UBound(inData3_2) < j Then
+                Exit For
+            End If
+            
+            If i = inData3_2(j).Seq Then
+                .Cells(.Range("S3_RATE_CNT").Row, .Range("S3_RATE_" & i).Column).Value = inData3_2(j).Rate_Cnt
+                .Cells(.Range("S3_RATE_KIN").Row, .Range("S3_RATE_" & i).Column).Value = inData3_2(j).Rate_Kin
+                j = j + 1
+            End If
+        
+        Next i
+                
+    End With
+    
+    '式を値に変換
+    If fncForMulaToValueInAllSheets(Workbooks(Workbooks.Count)) = False Then
+        GoTo ErrSection
+    End If
+    
+    ' カーソル位置を移動する。
+    With Workbooks(Workbooks.Count).Worksheets("別紙様式第２号①")
+        .Activate
+        .Range("A1").Activate
+    End With
+        
+    ActiveWindow.ScrollRow = 1
+    ActiveWindow.ScrollColumn = 1
+
+'------------<Modify Start azuma 2007/12/04 (PH4)> ★★★☆-----------------------
+    Workbooks(Workbooks.Count).Save
+'    Workbooks(Workbooks.Count).Close SaveChanges:=True
+'------------<Modify End   azuma 2007/12/04 (PH4)> ★★★☆-----------------------
+    
+Application.DisplayAlerts = True
+    
+    fncMakeBook4300 = True
+    
+    Call subEndProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+Application.DisplayAlerts = True
+
+    Workbooks(Workbooks.Count).Close SaveChanges:=True
+    fncMakeBook4300 = False
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- エラーログ出力 End  ---------------------------------
+   
+End Function
+
+'*************************************************************************
+'関数名　　：ワークテーブル作成
+'引　　数　：
+'           lngSessionID        I           セッションID
+'           strWhereString      I           WHERE文の文字列
+'                                           例) "WHERE  KIJYUN_YMD IN ('20070331','20070228')"
+'戻り値　　：処理結果
+'機能説明　：ワークテーブルにV経営帳票のデータをINSERTする
+'更新履歴　：2008/03/03 SRA H.Anpo   新規
+'        　：2013/04/11 GUT 趙 顧問バック更改対応
+'
+'*************************************************************************
+Public Function fncInsertTempTable4300( _
+    ByVal lngSessionID As Long, _
+    ByVal strWhereString As String _
+    ) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncInsertTempTable4300"
+
+On Error GoTo ErrSection
+
+    Dim strSql      As String
+    
+    fncInsertTempTable4300 = False
+    
+    cnAdo.BeginTrans
+    
+    strSql = ""
+    strSql = strSql & " INSERT INTO KYK_WK_KEIEI_CHOUHYOU ("
+    strSql = strSql & "     SESSION_ID,"
+    strSql = strSql & "     KIJYUN_YMD,PRTCD,SETTEI_KBN,CNT_TYPE,DATA_TYPE,KOKYAKU_KUNI,KOKYAKU_CHIIKI_1,"
+'------------<顧問バック更改対応 2013/04/11 GUT 趙 START> ------------
+'    strSql = strSql & "     ZOKUSEI_4,ZOKUSEI_5,ZOKUSEI_6,ZOKUSEI_20,JPY_JIKA_TOTAL_KOKUNAI,JPY_JIKA_TOTAL_KAIGAI"
+    strSql = strSql & "     ZOKUSEI_4,ZOKUSEI_5,ZOKUSEI_6,ZOKUSEI_20,JPY_JIKA_TOTAL_KOKUNAI,JPY_JIKA_TOTAL_KAIGAI,GENGO"
+'------------<顧問バック更改対応 2013/04/11 GUT 趙 END> ------------
+    strSql = strSql & " )"
+    strSql = strSql & " SELECT " & lngSessionID & ", "
+    strSql = strSql & "     KIJYUN_YMD,PRTCD,SETTEI_KBN,CNT_TYPE,DATA_TYPE,KOKYAKU_KUNI,KOKYAKU_CHIIKI_1,"
+'------------<顧問バック更改対応 2013/04/11 GUT 趙 START> ------------
+'    strSql = strSql & "     ZOKUSEI_4,ZOKUSEI_5,ZOKUSEI_6,ZOKUSEI_20,JPY_JIKA_TOTAL_KOKUNAI,JPY_JIKA_TOTAL_KAIGAI"
+    strSql = strSql & "     ZOKUSEI_4,ZOKUSEI_5,ZOKUSEI_6,ZOKUSEI_20,JPY_JIKA_TOTAL_KOKUNAI,JPY_JIKA_TOTAL_KAIGAI,GENGO"
+'------------<顧問バック更改対応 2013/04/11 GUT 趙 END> ------------
+    strSql = strSql & " FROM KYK_VW_KEIEI_CHOUHYOU KVKC "
+    strSql = strSql & strWhereString
+    cnAdo.Execute strSql
+    
+    cnAdo.CommitTrans
+    
+    fncInsertTempTable4300 = True
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncInsertTempTable4300 = False
+
+    cnAdo.RollbackTrans
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- エラーログ出力 End  ---------------------------------
+
+End Function
+
+
+
+
+
+
+

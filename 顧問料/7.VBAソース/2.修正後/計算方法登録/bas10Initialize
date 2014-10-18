@@ -1,0 +1,671 @@
+Attribute VB_Name = "bas10Initialize"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：国内顧問料計算システム・計算方法
+'
+'オブジェクト名：bas10Initialize
+'
+'機能概要　：初期処理
+'
+'更新履歴　：2006/07/04 SRA 東       新規作成
+'
+'*************************************************************************
+Const MODULE_NAME = "bas10Initialize"
+
+
+'Public strKK33Dankai() As String    '<------------ Modify azuma 2006/08/01 No.032
+
+
+'*************************************************************************
+'関数名　　：計算方法登録画面の初期化メイン
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：初期起動時に行われる初期処理のメイン
+'
+'更新履歴　：2006/07/05 SRA T.Azuma    新規作成
+'
+'*************************************************************************
+Public Sub g_subKeisanInitialize()
+
+    '画面の初期化
+    Call gCom01_SheetProtect(ThisWorkbook.Worksheets(MAIN_SHEETNAME), False)
+    ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range("口座番号").Value = ""
+    ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range("顧問料請求期間").Value = ""
+    ThisWorkbook.Worksheets(TEMPLATE_SHEETNAME).Range("検索時口座ＮＯ").Value = ""
+    ThisWorkbook.Worksheets(TEMPLATE_SHEETNAME).Range("検索時請求期間ID").Value = ""
+    
+    Call g_subKeisanIniScreenH(ThisWorkbook.Worksheets(MAIN_SHEETNAME))   'ヘッダー部
+    Call g_subKeisanIniScreenD(ThisWorkbook.Worksheets(MAIN_SHEETNAME))   '明細部
+    
+    'サインエリアの非表示
+    Call gfunc_VisibleSignArea(False)
+    
+    'コンボ項目の初期化
+    Call keisanIniCombo
+    
+    
+End Sub
+
+
+'*************************************************************************
+'関数名　　：計算方法画面のクリア処理(ヘッダー部)
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：ヘッダー部のセルをクリアする
+'
+'更新履歴　：2006/07/05 SRA T.Azuma    新規作成
+'更新履歴　：2006/12/13 SRA Y.Azuma    変更     (仕変)入金日区分削除
+'更新履歴　：2006/12/25 SRA Y.Azuma    変更     (仕変)初回最終区分追加
+'更新履歴　：2007/01/26 SRA Y.Azuma    変更     (PH1)入金日区分の復活
+'
+'*************************************************************************
+Public Sub g_subKeisanIniScreenH(ByRef TargetSheets As Object)
+
+    ' ヘッダー部の初期化
+    With ThisWorkbook.Worksheets(MAIN_SHEETNAME)
+
+'''        .Range("口座番号").Value = ""
+'''        .Range("顧問料請求期間").Value = ""
+        Call gCom01_SheetProtect(TargetSheets, False)
+        
+        .Range("口座名称").Value = ""
+        .Range("協会報告区分").Value = ""
+        .Range("顧問請求From").Value = ""
+        .Range("顧問請求To").Value = ""
+        .Range("信託From").Value = ""
+        .Range("信託To").Value = ""
+        .Range("契約From").Value = ""
+        .Range("契約To").Value = ""
+        .Range("契約金額").Value = ""
+
+        .Range("入金日区分").Value = ""
+
+        .Range("年間日数").Value = ""
+        
+'------------<Modify Start azuma 2006/12/25 > -----------------------
+        .Range("初回最終区分").Value = ""
+'------------<Modify End   azuma 2006/12/25 > -----------------------
+
+'*** 2007/03/14 PH3対応 Added By H.Anpo Start
+        .Range("平残断面区分").Value = ""
+        .Range("前払後払区分").Value = ""
+        .Range("ゼロ円請求書区分").Value = ""
+'*** 2007/03/14 PH3対応 Added By H.Anpo End
+
+        Call gCom01_SheetProtect(TargetSheets, True)
+        
+'        .cmdPrint.Enabled = False
+    
+    End With
+End Sub
+
+'*************************************************************************
+'関数名　　：計算方法画面のクリア処理(明細部)
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：明細部行を全て削除する
+'
+'更新履歴　：2006/07/05 SRA T.Azuma    新規作成
+'
+'*************************************************************************
+Public Sub g_subKeisanIniScreenD(ByRef TargetSheets As Object)
+        
+    Call gCom01_SheetProtect(TargetSheets, False)
+        
+    Call gKsC_fncKsCmnCheckRowDelete(ThisWorkbook.Worksheets(MAIN_SHEETNAME), 1, True)  '一般資産
+    Call gKsC_fncKsCmnCheckRowDelete(ThisWorkbook.Worksheets(MAIN_SHEETNAME), 2, True)  '月末顧問料調整資産
+    Call gKsC_fncKsCmnCheckRowDelete(ThisWorkbook.Worksheets(MAIN_SHEETNAME), 3, True)  'T21調整資産
+    
+    Call gCom01_SheetProtect(TargetSheets, True)
+
+End Sub
+
+'コンボ項目の初期化
+Private Sub keisanIniCombo()
+
+    Dim strErrMsg As String
+    
+    strErrMsg = ""
+
+    '資産と料率のデータ取得
+    If fucGetShisanRyouritu(strErrMsg) = False Then
+'        Call MsgBox("データ取得失敗(" & strErrMsg & ")")
+        Call gfunc_ErrorMsg(3, 1100, "", "(" & strErrMsg & ")")
+        Exit Sub
+    End If
+    
+    
+    '資産と料率の名前定義
+    Call subNameDefine
+    
+    
+
+End Sub
+
+
+'資産と料率データの取得
+Private Function fucGetShisanRyouritu(ByRef strErrMsg As String) As Boolean
+
+    fucGetShisanRyouritu = False
+
+    '資産テーブルの抽出
+    If fncGet_KYKSHISAN = False Then
+        strErrMsg = "資産テーブル取得で失敗"
+        Exit Function
+    End If
+
+
+    'KK33テーブルの抽出(料率)
+    If fncGet_KK33 = False Then
+        strErrMsg = "KK33テーブル取得で失敗"
+        Exit Function
+    End If
+
+    fucGetShisanRyouritu = True
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：料率テーブル抽出処理
+'
+'引　　数　：無し
+'
+'戻り値　　：Boolean
+'
+'機能説明　：料率テーブルからコンボ項目を取得し「data」シートに記入
+'
+'更新履歴　：2006/07/05 SRA Y.Azuma    新規作成
+'更新履歴　：2007/01/12 SRA Y.Azuma    変更     UAT要望　一般、調整、T21資産毎にリストを作成する。
+'更新履歴　：2007/05/31 SRA Y.Azuma    変更     (PH3)連結　起動中のキー入力エラー対策
+'
+'*************************************************************************
+Private Function fncGet_KYKSHISAN() As Boolean
+       
+On Error GoTo ErrHandler
+    
+    Dim strSql          As String
+    Dim vData()         As Variant
+    Dim lngCol          As Long
+    Dim lngRow          As Long
+    Dim lngCnt          As Long
+    Dim lngShisan       As Long
+    Dim strShisanBunrui As String
+    Dim lngListCol      As Long
+    
+    fncGet_KYKSHISAN = False
+    
+    For lngShisan = 1 To 3
+    
+        Select Case lngShisan
+            Case 1
+            '一般資産
+                strShisanBunrui = "'0'"
+                lngListCol = 3
+            Case 2
+            '調整資産
+                strShisanBunrui = "'A' ,'B'"
+                lngListCol = 9
+            Case 3
+            'T21資産
+                strShisanBunrui = "'Z'"
+                lngListCol = 10
+        End Select
+    
+    
+        strSql = ""
+        strSql = strSql & " SELECT"
+        strSql = strSql & "     SHISAN_BUNRUI||SHISAN_CODE||':'||SHISAN_NAME"
+        strSql = strSql & " FROM"
+        strSql = strSql & "     KYK_SHISAN"
+        strSql = strSql & " WHERE"
+        strSql = strSql & "     SAKUJO_FLG ='0'"
+        strSql = strSql & " AND SHISAN_BUNRUI IN(" & strShisanBunrui & ")"
+        strSql = strSql & " ORDER BY "
+        strSql = strSql & "     SHISAN_BUNRUI, "
+        strSql = strSql & "     SHISAN_CODE "
+        
+        
+        'データ取得
+        Call gclsdb.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow)
+        
+'------------<Modify Start azuma 2007/05/31 (PH3)> -----------------------
+        ThisWorkbook.Worksheets(DATA_SHEETNAME).Activate
+'------------<Modify End   azuma 2007/05/31 (PH3)> -----------------------
+        
+        '「資産」のデータセル範囲をクリア
+        With ThisWorkbook.Worksheets(DATA_SHEETNAME)
+            .Range(.Cells(2, lngListCol), .Cells(65536, lngListCol)).ClearContents
+        End With
+        
+        '取得データをセルに設定
+        For lngCnt = 0 To lngRow - 1
+             ThisWorkbook.Worksheets(DATA_SHEETNAME).Cells(2 + lngCnt + 0, lngListCol).Value = vData(0, lngCnt)
+        Next lngCnt
+        
+        Erase vData
+    
+    Next lngShisan
+    
+'    strSql = ""
+'    strSql = strSql & " SELECT"
+'    strSql = strSql & "     SHISAN_BUNRUI||SHISAN_CODE||':'||SHISAN_NAME"
+'    strSql = strSql & " FROM"
+'    strSql = strSql & "     KYK_SHISAN"
+'    strSql = strSql & " WHERE"
+'    strSql = strSql & "     SAKUJO_FLG ='0'"
+'    strSql = strSql & " ORDER BY "
+'    strSql = strSql & "     SHISAN_BUNRUI, "
+'    strSql = strSql & "     SHISAN_CODE "
+'
+'
+'    'データ取得
+'    Call gclsdb.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow)
+'
+'    '「資産」のデータセル範囲をクリア
+'    ThisWorkbook.Worksheets(DATA_SHEETNAME).Range("C2:C65536").ClearContents
+'
+'    '取得データをセルに設定
+'    For lngCnt = 0 To lngRow - 1
+'         ThisWorkbook.Worksheets(DATA_SHEETNAME).Cells(2 + lngCnt + 1, 3).Value = vData(0, lngCnt)
+'    Next lngCnt
+'
+'    Erase vData
+    
+    fncGet_KYKSHISAN = True
+    
+    Exit Function
+ErrHandler:
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "fncGet_KYKSHISAN", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Erase vData
+'    MsgBox "Error:fncGet_KYKSHISAN" & vbCrLf & Err.Description
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：KK33テーブル抽出処理
+'
+'引　　数　：無し
+'
+'戻り値　　：Boolean
+'
+'機能説明　：KK33テーブルからコンボ項目(料率)を取得し「data」シートに記入
+'
+'更新履歴　：2006/07/05 SRA Y.Azuma    新規作成
+'更新履歴　：2007/05/24 SRA Y.Azuma    変更     (PH3)連結　起動中のキー入力エラー対策
+'更新履歴　：2007/11/09 SRA Y.Azuma    変更     (PH4)KK33廃止
+'
+'*************************************************************************
+Private Function fncGet_KK33() As Boolean
+       
+On Error GoTo ErrHandler
+    
+    Dim strSql      As String
+    Dim vData()     As Variant
+    Dim lngCol      As Long
+    Dim lngRow      As Long
+    Dim lngCnt      As Long
+    Dim lngColCnt   As Long
+    
+    fncGet_KK33 = False
+    
+'------------<Modify Start azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+    strSql = ""
+    strSql = strSql & " SELECT"
+    strSql = strSql & "     RATE_CODE||':'||NVL(RATE_NAME,'')"
+    strSql = strSql & " FROM"
+    strSql = strSql & "     KYK_RATE"
+    strSql = strSql & " WHERE"
+    strSql = strSql & "     SAKUJO_FLG='0'"
+    strSql = strSql & " ORDER BY"
+    strSql = strSql & "     RATE_CODE"
+    
+'    strSql = ""
+'    strSql = strSql & " SELECT"
+'    strSql = strSql & "     RYORITSU_CD||':'||NVL(RYORITSU_MEI,'')"
+'    strSql = strSql & " FROM"
+'    strSql = strSql & "     KK33"
+'    strSql = strSql & " ORDER BY RYORITSU_CD"
+'------------<Modify End   azuma 2007/11/09 (PH4)> ★★★☆-----------------------
+    'データ取得
+    Call gclsdb.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow)
+    
+'------------<Modify Start azuma 2007/05/31 (PH3)> -----------------------
+    ThisWorkbook.Worksheets(DATA_SHEETNAME).Activate
+'------------<Modify End   azuma 2007/05/31 (PH3)> -----------------------
+    
+    '「資産」のデータセル範囲をクリア
+    ThisWorkbook.Worksheets(DATA_SHEETNAME).Range("D2:D65536").ClearContents
+    
+    
+    '取得データをセルに設定
+    For lngCnt = 0 To lngRow - 1
+        ThisWorkbook.Worksheets(DATA_SHEETNAME).Cells(2 + lngCnt + 1, 4).Value = vData(0, lngCnt)
+    Next lngCnt
+    
+    Erase vData
+    
+    fncGet_KK33 = True
+    
+    Exit Function
+ErrHandler:
+    fncGet_KK33 = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "fncGet_KK33", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Erase vData
+'MsgBox "Error:fncGet_KK33" & vbCrLf & Err.Description
+
+End Function
+
+'*************************************************************************
+'関数名　　：資産と料率の名前定義設定
+'
+'引　　数　：無し
+'
+'戻り値　　：無し
+'
+'機能説明　：資産と料率の名前定義を再設定する。
+'
+'更新履歴　：2006/07/05 SRA Y.Azuma    新規作成
+'更新履歴　：2007/01/12 SRA Y.Azuma    変更     UAT要望　一般、調整、T21資産毎にリストを作成する。
+'
+'*************************************************************************
+Private Sub subNameDefine()
+
+    Dim rowcnt  As Long
+    
+    Dim lngShisan       As Long
+    Dim strShisanBunrui As String
+    Dim lngListCol      As Long
+    
+    '*** 資産の名前定義
+'------------<Modify Start azuma 2007/01/12 > -----------------------
+    For lngShisan = 1 To 3
+        
+        Select Case lngShisan
+            Case 1
+            '一般資産
+                strShisanBunrui = "資産リスト"
+                lngListCol = 3
+            Case 2
+            '調整資産
+                strShisanBunrui = "調整資産リスト"
+                lngListCol = 9
+            Case 3
+            'T21資産
+                strShisanBunrui = "T21資産リスト"
+                lngListCol = 10
+        End Select
+        
+        For rowcnt = 2 + 0 To 65536
+            If Trim(ThisWorkbook.Worksheets(DATA_SHEETNAME).Cells(rowcnt, lngListCol).Value) = "" Then
+                rowcnt = rowcnt - 1
+                Exit For
+            End If
+        Next rowcnt
+        
+        '再定義
+        ThisWorkbook.Names.Add Name:=strShisanBunrui, _
+         RefersToR1C1:="=data!R2C" & lngListCol & ":R" & rowcnt & "C" & lngListCol
+    Next lngShisan
+    
+'    '*** 資産の名前定義
+'    For rowcnt = 2 + 1 To 65536
+'        If ThisWorkbook.Worksheets(DATA_SHEETNAME).Cells(rowcnt, 3).Value = "" Then
+'            rowcnt = rowcnt - 1
+'            Exit For
+'        End If
+'    Next rowcnt
+'
+'    '再定義
+'    ThisWorkbook.Names.Add Name:="資産リスト", _
+'     RefersToR1C1:="=data!R2C3:R" & rowcnt & "C3"
+'------------<Modify End   azuma 2007/01/12 > -----------------------
+
+
+    '*** 料率の名前定義
+    For rowcnt = 2 + 1 To 65536
+        If ThisWorkbook.Worksheets(DATA_SHEETNAME).Cells(rowcnt, 4).Value = "" Then
+            rowcnt = rowcnt - 1
+            Exit For
+        End If
+    Next rowcnt
+    
+    '再定義
+    ThisWorkbook.Names.Add Name:="料率コードリスト", _
+     RefersToR1C1:="=data!R2C4:R" & rowcnt & "C4"
+
+End Sub
+
+
+'*************************************************************************
+'関数名　　：サインエリアの表示・非表示設定
+'
+'引　　数　：
+'           blnType       I       表示：True、非表示：False
+'
+'戻り値　　：なし
+'
+'機能説明　：サインエリア上シェイプ背景を透明、不透明の設定する。
+'
+'更新履歴　：2006/07/07 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Sub gfunc_VisibleSignArea(blnType As Boolean)
+
+Dim lngRow  As Long
+Dim lngCol  As Long
+    
+    Call gCom01_SheetProtect(Worksheets(MAIN_SHEETNAME), False)
+    
+'*** 2007/03/14 PH3対応 Modified By H.Anpo Start
+'    With ThisWorkbook.Worksheets(MAIN_SHEETNAME)
+'        If blnType Then
+'            With .Range("承認欄")
+'                .Borders(xlDiagonalDown).LineStyle = xlNone
+'                .Borders(xlDiagonalUp).LineStyle = xlNone
+'                With .Borders(xlEdgeLeft)
+'                    .LineStyle = xlContinuous
+'                    .Weight = xlThin
+'                    .ColorIndex = xlAutomatic
+'                End With
+'                With .Borders(xlEdgeTop)
+'                    .LineStyle = xlContinuous
+'                    .Weight = xlThin
+'                    .ColorIndex = xlAutomatic
+'                End With
+'                With .Borders(xlEdgeBottom)
+'                    .LineStyle = xlContinuous
+'                    .Weight = xlThin
+'                    .ColorIndex = xlAutomatic
+'                End With
+'                With .Borders(xlEdgeRight)
+'                    .LineStyle = xlContinuous
+'                    .Weight = xlThin
+'                    .ColorIndex = xlAutomatic
+'                End With
+'                With .Borders(xlInsideVertical)
+'                    .LineStyle = xlContinuous
+'                    .Weight = xlThin
+'                    .ColorIndex = xlAutomatic
+'                End With
+'                With .Borders(xlInsideHorizontal)
+'                    .LineStyle = xlContinuous
+'                    .Weight = xlThin
+'                    .ColorIndex = xlAutomatic
+'                End With
+'            End With
+'
+'            .Range("AE3").Value = "担当印"
+'            .Range("AG3").Value = "承認印"
+'            .Range("AE4:AF6").ClearContents              '担当サイン欄
+'            .Range("AG4:AH6").ClearContents              '承認サイン欄
+''*** 2007/03/14 PH3対応 Modified By H.Anpo Start
+''            .Range("印刷日時") = .Range("データ取得日時") '印刷日時
+'            .Range("印刷日時") = Format(.Range("データ取得日時"), "yyyy/mm/dd hh:mm:ss") '印刷日時
+''*** 2007/03/14 PH3対応 Modified By H.Anpo End
+'        Else
+'            .Range("AE3:AF3").ClearContents     '担当印
+'            .Range("AG3:AH3").ClearContents     '承認印
+'            .Range("AE4:AF6").ClearContents     '担当サイン欄
+'            .Range("AG4:AH6").ClearContents     '承認サイン欄
+'            .Range("AE1:AI1").ClearContents     '印刷日時
+'            With .Range("AE3:AH6")
+'                .Borders(xlDiagonalDown).LineStyle = xlNone
+'                .Borders(xlDiagonalUp).LineStyle = xlNone
+'                .Borders(xlEdgeLeft).LineStyle = xlNone
+'                .Borders(xlEdgeTop).LineStyle = xlNone
+'                .Borders(xlEdgeBottom).LineStyle = xlNone
+'                .Borders(xlEdgeRight).LineStyle = xlNone
+'                .Borders(xlInsideVertical).LineStyle = xlNone
+'                .Borders(xlInsideHorizontal).LineStyle = xlNone
+'            End With
+'        End If
+'
+'    End With
+    
+    With ThisWorkbook.Worksheets(MAIN_SHEETNAME)
+        If blnType Then
+            With .Range("承認欄")
+                .Borders(xlDiagonalDown).LineStyle = xlNone
+                .Borders(xlDiagonalUp).LineStyle = xlNone
+                With .Borders(xlEdgeLeft)
+                    .LineStyle = xlContinuous
+                    .Weight = xlThin
+                    .ColorIndex = xlAutomatic
+                End With
+                With .Borders(xlEdgeTop)
+                    .LineStyle = xlContinuous
+                    .Weight = xlThin
+                    .ColorIndex = xlAutomatic
+                End With
+                With .Borders(xlEdgeBottom)
+                    .LineStyle = xlContinuous
+                    .Weight = xlThin
+                    .ColorIndex = xlAutomatic
+                End With
+                With .Borders(xlEdgeRight)
+                    .LineStyle = xlContinuous
+                    .Weight = xlThin
+                    .ColorIndex = xlAutomatic
+                End With
+                With .Borders(xlInsideVertical)
+                    .LineStyle = xlContinuous
+                    .Weight = xlThin
+                    .ColorIndex = xlAutomatic
+                End With
+                With .Borders(xlInsideHorizontal)
+                    .LineStyle = xlContinuous
+                    .Weight = xlThin
+                    .ColorIndex = xlAutomatic
+                End With
+
+                '先頭の行、列を取得
+                lngRow = .Row
+                lngCol = .Column
+
+            End With
+                
+            .Cells(lngRow, lngCol).Value = "担当印"         '担当印
+            .Cells(lngRow, lngCol + 2).Value = "承認印"     '承認印
+            
+            .Range(.Cells(lngRow + 1, lngCol), .Cells(lngRow + 3, lngCol + 1)).ClearContents            '担当サイン欄
+            .Range(.Cells(lngRow + 1, lngCol + 2), .Cells(lngRow + 3, lngCol + 2 + 1)).ClearContents    '承認サイン欄
+            
+            .Range("印刷日時") = Format(.Range("データ取得日時"), "yyyy/mm/dd hh:mm:ss") '印刷日時
+            
+        Else
+            
+            With .Range("承認欄")
+                '先頭の行、列を取得
+                lngRow = .Row
+                lngCol = .Column
+            End With
+            .Range(.Cells(lngRow, lngCol), .Cells(lngRow, lngCol + 1)).ClearContents            '担当印
+            .Range(.Cells(lngRow, lngCol + 2), .Cells(lngRow, lngCol + 2 + 1)).ClearContents    '承認印
+                
+            .Range(.Cells(lngRow + 1, lngCol), .Cells(lngRow + 3, lngCol + 1)).ClearContents            '担当サイン欄
+            .Range(.Cells(lngRow + 1, lngCol + 2), .Cells(lngRow + 3, lngCol + 2 + 1)).ClearContents    '承認サイン欄
+            
+            With .Range("印刷日時")
+                '先頭の行、列を取得
+                lngRow = .Row
+                lngCol = .Column
+            End With
+            .Range(.Cells(lngRow, lngCol), .Cells(lngRow, lngCol + 4)).ClearContents            '印刷日時
+            
+            With .Range("承認欄")
+                .Borders(xlDiagonalDown).LineStyle = xlNone
+                .Borders(xlDiagonalUp).LineStyle = xlNone
+                .Borders(xlEdgeLeft).LineStyle = xlNone
+                .Borders(xlEdgeTop).LineStyle = xlNone
+                .Borders(xlEdgeBottom).LineStyle = xlNone
+                .Borders(xlEdgeRight).LineStyle = xlNone
+                .Borders(xlInsideVertical).LineStyle = xlNone
+                .Borders(xlInsideHorizontal).LineStyle = xlNone
+            End With
+        End If
+'*** 2007/03/14 PH3対応 Modified By H.Anpo End
+    
+    End With
+    
+    Call gCom01_SheetProtect(ThisWorkbook.Worksheets(MAIN_SHEETNAME), True)
+
+End Sub
+
+
+'*************************************************************************
+'関数名　　：コマンドボタンの表示・非表示設定
+'
+'引　　数　：
+'           blnType       I       表示：True、非表示：False
+'
+'戻り値　　：なし
+'
+'機能説明　：コマンドボタン表示・非表示の設定をする。
+'
+'更新履歴　：2006/07/07 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Sub gfunc_VisibleCommandBtn(blnType As Boolean)
+
+    With ThisWorkbook.Worksheets(MAIN_SHEETNAME)
+    
+        .cmdAdd1.Visible = blnType
+        .cmdAdd2.Visible = blnType
+        .cmdAdd3.Visible = blnType
+        .cmdDel1.Visible = blnType
+        .cmdDel2.Visible = blnType
+        .cmdDel3.Visible = blnType
+        
+        .cmdSearch.Visible = blnType
+        .cmdUp.Visible = blnType
+        .cmdPrint.Visible = blnType
+                
+    End With
+
+End Sub

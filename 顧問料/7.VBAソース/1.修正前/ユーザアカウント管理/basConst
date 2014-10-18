@@ -1,0 +1,29 @@
+Attribute VB_Name = "basConst"
+'=========================================================================
+'プロジェクト　　　：国内顧問料ユーザアカウント管理
+'プログラム名　　　：共通変数と定数モジュール
+'プログラムＩＤ　　：basConst
+'機能概要　　　　　：共通の変数と定数を宣言する
+'
+'日付　　　　　　　作成者　　　　　　　　　　修正内容
+'-------------------------------------------------------------------------
+'2008/05/14       K.Furuya<SRA>　　　　　　新規作成
+'
+'=========================================================================
+Option Explicit
+
+'データーベース
+Public gbsDBUserId          As String 'データベースユーザーＩＤ
+Public gbsDBPassword        As String 'データベースパスワード
+Public gbsDBName            As String 'データベース名
+
+Public Const CON_PARA_CODE_NO010           As String = "010"       'パラメータコード
+Public Const CON_PARA_CODE_NO020           As String = "020"       'パラメータコード
+Public Const CON_PARA_CODE_NO030           As String = "030"       'パラメータコード
+Public Const CON_PARA_CODE_NO040           As String = "040"       'パラメータコード
+Public Const CON_PARA_CODE_NO050           As String = "050"       'パラメータコード
+Public Const CON_PARA_CODE_NO070           As String = "070"       'パラメータコード
+
+
+
+

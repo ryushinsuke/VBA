@@ -1,0 +1,233 @@
+Attribute VB_Name = "basProcess"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：新顧問料契約管理システム・WEB時価ﾃﾞｰﾀ取込処理
+'
+'オブジェクト名：basProcess
+'
+'機能概要　：プロセス管理
+'
+'更新履歴　：2006/01/17 SRA T.Tanaka    新規作成
+'
+'
+'*************************************************************************
+Private Const MODULE_NAME As String = "basProcess"
+
+'*************************************************************************
+'関数名　　：プロセス開始
+'
+'引　　数　：ARG1   I   Module      Strinng モジュール名
+'　　　　　：ARG2   I   Procedure   Strinng プロシージャ名
+'
+'戻り値　　：なし
+'
+'機能説明　：
+'
+'更新履歴　：2006/01/17 SRA T.Tanaka    新規作成
+'
+'*************************************************************************
+Public Sub subBeginProcess(ByVal Module As String, ByVal Procedure As String)
+    
+    Const PROCEDURE_NAME As String = "subBeginProcess"
+    
+    On Error GoTo ErrHandler
+    
+    
+    Exit Sub
+ErrHandler:
+     
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Sub
+'*************************************************************************
+'関数名　　：プロセス終了
+'
+'引　　数　：ARG1   I   Module      Strinng モジュール名
+'　　　　　：ARG2   I   Procedure   Strinng プロシージャ名
+'
+'戻り値　　：なし
+'
+'機能説明　：
+'
+'更新履歴　：2006/01/17 SRA T.Tanaka    新規作成
+'
+'*************************************************************************
+Public Sub subEndProcess(ByVal Module As String, ByVal Procedure As String)
+    
+    Const PROCEDURE_NAME As String = "subEndProcess"
+    
+    On Error GoTo ErrHandler
+    
+    
+    Exit Sub
+ErrHandler:
+     
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Sub
+'*************************************************************************
+'関数名　　：エラー共通処理
+'
+'引　　数　：ARG1   I   Module      Strinng モジュール名
+'　　　　　：ARG2   I   Procedure   Strinng プロシージャ名
+'　　　　　：ARG3   I   ErrNum      Long    エラー番号
+'　　　　　：ARG4   I   ErrMsg      Strinng エラーメッセージ
+'
+'戻り値　　：なし
+'
+'機能説明　：サンプル
+'
+'更新履歴　：2006/01/17 SRA T.Tanaka    新規作成
+'
+'*************************************************************************
+Public Sub subErrProcess(ByVal Module As String, ByVal Procedure As String, _
+                         ByVal ErrNum As Long, ByVal ErrMsg As String)
+    
+    Const PROCEDURE_NAME As String = "subErrProcess"
+    
+    On Error GoTo ErrHandler
+    
+    Debug.Print ErrNum & ":" & ErrMsg
+    
+    Exit Sub
+ErrHandler:
+     
+    Rem Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Sub
+'*************************************************************************
+'関数名　　：処理時間測定
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：ツール
+'
+'更新履歴　：2006/01/24 SRA T.Tanaka    新規作成
+'
+'*************************************************************************
+Public Function STime()
+    gdatStr = Timer
+End Function
+Public Function ETime()
+    gdatEnd = Timer
+    MsgBox gdatEnd - gdatStr
+End Function
+
+'Sub testR()
+'
+'    Dim lngCnt  As Long
+'    Dim lngRow  As Long
+'    Dim lngRet  As Long
+'
+'    With Sheets(SHEET_ERR1)
+'STime
+'        For lngCnt = 1 To 1000
+'            For lngRow = 1 To 1000
+'                lngRet = lngRet + .Range("A" & lngRow)
+'            Next
+'        Next
+'ETime
+'MsgBox lngRet
+'    End With
+'End Sub
+'Sub testC()
+'
+'    Dim lngCnt  As Long
+'    Dim lngRow  As Long
+'    Dim lngRet  As Long
+'
+'    With Sheets(SHEET_ERR1)
+'STime
+'        For lngCnt = 1 To 1000
+'            For lngRow = 1 To 1000
+'                lngRet = lngRet + .Cells(lngRow, 1)
+'            Next
+'        Next
+'ETime
+'MsgBox lngRet
+'    End With
+'
+'End Sub
+'
+'Sub subConnAdo()
+'
+'    Dim lngCnt As Long
+'    Dim strSql As String
+'    Dim lngKIjyunFr As Long
+'    Dim recRet As ADODB.Recordset
+'    Dim strNAMKouza As String
+'    Dim lngKIjyunTo As Long
+'    strNAMKouza = "0026557"
+'    lngKIjyunTo = 20050401
+'
+'    strSql = ""
+'    strSql = strSql & " SELECT"
+'    strSql = strSql & " SF_SINTAKU_DT"
+'    strSql = strSql & "('" & strNAMKouza & "'"
+'    strSql = strSql & "," & lngKIjyunTo
+'    strSql = strSql & ")"
+'    strSql = strSql & " FROM DUAL"
+'    strSql = ""
+'    strSql = strSql & " SELECT k.shintaku_kouza_bk,k.SHINTAKU_BK_CD,k.kouza_no"
+'    strSql = strSql & " FROM kk01 k"
+'    strSql = strSql & " WHERE k.kouza_kaisetsu_kbn = '1'"
+'STime
+'    For lngCnt = 1 To 1000
+'        Set recRet = cnAdo.Execute(strSql) '2.5
+''        lngKIjyunFr = recRet.Fields(0).Value
+'        recRet.Close
+'        Set recRet = Nothing
+'    Next
+'ETime
+'
+'End Sub
+'
+'Sub subCmdAdo()
+'
+'    Dim lngCnt As Long
+'    Dim strSql As String
+'    Dim lngKIjyunFr As Long
+'    Dim recRet As ADODB.Recordset
+'    Dim strNAMKouza As String
+'    Dim lngKIjyunTo As Long
+'    strNAMKouza = "0026557"
+'    lngKIjyunTo = 20050401
+'    strSql = ""
+'    strSql = strSql & " SELECT k.shintaku_kouza_bk,k.SHINTAKU_BK_CD,k.kouza_no"
+'    strSql = strSql & " FROM kk01 k"
+'    strSql = strSql & " WHERE k.kouza_kaisetsu_kbn = '1'"
+'
+'
+''    strSql = ""
+''    strSql = strSql & " SELECT"
+''    strSql = strSql & " SF_SINTAKU_DT"
+''    strSql = strSql & "('" & strNAMKouza & "'"
+''    strSql = strSql & "," & lngKIjyunTo
+''    strSql = strSql & ")"
+''    strSql = strSql & " FROM DUAL"
+'STime
+'    For lngCnt = 1 To 1000
+'        With cmAdo
+'        #If False Then
+'            .CommandText = "SF_SINTAKU_DT"
+'            .CommandType = adCmdStoredProc
+'            .Parameters.Refresh
+'            .Parameters(0) = strNAMKouza
+'            .Parameters(1) = lngKIjyunTo
+'            'Call .Execute
+'            Set recRet = .Execute   'StoredFunction は実行できない
+'            lngKIjyunFr = recRet.Fields(0).Value
+'        #Else
+'            .CommandText = strSql
+'            .CommandType = adCmdText
+'            Set recRet = .Execute '0.92 Recordset はこっちがはやい
+'        #End If
+'            recRet.Close
+'            Set recRet = Nothing
+'        End With
+'    Next
+'ETime
+'
+'End Sub
+

@@ -1,0 +1,638 @@
+Attribute VB_Name = "basClickRunBtn4700"
+Option Explicit
+
+'*************************************************************************
+'プロジェクト名：新契約管理システム・業務帳票作成指示
+'オブジェクト名：basClickRunBtn4700
+'機能概要　：統計情報 海外口座一覧
+'更新履歴　：2007/11/12 SRA 安保     新規作成
+'
+'*************************************************************************
+
+Const MODULE_NAME = "basClickRunBtn4700"
+
+Private Const cBaseFile = gc帳票Base47
+Private Const cPreFName = gc帳票名47
+
+'出力する属性コードの範囲
+Private Const cZokuseiCdFrom = 1001     '属性1
+Private Const cZokuseiCdTo = 1030       '属性30
+
+Private Type typIndata
+    MeisaiCnt           As Long     'レコード数
+    Meisai()            As Variant  '取得データ
+End Type
+
+'*************************************************************************
+'関数名　　：統計情報 海外口座一覧(帳票作成)
+'引　　数　：
+'           objTarget        I           対象のシート
+'戻り値　　：
+'機能説明　：
+'更新履歴　：2007/11/12 SRA             新規作成
+'更新履歴　：2007/12/04 SRA Y.Azuma    変更     (PH4)印刷エラー対策
+'
+'*************************************************************************
+Public Function fncClickRunBtn4700(ByRef objTarget As Object) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncClickRunBtn4700"
+
+On Error GoTo ErrSection
+
+    Dim strDay          As String
+    Dim strOutFName     As String
+    Dim strOutFNameOnly As String
+    
+    Dim inData(2)       As typIndata            '海外口座一覧 データ取得用
+                                                'inData(1) : 明細データ用
+                                                'inData(2) : 属性情報用
+    
+    Dim strKjnLastYmd   As String               '基準月末日
+    Dim wDate           As Date                 '日付編集用WORK
+    Dim strWhereSetteiKbn As String             '口座開設区分抽出条件  ex) " IN ('2','4') "
+    
+    Call subBeginProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    fncClickRunBtn4700 = False
+    With objTarget
+
+        'マウスポインターをWAITにする
+        ThisWorkbook.Application.Cursor = xlWait
+
+        ' 作成選択の場合
+        If .chkMake.Value = True Then
+        
+            strDay = Trim(.Range("基準年月4700").Value)
+
+            '基準年月の月末日取得
+            wDate = Mid(strDay, 1, 4) & "/" & Mid(strDay, 5, 2) & "/01"
+            wDate = DateAdd("m", 1, wDate)
+            wDate = DateAdd("d", -1, wDate)
+            strKjnLastYmd = Format(wDate, "YYYYMMDD")
+            
+            ' データ取得
+            '口座開設区分の抽出条件を編集
+            strWhereSetteiKbn = " IN ("
+            If .chk4700hon.Value = True Then
+                strWhereSetteiKbn = strWhereSetteiKbn & "'2'"         '2:海外本開設
+            End If
+            If .chk4700kari.Value = True Then
+                If .chk4700hon.Value = True Then
+                    strWhereSetteiKbn = strWhereSetteiKbn & ","
+                End If
+                strWhereSetteiKbn = strWhereSetteiKbn & "'4'"         '4:海外仮開設
+            End If
+            strWhereSetteiKbn = strWhereSetteiKbn & ") "
+            If fncGetDBData4700(strKjnLastYmd, strWhereSetteiKbn, inData) = False Then
+                GoTo RtnErrSection
+            End If
+        
+            ' 帳票ファイル取得
+            If fncGetFile4700(strDay, strOutFName) = False Then
+                GoTo RtnErrSection
+            End If
+'------------<Modify Start azuma 2007/12/04 (PH4)> ★★★☆-----------------------
+            strOutFNameOnly = strOutFName
+'------------<Modify End   azuma 2007/12/04 (PH4)> ★★★☆-----------------------
+        
+            ' フォルダをつける。
+            strOutFName = .Range("保存フォルダ").Value & "\" & strOutFName
+            
+            ' ファイルコピー
+            If fncCopyBook(cBaseFile, strOutFName) = False Then
+                GoTo RtnErrSection
+            End If
+            
+            ' ファイル作成
+            If fncMakeBook4700(strOutFName, strKjnLastYmd, inData()) = False Then
+                ' ファイル削除
+                Call fncDeleteFile(strOutFName)
+
+                GoTo RtnErrSection
+            End If
+
+'------------<Modify Start azuma 2007/12/04 (PH4)> ★★★☆-----------------------
+            If .chkPrint.Value = True Then
+                Call ToukeiChouhyouPrint(strOutFNameOnly)
+            End If
+            
+            Workbooks(strOutFNameOnly).Close SaveChanges:=True
+'------------<Modify End   azuma 2007/12/04 (PH4)> ★★★☆-----------------------
+        
+        End If
+    
+        ' 印刷選択の場合
+'------------<Modify Start azuma 2007/12/04 (PH4)> ★★★☆-----------------------
+        If .chkMake.Value = False And .chkPrint.Value = True Then
+'        If .chkPrint.Value = True Then
+'------------<Modify End   azuma 2007/12/04 (PH4)> ★★★☆-----------------------
+            ' ファイル印刷
+            If fncPrintBook(cPreFName, .Range("保存フォルダ").Value) = False Then
+                GoTo RtnErrSection
+            End If
+        End If
+    
+    'マウスポインターを戻す
+    ThisWorkbook.Application.Cursor = xlDefault
+    
+    End With
+   
+    fncClickRunBtn4700 = True
+    Erase inData
+    
+    Call subEndProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                     *
+'*******************************************************
+ErrSection:
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+'*******************************************************
+'* リターンエラーセクション                              *
+'*******************************************************
+RtnErrSection:
+                
+    'マウスポインターを戻す
+    ThisWorkbook.Application.Cursor = xlDefault
+                
+    fncClickRunBtn4700 = False
+    Erase inData
+    
+End Function
+
+'*************************************************************************
+'関数名　　：統計情報 海外口座一覧(帳票ファイル取得)
+'引　　数　：
+'           strDay             I           基準日
+'           strOutFName        O           出力ファイル名
+'戻り値　　：処理結果
+'機能説明　：海外口座一覧を出力するファイルを取得する。
+'更新履歴　：2007/11/12 SRA             新規作成
+'
+'*************************************************************************
+Public Function fncGetFile4700(ByVal strDay As String, _
+                               ByRef strOutFName As String) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncGetFile4700"
+
+On Error GoTo ErrSection
+
+    Dim strDate         As String
+    Dim strTime         As String
+
+    strOutFName = ""
+    
+    fncGetFile4700 = False
+    
+    Call gfunc_GetSvDateTime(strDate, strTime)
+       
+    ' 出力帳票ファイル
+    strOutFName = cPreFName
+    strOutFName = strOutFName & "_" & strDate
+    strOutFName = strOutFName & "_" & strTime
+    strOutFName = strOutFName & "-(" & strDay
+    strOutFName = strOutFName & ")"
+    strOutFName = strOutFName & ".xls"
+    
+    fncGetFile4700 = True
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncGetFile4700 = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    
+End Function
+
+'*************************************************************************
+'関数名　　：統計情報 海外口座一覧(帳票データ取得)
+'引　　数　：
+'           strKjnLastYmd      I           基準年月(YYYYMMDD)
+'           strWhereSetteiKbn  I           口座開設区分抽出条件  ex) " IN ('2','4') "
+'           inData()　         O           明細取得データ
+'戻り値　　：処理結果
+'機能説明　：海外口座一覧のデータを取得する。
+'
+'*************************************************************************
+Public Function fncGetDBData4700( _
+    ByVal strKjnLastYmd As String, _
+    ByVal strWhereSetteiKbn As String, _
+    ByRef inData() As typIndata _
+) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncGetDBData4700"
+
+On Error GoTo ErrSection
+
+    Dim blnRet      As Boolean
+    
+    fncGetDBData4700 = False
+    
+    blnRet = False
+    
+    '海外口座一覧データ取得
+    blnRet = fncGetKaigaiKohzaIchiranData(strKjnLastYmd, strWhereSetteiKbn, inData())
+    If blnRet <> True Then
+        Exit Function
+    End If
+    
+    '属性情報(名称、ACTIVE_FLG等)取得
+    blnRet = fncGetZokuseiInfo(inData())
+    If blnRet <> True Then
+        Exit Function
+    End If
+    
+    fncGetDBData4700 = True
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncGetDBData4700 = False
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- エラーログ出力 End  ---------------------------------
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：海外口座一覧 明細データ取得
+'引　　数　：
+'           strLastDay         I           基準年月末日(YYYYMMDD)
+'           strWhereSetteiKbn  I           口座開設区分抽出条件  ex) " IN ('2','4') "
+'           inData()           O           取得データ
+'戻り値　　：処理結果
+'機能説明　：海外口座一覧のデータを取得する
+'更新履歴　：2007/11/12 SRA H.Anpo   新規
+'更新履歴　：2011/12/16 SRA R.Takagi 変更  海外口座の統計帳票集計基準変更対応
+'
+'*************************************************************************
+Public Function fncGetKaigaiKohzaIchiranData( _
+    ByVal strKjnLastYmd As String, _
+    ByVal strWhereSetteiKbn As String, _
+    ByRef inData() As typIndata _
+    ) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncGetKaigaiKohzaIchiranData"
+
+On Error GoTo ErrSection
+
+    Dim strSql      As String
+    Dim lngCol      As Long
+    Dim lngRow      As Long
+    Dim lngRowCnt   As Long
+    Dim lngColCnt   As Long
+    
+    fncGetKaigaiKohzaIchiranData = False
+
+'*******************************************************
+'* SQL文作成                                           *
+'*******************************************************
+    strSql = ""
+    strSql = strSql & " SELECT"
+    strSql = strSql & "         PRTCD,"                         '口座番号                       (PX A/C No.)
+    strSql = strSql & "         NAME_RE,"                       '顧客名略称英語                 (Short Name)
+    strSql = strSql & "         NAME_E,"                        '顧客名正式英語                 (Full Name)
+    strSql = strSql & "         NVL(JPY_JIKA_TOTAL_KAIGAI,0),"  'NAV(百万円)                    (NAV (JPY, Mi.))
+    strSql = strSql & "         NVL(USD_JIKA_TOTAL_KAIGAI,0),"  'NAV(百万USD)                   (NAV (USD, Mi.))
+'=== 2008/02/20 Modified By H.Anpo Start
+''=== 2008/01/25 Modified By H.Anpo Start
+''    strSql = strSql & "         NVL(BC_JIKA_TOTAL_KAIGAI,0),"   'NAV(運用通貨)                  (NAV (BC))
+'    strSql = strSql & "         TRIM(TO_CHAR(NVL(BC_JIKA_TOTAL_KAIGAI,0),'999,999,999,999,999,999,999,999,999,999,999,999.90')),"   'NAV(運用通貨)
+''=== 2008/01/25 Modified By H.Anpo End
+    strSql = strSql & "         TRIM(TO_CHAR(NVL(BC_JIKA_TOTAL_KAIGAI,0),'999,999,999,999,999,999,999,999,999,999,999,990.00')),"   'NAV(運用通貨)
+'=== 2008/02/20 Modified By H.Anpo End
+    strSql = strSql & "         TRIM(MNGCD),"                   '通貨                           (BC)
+    strSql = strSql & "         SETTEI_DATE,"                   '開設日                         (Inception Date)
+    strSql = strSql & "         KOKYAKU_KUNI,"                  '国籍                           (Client's Domicile)
+    strSql = strSql & "         KOKYAKU_CHIIKI_1,"              '国籍の地域                     (Region of Client's Domicile)
+    strSql = strSql & "         KEIYAKU_KYOTEN,"                '契約拠点                       (Lead Manager)
+    strSql = strSql & "         UNYO_HONBU_KBN,"                '本部コード                     (Lead Manager Code)
+    strSql = strSql & "         CNT_TYPE,"                      '契約形態                       (Agreement Type)
+    strSql = strSql & "         SHUKEI_KOKYAKU_TYP,"            '顧客タイプ                     (Client Type 1)
+    strSql = strSql & "         UNYO_KEITAI,"                   '運用形態                       (Asset Type)
+    strSql = strSql & "         TOUSHI_CHIKI,"                  '投資地域                       (Mandate Type 1)
+    strSql = strSql & "         SHOZOKU_BU,"                    '部店                           (Dept/Team)
+    strSql = strSql & "         SHU_PM_NAME,"                   '主PM                           (PM)
+    strSql = strSql & "         AM_NAME,"                       'AM                             (AM)
+    strSql = strSql & "         SINTAKU_BANK_CD,"               '信託銀行                       (Global Custodian)
+    strSql = strSql & "         SINTAKU_BANK_PRTCD,"            '信託銀行口座                   (Custody A/C No.)
+    strSql = strSql & "         DATA_TYPE,"                     '協会区分                       (Kyokai Classification)
+    strSql = strSql & "         KAISETSU_KBN,"                  '開設区分                       (Account Type)
+    strSql = strSql & "         CALLOFF_DATE,"                  '閉鎖日                         (Termination Date)
+    strSql = strSql & "         INV_CD,"                        '投資目的                       (Investment Objective)
+    strSql = strSql & "         JPY_RATE,"                      '円評価レート(円／運用通貨)     (FX Rate (JPY/BC))
+    strSql = strSql & "         PRT_KANRI_KBN,"                 '口座管理区分                   (Account Attribution)
+    strSql = strSql & "         HAITO_MISU,"                    '未収配計上区分                 (?????)
+    strSql = strSql & "         VARIATION_NO,"                  'バリエーションNO               (Valuation No.)
+    strSql = strSql & "         TWR_START_DATE,"                'パフォーマンス計算開始日前日   (Date 1-Day Before the Inception of Performance Calculation)
+    strSql = strSql & "         KENRI_JIDO_KBN,"                '権利データ自動作成区分         (Automatic Realization of Expected COAC, Coupon, Maturity Data)
+    strSql = strSql & "         RATE_KBN,"                      '為替レート区分                 (FX Rate for Book Cost and Evalutaion)
+    strSql = strSql & "         RULE_NO,"                       'ルール番号                     (Calculation of Dividend and Coupon Receivables)
+    strSql = strSql & "         GEN_SISAN_KBN,"                 '原資産区分                     (Asset Type Hedged by FX FWD)
+'=== 2011/12/16 Add By R.Takagi Start    海外口座の統計帳票集計基準変更対応 ===
+    strSql = strSql & "         AC_SETUP_DATE,"                 '口座開設年月日                 (AC Setup Date)
+    strSql = strSql & "         DATE_OF_AGREEMENT,"             '契約年月日                     (Date of Agreement)
+'=== 2011/12/16 Add By R.Takagi End      海外口座の統計帳票集計基準変更対応 ===
+    strSql = strSql & "         PRT_START_DATE,"                '運用開始日                     (Date Start Reporting)
+    strSql = strSql & "         INVESTMENT_MANAGER1,"           '運用拠点1                      (Investment Manager1)
+    strSql = strSql & "         INVESTMENT_MANAGER2,"           '運用拠点2                      (Investment Manager2)
+    strSql = strSql & "         INVESTMENT_MANAGER3,"           '運用拠点3                      (Investment Manager3)
+    strSql = strSql & "         INVESTMENT_MANAGER4,"           '運用拠点4                      (Investment Manager4)
+    strSql = strSql & "         INVESTMENT_MANAGER5,"           '運用拠点5                      (Investment Manager5)
+    strSql = strSql & "         ZOKUSEI_1,"                     '属性1 (成功報酬)               (Performance Fee)
+    strSql = strSql & "         ZOKUSEI_2,"                     '属性2 (自己設定投信)           ()
+    strSql = strSql & "         ZOKUSEI_3,"                     '属性3 (領収書)                 ()
+    strSql = strSql & "         ZOKUSEI_4,"                     '属性4 (協会報告ファンド種類)   ()
+    strSql = strSql & "         ZOKUSEI_5,"                     '属性5 ((再掲)再委任(委任))     ()
+    strSql = strSql & "         ZOKUSEI_6,"                     '属性6 ((再掲)助言(受))         ()
+    strSql = strSql & "         ZOKUSEI_7,"                     '属性7 (最終顧客国籍)           ()
+    strSql = strSql & "         ZOKUSEI_8,"                     '属性8 (契約顧客国籍の地域)     ()
+    strSql = strSql & "         ZOKUSEI_9,"                     '属性9 (関係会社等)             ()
+    strSql = strSql & "         ZOKUSEI_10,"                    '属性10(当初契約日)             ()
+    strSql = strSql & "         ZOKUSEI_11,"                    '属性11(電磁的方法書面交付)     ()
+    strSql = strSql & "         ZOKUSEI_12,"                    '属性12(非年金議決権行使指図)   ()
+    strSql = strSql & "         ZOKUSEI_13,"                    '属性13(守秘義務緩和)           ()
+    strSql = strSql & "         ZOKUSEI_14,"                    '属性14(ｱｶｳﾝﾄﾏﾈｰｼﾞｬｰ2)          ()
+    strSql = strSql & "         ZOKUSEI_15,"                    '属性15(受託変更旧ＮＡＭNo.)    ()
+    strSql = strSql & "         ZOKUSEI_16,"                    '属性16(投資顧問料入金予定日)   ()
+    strSql = strSql & "         ZOKUSEI_17,"                    '属性17(顧問料支払方法)         ()
+    strSql = strSql & "         ZOKUSEI_18,"                    '属性18(請求書)                 ()
+    strSql = strSql & "         ZOKUSEI_19,"                    '属性19(上期・下期分離)         ()
+    strSql = strSql & "         ZOKUSEI_20,"                    '属性20(ラップ口座)             ()
+    strSql = strSql & "         ZOKUSEI_21,"                    '属性21(NAM東京直接契約先)      ()
+    strSql = strSql & "         ZOKUSEI_22,"                    '属性22(顧客区分)               (Client Type 2)
+    strSql = strSql & "         ZOKUSEI_23,"                    '属性23(Mandate)                (Mandate Type 2)
+    strSql = strSql & "         ZOKUSEI_24,"                    '属性24(属性24)                 ()
+    strSql = strSql & "         ZOKUSEI_25,"                    '属性25(属性25)                 ()
+    strSql = strSql & "         ZOKUSEI_26,"                    '属性26(属性26)                 ()
+    strSql = strSql & "         ZOKUSEI_27,"                    '属性27(属性27)                 ()
+    strSql = strSql & "         ZOKUSEI_28,"                    '属性28(属性28)                 ()
+    strSql = strSql & "         ZOKUSEI_29,"                    '属性29(属性29)                 ()
+    strSql = strSql & "         ZOKUSEI_30"                     '属性30(属性30)                 ()
+    strSql = strSql & " FROM"
+    strSql = strSql & "         KYK_VW_KAIGAI_KOHZA_ICHIRAN"    '海外口座一覧VEW
+    strSql = strSql & " WHERE"
+    strSql = strSql & "         KIJYUN_YMD = '" & strKjnLastYmd & "'"
+    strSql = strSql & " AND     SETTEI_KBN " & strWhereSetteiKbn
+    strSql = strSql & " ORDER BY"
+    strSql = strSql & "         PRTCD"
+    'データ取得
+    Call gclsDB.DoExequteSql(gcSELECT, strSql, inData(1).Meisai, lngCol, lngRow)
+    inData(1).MeisaiCnt = lngRow
+    If lngRow > 0 Then
+        fncGetKaigaiKohzaIchiranData = True
+    Else
+        ' 該当データが存在しません。
+        Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3001, cPreFName, "")
+    End If
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncGetKaigaiKohzaIchiranData = False
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- エラーログ出力 End  ---------------------------------
+   
+End Function
+
+'*************************************************************************
+'関数名　　：属性情報取得
+'引　　数　：
+'           inData()           O           取得データ
+'戻り値　　：処理結果
+'機能説明　：属性情報(属性名称、ACTIVE_FLG等)を取得する
+'更新履歴　：2007/11/12 SRA H.Anpo   新規
+'
+'*************************************************************************
+Public Function fncGetZokuseiInfo( _
+    ByRef inData() As typIndata _
+    ) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncGetZokuseiInfo"
+
+On Error GoTo ErrSection
+
+    Dim strSql      As String
+    Dim lngCol      As Long
+    Dim lngRow      As Long
+    Dim lngRowCnt   As Long
+    Dim lngColCnt   As Long
+    
+    fncGetZokuseiInfo = False
+    
+'*******************************************************
+'* SQL文作成                                           *
+'*******************************************************
+    strSql = ""
+    strSql = strSql & " SELECT "
+    strSql = strSql & "         KC.CODE_NO,"            'コード番号
+    strSql = strSql & "         KC.CODE_NAME_E"         'コード名英字
+'    strSql = strSql & "         KC.ACTIVE_FLG,"         'アクティブフラグ
+'    strSql = strSql & "         KC.SAKUJO_FLG"          '削除フラグ
+    strSql = strSql & " FROM"
+    strSql = strSql & "         KYK_CODE KC"
+    strSql = strSql & " WHERE"
+    strSql = strSql & "         KC.CODE_NO >= " & cZokuseiCdFrom
+    strSql = strSql & " AND     KC.CODE_NO <= " & cZokuseiCdTo
+    strSql = strSql & " AND     KC.ACTIVE_FLG = '1'"
+    strSql = strSql & " AND     KC.SAKUJO_FLG = '0'"
+    strSql = strSql & " ORDER BY"
+    strSql = strSql & "         KC.CODE_NO"
+    
+    'データ取得
+    Call gclsDB.DoExequteSql(gcSELECT, strSql, inData(2).Meisai, lngCol, lngRow)
+    inData(2).MeisaiCnt = lngRow
+    If lngRow > 0 Then
+        fncGetZokuseiInfo = True
+    Else
+        ' 該当データが存在しません。
+        Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3001, cPreFName, "属性情報が登録されていません。")
+    End If
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncGetZokuseiInfo = False
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- エラーログ出力 End  ---------------------------------
+   
+End Function
+
+
+'*************************************************************************
+'関数名　　：統計情報 海外口座一覧(帳票作成)
+'引　　数　：
+'           strOutFName        I           出力ファイル名
+'           strKjnLastYmd      I           基準日(月末日)
+'           inData()　         I           海外口座一覧データ
+'戻り値　　：処理結果
+'機能説明　：統計情報 海外口座一覧のBOOKを作成する。
+'更新履歴　：2007/12/04 SRA Y.Azuma    変更     (PH4)印刷エラー対策
+'
+'*************************************************************************
+Public Function fncMakeBook4700( _
+    ByVal strOutFName As String, _
+    ByVal strKjnLastYmd As String, _
+    ByRef inData() As typIndata _
+    ) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncMakeBook4700"
+    
+On Error GoTo ErrSection
+
+    Dim lngRowCnt       As Long
+    Dim strDesRange     As String
+    Dim vntArray2()     As Variant
+    Dim lngRet          As Long
+    Dim lngCnt          As Long
+    Dim lngStartRowIchiran  As Long
+    
+    Call subBeginProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    ' ファイルOpen
+    Workbooks.Open Filename:=strOutFName
+    
+    fncMakeBook4700 = False
+    
+Application.DisplayAlerts = False
+    
+    '============================================
+    ' 海外口座一覧
+    '============================================
+    '配列の添え字の階層を変更 array(X,Y) -> array(Y,X)
+    lngRet = fncKsCmnArrayIdxChange(inData(1).Meisai, vntArray2)
+    
+    lngRowCnt = inData(1).MeisaiCnt - 1
+    
+    With Workbooks(Workbooks.Count).Worksheets("海外口座一覧")
+    
+        lngStartRowIchiran = .Range("一覧_明細TOP").Row
+        strDesRange = .Cells(lngStartRowIchiran, .Range("一覧_開始列").Column).Address & ":" & .Cells(lngStartRowIchiran + lngRowCnt, .Range("タイトル_属性" & cZokuseiCdTo).Column).Address
+    
+        '行を追加
+        .Rows(lngStartRowIchiran & ":" & lngStartRowIchiran).Copy
+        .Rows(lngStartRowIchiran & ":" & lngStartRowIchiran + lngRowCnt).Insert Shift:=xlDown
+        'シートにデータをセット
+        .Range(strDesRange) = vntArray2
+
+        '不要な行を削除
+        .Range(lngStartRowIchiran + lngRowCnt + 1 & ":" & lngStartRowIchiran + lngRowCnt + 1).Delete
+
+        'ヘッダー部の編集
+        '基準日
+        .Range("基準日").Value = Format(strKjnLastYmd, "####/##/##")
+
+        '属性情報の編集
+        For lngCnt = 0 To inData(2).MeisaiCnt - 1
+            'アクティブな属性の列を再表示
+            .Columns(.Range("タイトル_属性" & inData(2).Meisai(0, lngCnt)).Column).EntireColumn.Hidden = False
+                
+            '属性のタイトルセット
+            .Range("タイトル_属性" & inData(2).Meisai(0, lngCnt)).Value = inData(2).Meisai(1, lngCnt)
+        
+'=== 2007/12/05 Added By H.Anpo Start
+            '属性部をオートフィット
+            .Columns(.Range("タイトル_属性" & inData(2).Meisai(0, lngCnt)).Column).EntireColumn.AutoFit
+'=== 2007/12/05 Added By H.Anpo End
+        
+        Next lngCnt
+        
+        'カーソル位置を移動する。
+        .Activate     ' シートが２個以上の場合要る。
+        .Range("A1").Activate
+    End With
+    
+    ActiveWindow.ScrollRow = 1
+    ActiveWindow.ScrollColumn = 1
+    
+'------------<Modify Start azuma 2007/12/04 (PH4)> ★★★☆-----------------------
+    Workbooks(Workbooks.Count).Save
+'    Workbooks(Workbooks.Count).Close SaveChanges:=True
+'------------<Modify End   azuma 2007/12/04 (PH4)> ★★★☆-----------------------
+    
+Application.DisplayAlerts = True
+    
+    fncMakeBook4700 = True
+    
+    Call subEndProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    Erase vntArray2
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+Application.DisplayAlerts = True
+
+    Workbooks(Workbooks.Count).Close SaveChanges:=True
+    fncMakeBook4700 = False
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'   Err.Raise lng
+'---- エラーログ出力 End  ---------------------------------
+   
+    Erase vntArray2
+   
+End Function
+
+
+
+

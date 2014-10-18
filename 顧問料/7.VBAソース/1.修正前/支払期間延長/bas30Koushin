@@ -1,0 +1,907 @@
+Attribute VB_Name = "bas30Koushin"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：外部委託ライセンスフィー計算システム
+'
+'オブジェクト名：bas30Koushin
+'
+'機能概要　：更新処理
+'
+'更新履歴　：2008/06/17 SRA T.Ichikawa   新規作成
+'
+'*************************************************************************
+
+'*************************************************************************
+'モジュール内共通変数
+'*************************************************************************
+Const MODULE_NAME = "bas30Koushin"
+
+'=======================================
+'更新ユーザ、プログラムIDの定義
+'=======================================
+Const UPDATE_USER = "APL001"
+Const UPDATE_PGM_ID = "支払期間延長"
+
+'=======================================
+'外部委託計算期間情報配列の番号定義
+'=======================================
+Const C_GKK_GI_NO = 0                           '外部委託先番号
+Const C_GKK_GI_SHIHARAI_KIKAN_ID = 1            '外部委託支払期間ID
+Const C_GKK_KOHZA_NO = 2                        '口座番号
+Const C_GKK_ISSCD = 3                           'PX銘柄コード
+Const C_GKK_KEISAN_KIKAN_ID = 4                 '計算期間ID
+Const C_GKK_KEISAN_KIKAN_FROM = 5               '計算期間FROM
+Const C_GKK_KEISAN_KIKAN_TO = 6                 '計算期間TO
+Const C_GKK_KEISAN_KIKAN_NISSU = 7              '計算期間日数
+Const C_GKK_KEISAN_HOHHOH = 8                   '計算方法
+Const C_GKK_RATE_CODE = 9                       '料率コード
+Const C_GKK_UNYOH_HOHSHU_RATE_CODE = 10         '運用報酬料率コード
+Const C_GKK_SAISHU_KBN = 11                     '最終区分
+Const C_GKK_BIKOH = 12                          '備考
+
+'------------<Modify Start azuma 2008/11/12 > ライセンスフィー期間延長条件変更---------------
+'=======================================
+'外部委先番号の定義
+'=======================================
+Const RAFI = "1"
+'Const BR = "2"
+'Const FQC = "3"
+'Const PEFRI = "4"
+'Const NFRTA = "5"
+'------------<Modify End   azuma 2008/11/12 > ライセンスフィー期間延長条件変更---------------
+
+
+'*************************************************************************
+'関数名　　：入力チェック処理(更新時)
+'
+'引　　数　：
+'           TargetSheets        I           チェック対象のシート
+'
+'戻り値　　：Boolean (TRUE:正常、FALSE:エラー)
+'
+'機能説明　：メインシートの更新時入力チェックを行う
+'
+'更新履歴　：2008/06/17 SRA T.Ichikawa    新規作成
+'
+'*************************************************************************
+Public Function gfuncKikan_UpdInputCheck(ByRef TargetSheets As Object) As Boolean
+On Error GoTo ErrorSection
+
+    Dim lngCnt          As Long
+
+    gfuncKikan_UpdInputCheck = False
+
+    With TargetSheets
+    
+        '既存支払期間との重複チェック
+        If func_Check_Taisho(lngCnt) = False Then
+            Exit Function
+        End If
+        
+        '更新対象が0件の場合
+        If lngCnt = 0 Then
+            Call gfunc_ErrorMsg(3, 25301, "対象", "")
+            Exit Function
+        End If
+
+    End With
+
+    gfuncKikan_UpdInputCheck = True
+
+    Exit Function
+
+ErrorSection:
+
+    gfuncKikan_UpdInputCheck = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gfuncKikan_UpdInputCheck", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+'*************************************************************************
+'関数名　　：支払期間情報の対象チェック
+'
+'引　　数　：
+'
+'戻り値　　：Boolean (TRUE:対象あり、FALSE:対象なし)
+'
+'機能説明　：支払期間情報の対象がチェックされているかチェックする
+'
+'更新履歴　：2008/06/17 SRA T.Ichikawa     新規作成
+'
+'*************************************************************************
+Public Function func_Check_Taisho(ByRef lngTaishoCnt As Long) As Boolean
+
+    Dim lngCnt          As Long
+    Dim strGiNo         As String       '外部委託先
+    Dim strWk           As String       '文字列編集用
+    
+    func_Check_Taisho = False
+    
+    lngTaishoCnt = 0
+    
+    With ThisWorkbook.Worksheets(MAIN_SHEETNAME)
+        lngCnt = .Range("先頭行").Row + 1
+        Do While (.Range(mLINKCELLNAME & lngCnt) <> vbNullString)
+            If .Range(mLINKCELLNAME & lngCnt) Then
+            
+                strGiNo = Mid(.Cells(lngCnt, .Range("明細_外部委託先").Column), 1, 1)
+                
+                '既存支払期間との重複チェック
+                If func_Check_ShiharaiKikan_Chohfuku( _
+                        strGiNo, _
+                        .Cells(lngCnt, .Range("明細_外部委託支払期間ID").Column), _
+                        .Cells(lngCnt, .Range("支払期間FROM").Column), _
+                        .Cells(lngCnt, .Range("支払期間To").Column), _
+                        strWk) = False Then
+                                                
+                    '期間重複エラーの場合
+                    If Trim(strWk) <> "" Then
+                        .Range(.Cells(lngCnt, .Range("支払期間FROM").Column), .Cells(lngCnt, .Range("支払期間To").Column)).Activate
+                        Call gfunc_ErrorMsg(3, 25300, "支払期間(From),(To)", _
+                                            "同一外部委託先で期間の重複したデータが既に登録されています。" & vbCrLf & "登録済みの期間：" & strWk)
+                    End If
+                    
+                    Exit Function
+                End If
+
+                lngTaishoCnt = lngTaishoCnt + 1
+                lngCnt = lngCnt + 1
+            Else
+                lngCnt = lngCnt + 1
+            End If
+        Loop
+    End With
+    
+    func_Check_Taisho = True
+    
+End Function
+
+'*************************************************************************
+'関数名　　：支払期間の既存登録重複チェック
+'
+'引　　数　：
+'           strGiNo             I     外部委託先番号(1桁)
+'           lngGiSKikanID       I     外部委託支払期間ID
+'           strKikanFrom        I     支払期間From(YYYMMDD)
+'           strKikanTo          I     支払期間To(YYYYMMDD)
+'           strErrKikan         I     重複している支払期間("YYYYMMDD～YYYYMMDD")
+'
+'戻り値　　：Boolean (TRUE:正常、FALSE:重複エラー)
+'
+'機能説明　：既存の支払期間の重複があるかをチェックする
+'
+'更新履歴　：2008/06/17 SRA T.Ichikawa     新規作成
+'
+'*************************************************************************
+Private Function func_Check_ShiharaiKikan_Chohfuku( _
+                ByVal strGiNo As String, _
+                ByVal lngGiSKikanID As Long, _
+                ByVal strKikanFrom As String, _
+                ByVal strKikanTo As String, _
+                ByRef strErrKikan As String _
+                ) As Boolean
+
+    Dim vData()                 As Variant
+    Dim strSql                  As String
+    Dim lngCol                  As Long
+    Dim lngRow                  As Long
+    Dim strErrCode              As String
+    Dim blnRet                  As Boolean
+
+    func_Check_ShiharaiKikan_Chohfuku = False
+
+    strErrCode = ""
+    strErrKikan = ""
+    Erase vData
+
+    '既存の支払期間情報を取得
+    strSql = ""
+    strSql = strSql & " SELECT"
+    strSql = strSql & "         GI_SHIHARAI_KIKAN_FROM || '～' || GI_SHIHARAI_KIKAN_TO"
+    strSql = strSql & " FROM"
+    strSql = strSql & "         KYK_GI_SHIHARAI_KIKAN"
+    strSql = strSql & " WHERE"
+    strSql = strSql & "         GI_NO = '" & strGiNo & "'"
+    strSql = strSql & " AND     GI_SHIHARAI_KIKAN_ID <> " & lngGiSKikanID & ""
+    
+    strSql = strSql & " AND  (( '" & strKikanFrom & "' <= GI_SHIHARAI_KIKAN_TO   AND '" & strKikanTo & "' >= GI_SHIHARAI_KIKAN_TO )"
+    strSql = strSql & " OR    ( '" & strKikanFrom & "' <= GI_SHIHARAI_KIKAN_FROM AND '" & strKikanTo & "' >= GI_SHIHARAI_KIKAN_FROM )"
+    strSql = strSql & " OR    ( '" & strKikanFrom & "' >= GI_SHIHARAI_KIKAN_FROM AND '" & strKikanTo & "' <= GI_SHIHARAI_KIKAN_TO ))"
+    
+    strSql = strSql & " AND     SAKUJO_FLG = '0'"
+
+    'データ取得
+    blnRet = gclsdb.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow, strErrCode)
+
+    If blnRet Then
+        If Trim(strErrCode) <> "" Then
+            'Error
+            Exit Function
+        End If
+    Else
+        Exit Function
+    End If
+
+    '存在の確認
+    If lngRow > 0 Then
+        'データがある場合期間が重複してるデータが存在している。
+        strErrKikan = vData(0, 0)
+        Exit Function
+    End If
+
+    Erase vData
+    
+    func_Check_ShiharaiKikan_Chohfuku = True
+
+    Exit Function
+
+ErrorSection:
+
+func_Check_ShiharaiKikan_Chohfuku = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_Check_ShiharaiKikan_Chohfuku", Err.Number, Err.Description)
+    On Error GoTo 0
+
+    Erase vData
+
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+'*************************************************************************
+'関数名　　：更新処理(メイン)
+'
+'引　　数　：
+'           TargetSheets        I           チェック対象のシート
+'           lngId               O           支払期間ID(採番したもの)
+'
+'戻り値　　：Boolean (TRUE:正常、FALSE:エラー)
+'
+'機能説明　：更新
+'
+'更新履歴　：2008/06/17 SRA T.Ichikawa      新規作成
+'
+'*************************************************************************
+Public Function gfuncKikan_DoUpdate(ByRef TargetSheets As Object) As Boolean
+
+On Error GoTo ErrorSection
+
+    Dim strGiNo             As String       '外部委託先番号
+    Dim lngSkikanId         As Long         '採番　　支払期間ID
+    Dim lngSkikanIdFirst    As Long         '検索時　支払期間ID
+    Dim lngSkikanM          As Long         '支払期間と同じ月数
+    Dim lngCnt              As Long
+    Dim lngDataCnt          As Long
+    
+    Dim vKeisanKikan()      As Variant      '外部委託計算期間　登録用配列
+    
+    Dim strError            As String
+
+    gfuncKikan_DoUpdate = False
+    
+    Erase vKeisanKikan
+
+    'トランザクション開始
+    cnAdo.BeginTrans
+    
+    With TargetSheets
+        lngCnt = .Range("先頭行").Row + 1
+        Do While (.Range(mLINKCELLNAME & lngCnt) <> vbNullString)
+            '登録対象の行の場合
+            If .Range(mLINKCELLNAME & lngCnt) Then
+            
+                strGiNo = Mid(.Cells(lngCnt, .Range("明細_外部委託先").Column), 1, 1)
+                lngSkikanIdFirst = .Cells(lngCnt, .Range("明細_外部委託支払期間ID").Column)
+                lngSkikanM = .Cells(lngCnt, .Range("支払延長期間月数").Column)
+        
+                '支払期間ＩＤの採番
+                If func_GetIDfromSequence(lngSkikanId) = False Then
+                    GoTo RollbackSection
+                    Exit Function
+                End If
+                
+                '外部委託計算期間登録用のデータ取得
+                If func_GetKeisanInfo(strGiNo, lngSkikanIdFirst, lngSkikanM, vKeisanKikan(), lngDataCnt) Then
+                    '計算期間登録対象が存在した場合
+                    If lngDataCnt > 0 Then
+                        '外部委託計算期間へのInsert
+                        If func_Ins_kyk_gi_keisan_kikan( _
+                                                 strGiNo _
+                                               , lngSkikanId _
+                                               , vKeisanKikan() _
+                                               , lngDataCnt _
+                                               , strError) = False Then
+                            GoTo RollbackSection
+                            Exit Function
+                        End If
+                    End If
+'------------<Modify Start azuma 2008/11/12 > ライセンスフィー期間延長条件変更---------------
+                Else
+                    GoTo RollbackSection
+                    Exit Function
+'------------<Modify End   azuma 2008/11/12 > ライセンスフィー期間延長条件変更---------------
+                End If
+                                
+                '外部委託支払期間へのInsert
+                If func_Ins_kyk_gi_shiharai_kikan( _
+                                         TargetSheets _
+                                       , lngCnt _
+                                       , strGiNo _
+                                       , lngSkikanId _
+                                       , strError) = False Then
+                    GoTo RollbackSection
+                    Exit Function
+                End If
+            
+                lngCnt = lngCnt + 1
+            
+            '登録対象外の行の場合
+            Else
+                lngCnt = lngCnt + 1
+            End If
+                
+        Loop
+        
+    End With
+        
+    'コミット
+    cnAdo.CommitTrans
+
+    Erase vKeisanKikan
+
+    gfuncKikan_DoUpdate = True
+
+    Exit Function
+
+RollbackSection:
+    'ロールバック
+    cnAdo.RollbackTrans
+    
+    Erase vKeisanKikan
+    
+    gfuncKikan_DoUpdate = False
+    Exit Function
+
+ErrorSection:
+
+    gfuncKikan_DoUpdate = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gfuncKikan_DoUpdate", Err.Number, Err.Description)
+    On Error GoTo 0
+    On Error Resume Next
+    'ロールバック
+    cnAdo.RollbackTrans
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Erase vKeisanKikan
+
+End Function
+
+'*************************************************************************
+'関数名　　：外部委託計算期間情報取得処理
+'
+'引　　数　：
+'           strGiNo         I       外部委託先番号
+'           lngSkikanId     I       外部委託支払期間ID
+'           lngSkikanM      I       支払期間の月数
+'           vdata()         O       取得結果
+'           lngRow          O       取得件数
+'
+'戻り値　　：Boolean　(TRUE:正常, FALSE:エラー)
+'
+'機能説明　：支払期間情報を取得する
+'
+'更新履歴　：2008/06/17 SRA T.Ichikawa     新規作成
+'更新履歴　：2008/08/04 SRA Y.Azuma        変更   連結障害対応(No.18)
+'更新履歴　：2008/08/08 SRA Y.Azuma        変更   連結障害対応(No.23)
+'更新履歴　：2008/08/19 SRA Y.Azuma        変更   連結障害対応(No.27)
+'更新履歴　：2008/08/29 SRA Y.Azuma        変更   連結障害対応(No.21)
+'更新履歴　：2008/11/12 SRA Y.Azuma        変更   ライセンスフィー期間延長条件変更
+'
+'*************************************************************************
+Private Function func_GetKeisanInfo(ByVal strGiNo As String _
+                                   , ByVal lngSkikanId As Long _
+                                   , ByVal lngSkikanM As Long _
+                                   , ByRef vData() As Variant _
+                                   , ByRef lngRow As Long) As Boolean
+    Dim strSql      As String
+    Dim lngCol      As Long
+    Dim lngCnt      As Long
+    Dim strErrCode  As String
+    
+    func_GetKeisanInfo = False
+    
+'------------<Modify Start azuma 2008/11/12 > ライセンスフィー期間延長条件変更---------------
+    If strGiNo = RAFI Then
+    'RAFIの場合
+'------------<Modify Start azuma 2008/08/08 > 連結障害対応(No.23)-----------------------
+        strSql = ""
+        strSql = strSql & " SELECT A.GI_NO" & vbCrLf
+        strSql = strSql & "       ,A.GI_SHIHARAI_KIKAN_ID" & vbCrLf
+        strSql = strSql & "       ,A.KOHZA_NO" & vbCrLf
+        strSql = strSql & "       ,A.ISSCD" & vbCrLf
+        strSql = strSql & "       ,A.GI_KEISAN_KIKAN_ID" & vbCrLf
+        strSql = strSql & "       ,TO_CHAR( TO_DATE(A.GI_KEISAN_KIKAN_TO) + 1,             'YYYYMMDD') MAX_KEISAN_KIKAN_FROM" & vbCrLf
+        strSql = strSql & "       ,TO_CHAR( ADD_MONTHS( TO_DATE(A.GI_KEISAN_KIKAN_TO), '" & lngSkikanM & "'), 'YYYYMMDD') MAX_KEISAN_KIKAN_TO" & vbCrLf
+        strSql = strSql & "       ,TO_CHAR((ADD_MONTHS(TO_DATE(A.GI_KEISAN_KIKAN_TO), '" & lngSkikanM & "') - " & vbCrLf
+        strSql = strSql & "        (TO_DATE(A.GI_KEISAN_KIKAN_TO) + 1) ) + 1)         KIKAN_NISSU" & vbCrLf
+        strSql = strSql & "       ,A.GI_KEISAN_HOHHOH" & vbCrLf
+        strSql = strSql & "       ,A.RATE_CODE" & vbCrLf
+        strSql = strSql & "       ,A.UNYOH_HOHSHU_RATE_CODE" & vbCrLf
+        strSql = strSql & "       ,A.GI_SAISHU_KBN" & vbCrLf
+        strSql = strSql & "       ,A.BIKOH" & vbCrLf
+        strSql = strSql & "   FROM  KYK_GI_SHIHARAI_KIKAN S" & vbCrLf
+        strSql = strSql & "        ,KYK_GI_KEISAN_KIKAN   A" & vbCrLf
+        strSql = strSql & "        ,VW_DT001D             C" & vbCrLf
+        strSql = strSql & "   WHERE S.GI_NO                = A.GI_NO" & vbCrLf
+        strSql = strSql & "     AND S.GI_SHIHARAI_KIKAN_ID = A.GI_SHIHARAI_KIKAN_ID" & vbCrLf
+        strSql = strSql & "     AND S.GI_SHIHARAI_KIKAN_TO = A.GI_KEISAN_KIKAN_TO" & vbCrLf
+        strSql = strSql & "     AND S.GI_NO                = '" & strGiNo & "'" & vbCrLf
+        strSql = strSql & "     AND S.GI_SHIHARAI_KIKAN_ID = " & lngSkikanId & vbCrLf
+        strSql = strSql & "     AND S.SAKUJO_FLG           = '0'" & vbCrLf
+        strSql = strSql & "     AND A.SAKUJO_FLG           = '0'" & vbCrLf
+        strSql = strSql & "     AND A.KOHZA_NO             = C.PRTCD" & vbCrLf
+        strSql = strSql & "     AND C.DELT_FLG             = '0'" & vbCrLf
+        strSql = strSql & "     AND (C.CALLOFF_DATE        = 0 OR" & vbCrLf
+        strSql = strSql & "          C.CALLOFF_DATE        > A.GI_KEISAN_KIKAN_TO)" & vbCrLf
+        strSql = strSql & "  ORDER BY" & vbCrLf
+        strSql = strSql & "        GI_NO" & vbCrLf
+        strSql = strSql & "       ,GI_SHIHARAI_KIKAN_ID" & vbCrLf
+        strSql = strSql & "       ,KOHZA_NO" & vbCrLf
+        strSql = strSql & "       ,ISSCD" & vbCrLf
+        strSql = strSql & "       ,GI_KEISAN_KIKAN_ID" & vbCrLf
+    Else
+    'RAFI以外
+        '何も処理なし
+        strSql = ""
+    End If
+'''    strSql = strSql & "  FROM  KYK_GI_KEISAN_KIKAN A," & vbCrLf
+'''    strSql = strSql & "        (SELECT WB.GI_NO" & vbCrLf
+'''    strSql = strSql & "               ,WB.GI_SHIHARAI_KIKAN_ID" & vbCrLf
+'''    strSql = strSql & "               ,WB.KOHZA_NO" & vbCrLf
+'''    strSql = strSql & "               ,WB.ISSCD" & vbCrLf
+'''    strSql = strSql & "               ,WB.GI_KEISAN_KIKAN_TO MAX_KIKAN_TO" & vbCrLf
+'''    strSql = strSql & "           FROM KYK_GI_KEISAN_KIKAN WB" & vbCrLf
+'''    strSql = strSql & "          WHERE WB.GI_NO                = '" & strGiNo & "'" & vbCrLf
+'''    strSql = strSql & "            AND WB.GI_SHIHARAI_KIKAN_ID =  " & lngSkikanId & vbCrLf
+'''    strSql = strSql & "            AND WB.GI_KEISAN_KIKAN_TO   = (SELECT MAX(D.GI_KEISAN_KIKAN_TO) KEISAN_TO_MAX" & vbCrLf
+'''    strSql = strSql & "                                             FROM KYK_GI_KEISAN_KIKAN D" & vbCrLf
+'''    strSql = strSql & "                                            WHERE D.GI_NO                = WB.GI_NO" & vbCrLf
+'''    strSql = strSql & "                                              AND D.GI_SHIHARAI_KIKAN_ID = WB.GI_SHIHARAI_KIKAN_ID" & vbCrLf
+'''    strSql = strSql & "                                              AND D.KOHZA_NO             = WB.KOHZA_NO" & vbCrLf
+'''    strSql = strSql & "                                              AND D.SAKUJO_FLG           = '0'" & vbCrLf
+'''    strSql = strSql & "                                         GROUP BY D.GI_NO" & vbCrLf
+'''    strSql = strSql & "                                                 ,D.GI_SHIHARAI_KIKAN_ID" & vbCrLf
+'''    strSql = strSql & "                                                 ,D.KOHZA_NO)" & vbCrLf
+'''    strSql = strSql & "            AND WB.SAKUJO_FLG = '0'" & vbCrLf
+'''    strSql = strSql & "        ) B," & vbCrLf
+'''    strSql = strSql & "        VW_DT001D C" & vbCrLf
+'''    strSql = strSql & "  WHERE A.GI_NO                = B.GI_NO" & vbCrLf
+'''    strSql = strSql & "    AND A.GI_SHIHARAI_KIKAN_ID = B.GI_SHIHARAI_KIKAN_ID" & vbCrLf
+'''    strSql = strSql & "    AND A.KOHZA_NO             = B.KOHZA_NO" & vbCrLf
+'''    strSql = strSql & "    AND A.ISSCD                = B.ISSCD" & vbCrLf
+'''    strSql = strSql & "    AND A.GI_KEISAN_KIKAN_TO   = B.MAX_KIKAN_TO" & vbCrLf
+'''    strSql = strSql & "    AND A.SAKUJO_FLG           = '0'" & vbCrLf
+'''    strSql = strSql & "    AND A.KOHZA_NO             = C.PRTCD" & vbCrLf
+'''    strSql = strSql & "    AND C.DELT_FLG             = '0'" & vbCrLf
+'''    strSql = strSql & "    AND (C.CALLOFF_DATE        = 0 OR" & vbCrLf
+''''------------<Modify Start azuma 2008/08/19 > 連結障害対応(No.27)-----------------------
+'''    strSql = strSql & "         C.CALLOFF_DATE        > A.GI_KEISAN_KIKAN_TO)" & vbCrLf
+''''    strSql = strSql & "         C.CALLOFF_DATE       >= A.GI_KEISAN_KIKAN_TO)" & vbCrLf
+'------------<Modify End   azuma 2008/08/19 > 連結障害対応(No.27)-----------------------
+'------------<Modify End   azuma 2008/11/12 > ライセンスフィー期間延長条件変更---------------
+
+'    strSql = ""
+'    strSql = strSql & "SELECT" & vbCrLf
+'    strSql = strSql & "    A.GI_NO," & vbCrLf
+'    strSql = strSql & "    A.GI_SHIHARAI_KIKAN_ID," & vbCrLf
+'    strSql = strSql & "    A.KOHZA_NO," & vbCrLf
+'    strSql = strSql & "    A.ISSCD," & vbCrLf
+'    strSql = strSql & "    A.GI_KEISAN_KIKAN_ID," & vbCrLf
+''------------<Modify Start azuma 2008/08/05 > 連結障害対応(No.18)-----------------------
+'    strSql = strSql & "    TO_CHAR(TO_DATE(A.GI_KEISAN_KIKAN_TO)+1, 'YYYYMMDD')                   MAX_KEISAN_KIKAN_FROM ," & vbCrLf
+''    strSql = strSql & "    TO_CHAR(" & vbCrLf
+''    strSql = strSql & "      ADD_MONTHS(" & vbCrLf
+''    strSql = strSql & "        TO_DATE(A.GI_KEISAN_KIKAN_FROM),'" & lngSkikanM & "'), 'YYYYMMDD') MAX_KEISAN_KIKAN_FROM ," & vbCrLf
+''------------<Modify End   azuma 2008/08/05 > 連結障害対応(No.18)-----------------------
+'    strSql = strSql & "    TO_CHAR(" & vbCrLf
+'    strSql = strSql & "      ADD_MONTHS(" & vbCrLf
+'    strSql = strSql & "        TO_DATE(A.GI_KEISAN_KIKAN_TO),'" & lngSkikanM & "'), 'YYYYMMDD')   MAX_KEISAN_KIKAN_TO," & vbCrLf
+'    strSql = strSql & "    (ADD_MONTHS(TO_DATE(A.GI_KEISAN_KIKAN_TO), '" & lngSkikanM & "') - " & vbCrLf
+'    strSql = strSql & "     ADD_MONTHS(TO_DATE(A.GI_KEISAN_KIKAN_FROM), '" & lngSkikanM & "')) + 1 KIKAN_NISSU," & vbCrLf
+'    strSql = strSql & "    A.GI_KEISAN_HOHHOH," & vbCrLf
+'    strSql = strSql & "    A.RATE_CODE," & vbCrLf
+'    strSql = strSql & "    A.UNYOH_HOHSHU_RATE_CODE," & vbCrLf
+'    strSql = strSql & "    A.GI_SAISHU_KBN," & vbCrLf
+'    strSql = strSql & "    A.BIKOH" & vbCrLf
+'    strSql = strSql & "FROM" & vbCrLf
+'    strSql = strSql & "    KYK_GI_KEISAN_KIKAN A," & vbCrLf
+'    strSql = strSql & "   (SELECT" & vbCrLf
+'    strSql = strSql & "        WB.GI_NO," & vbCrLf
+'    strSql = strSql & "        WB.GI_SHIHARAI_KIKAN_ID," & vbCrLf
+'    strSql = strSql & "        WB.KOHZA_NO," & vbCrLf
+'    strSql = strSql & "        WB.ISSCD," & vbCrLf
+'    strSql = strSql & "        MAX(WB.GI_KEISAN_KIKAN_TO) MAX_KIKAN_TO" & vbCrLf
+'    strSql = strSql & "    FROM" & vbCrLf
+'    strSql = strSql & "        KYK_GI_KEISAN_KIKAN WB" & vbCrLf
+'    strSql = strSql & "    WHERE" & vbCrLf
+'    strSql = strSql & "        WB.GI_NO = '" & strGiNo & "'" & vbCrLf
+'    strSql = strSql & "    AND WB.GI_SHIHARAI_KIKAN_ID = " & lngSkikanId & vbCrLf
+'    strSql = strSql & "    AND WB.SAKUJO_FLG = '0'" & vbCrLf
+'    strSql = strSql & "    GROUP BY" & vbCrLf
+'    strSql = strSql & "        WB.GI_NO," & vbCrLf
+'    strSql = strSql & "        WB.GI_SHIHARAI_KIKAN_ID," & vbCrLf
+'    strSql = strSql & "        WB.KOHZA_NO," & vbCrLf
+'    strSql = strSql & "        WB.ISSCD" & vbCrLf
+'    strSql = strSql & "    ) B," & vbCrLf
+'    strSql = strSql & "    VW_DT001D C" & vbCrLf
+'    strSql = strSql & "WHERE" & vbCrLf
+'    strSql = strSql & "    A.GI_NO = B.GI_NO" & vbCrLf
+'    strSql = strSql & "AND A.GI_SHIHARAI_KIKAN_ID = B.GI_SHIHARAI_KIKAN_ID" & vbCrLf
+'    strSql = strSql & "AND A.KOHZA_NO = B.KOHZA_NO" & vbCrLf
+'    strSql = strSql & "AND A.ISSCD = B.ISSCD" & vbCrLf
+'    strSql = strSql & "AND A.GI_KEISAN_KIKAN_TO = B.MAX_KIKAN_TO" & vbCrLf
+'    strSql = strSql & "AND A.SAKUJO_FLG = '0'" & vbCrLf
+'    strSql = strSql & "AND A.KOHZA_NO = C.PRTCD" & vbCrLf
+'    strSql = strSql & "AND C.DELT_FLG = '0'" & vbCrLf
+'    strSql = strSql & "AND (C.CALLOFF_DATE = 0 OR C.CALLOFF_DATE >= A.GI_KEISAN_KIKAN_TO)" & vbCrLf
+'    strSql = strSql & "ORDER BY" & vbCrLf
+'    strSql = strSql & "    GI_NO," & vbCrLf
+'    strSql = strSql & "    GI_SHIHARAI_KIKAN_ID," & vbCrLf
+'    strSql = strSql & "    KOHZA_NO," & vbCrLf
+'    strSql = strSql & "    ISSCD," & vbCrLf
+'    strSql = strSql & "    GI_KEISAN_KIKAN_ID" & vbCrLf
+'------------<Modify End   azuma 2008/08/08 > 連結障害対応(No.23)-----------------------
+    
+    'データ取得
+    Call gclsdb.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow, strErrCode)
+    
+    If Trim(strErrCode) <> "" Then
+        Exit Function
+    End If
+    
+    func_GetKeisanInfo = True
+    
+    Exit Function
+
+ErrHandler:
+    func_GetKeisanInfo = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_GetKeisanInfo", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+'*************************************************************************
+'関数名　　：ID発番処理
+'
+'引　　数　：
+'           lngId       I       採番したID
+'
+'戻り値　　：Boolean (TRUE:正常、FALSE:エラー)
+'
+'機能説明　：シーケンスからIDの採番
+'
+'更新履歴　：2008/06/17 SRA T.Ichikawa    新規作成
+'
+'*************************************************************************
+Private Function func_GetIDfromSequence(ByRef lngId As Long) As Boolean
+
+On Error GoTo ErrorSection
+
+    Dim vData()                 As Variant
+    Dim strSql                  As String
+    Dim lngCol                  As Long
+    Dim lngRow                  As Long
+    Dim strErrCode              As String
+    Dim blnRet                  As Boolean
+
+    func_GetIDfromSequence = False
+
+    strSql = "SELECT KYK_ID_SQ.NEXTVAL FROM DUAL"
+
+    'データ取得
+    blnRet = gclsdb.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow, strErrCode)
+
+    If blnRet Then
+        If Trim(strErrCode) <> "" Then
+            Exit Function
+        Else
+            If IsNumeric(vData(0, 0)) Then
+                lngId = CLng(vData(0, 0))
+            Else
+            '数値以外
+                Exit Function
+            End If
+        End If
+    Else
+        Exit Function
+    End If
+
+    func_GetIDfromSequence = True
+
+    Exit Function
+
+ErrorSection:
+
+    func_GetIDfromSequence = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_GetSeikyuuId", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+'*************************************************************************
+'関数名　　：外部委託支払期間テーブル新規登録(INSERT)処理
+'
+'引　　数　：
+'           TargetSheets    I       処理対象ワークシート
+'           lngCnt          I       画面行番号
+'           strGiNo         I       外部委託先番号
+'           lngId           I       支払期間ID
+'           strError        O       エラーコード
+'
+'戻り値　　：Boolean (TRUE:正常、FALSE:エラー)
+'
+'機能説明　：外部委託支払期間テーブルへINSERTを行う
+'
+'更新履歴　：2008/06/17 SRA T.Ichikawa    新規作成
+'
+'*************************************************************************
+Private Function func_Ins_kyk_gi_shiharai_kikan(ByVal TargetSheets As Object _
+                                              , ByVal lngCnt As Long _
+                                              , ByVal strGiNo As String _
+                                              , ByVal lngId As Long _
+                                              , ByRef strError As String) As Boolean
+
+On Error GoTo ErrorSection
+
+    Dim vData()                 As Variant
+    Dim strSql                  As String
+    Dim lngCol                  As Long
+    Dim lngRow                  As Long
+    Dim strErrCode              As String
+    Dim blnRet                  As Boolean
+
+    func_Ins_kyk_gi_shiharai_kikan = False
+    
+    Erase vData
+
+    With TargetSheets
+        strSql = ""
+        strSql = strSql & " INSERT INTO KYK_GI_SHIHARAI_KIKAN"
+        strSql = strSql & " ("
+        strSql = strSql & "     GI_NO,"                             '外部委託先番号
+        strSql = strSql & "     GI_SHIHARAI_KIKAN_ID,"              '支払期間ID
+        strSql = strSql & "     GI_SHIHARAI_KIKAN_FROM,"            '支払期間FROM
+        strSql = strSql & "     GI_SHIHARAI_KIKAN_TO,"              '支払期間TO
+        strSql = strSql & "     GI_KEIYAKU_KIKAN_FROM,"             '契約期間FROM
+        strSql = strSql & "     GI_KEIYAKU_KIKAN_TO,"               '契約期間TO
+        strSql = strSql & "     SHIHARAI_WARIAI_BUNSHI,"            '支払割合(分子)
+        strSql = strSql & "     SHIHARAI_WARIAI_BUNBO,"             '支払割合(分母)
+        strSql = strSql & "     SHOHIZEI_FLG,"                      '消費税フラグ
+        strSql = strSql & "     SHOHIZEI_RITSU,"                    '消費税率
+        strSql = strSql & "     GENSENZEI_FLG,"                     '源泉税フラグ
+        strSql = strSql & "     GENSENZEI_RITSU,"                   '源泉税率
+        strSql = strSql & "     NENKAN_NISSU_KBN,"                  '年間日数区分
+        strSql = strSql & "     TOHROKU_YMD,"                       '登録日
+        strSql = strSql & "     KOHSHIN_YMD,"                       '更新日
+        strSql = strSql & "     KOHSHIN_PGM_ID,"                    '更新プログラムID
+        strSql = strSql & "     KOHSHIN_TANTOHSHA,"                 '更新担当者
+        strSql = strSql & "     SAKUJO_FLG"                         '削除フラグ
+        strSql = strSql & " )"
+        strSql = strSql & " VALUES"
+        strSql = strSql & " ("
+        strSql = strSql & "     '" & strGiNo & "',"
+        strSql = strSql & "     " & lngId & ","
+        strSql = strSql & "     '" & Trim(.Cells(lngCnt, .Range("支払期間FROM").Column)) & "',"
+        strSql = strSql & "     '" & Trim(.Cells(lngCnt, .Range("支払期間TO").Column)) & "',"
+        strSql = strSql & "     '" & Trim(.Cells(lngCnt, .Range("契約期間FROM").Column)) & "',"
+        strSql = strSql & "     '" & Trim(.Cells(lngCnt, .Range("契約期間TO").Column)) & "',"
+        strSql = strSql & "     '" & Trim(.Cells(lngCnt, .Range("支払割合分子").Column)) & "',"
+        strSql = strSql & "     '" & Trim(.Cells(lngCnt, .Range("支払割合分母").Column)) & "',"
+        strSql = strSql & "     '" & Mid(Trim(.Cells(lngCnt, .Range("消費税").Column)), 1, 1) & "',"
+        strSql = strSql & "     " & IIf(Trim(.Cells(lngCnt, .Range("消費税率").Column)) = "", "NULL", Trim(.Cells(lngCnt, .Range("消費税率").Column))) & ","
+        strSql = strSql & "     '" & Mid(Trim(.Cells(lngCnt, .Range("源泉税").Column)), 1, 1) & "',"
+        strSql = strSql & "     " & IIf(Trim(.Cells(lngCnt, .Range("源泉税率").Column)) = "", "NULL", Trim(.Cells(lngCnt, .Range("源泉税率").Column))) & ","
+        strSql = strSql & "     '" & Mid(Trim(.Cells(lngCnt, .Range("年間日数").Column)), 1, 1) & "',"
+        strSql = strSql & "     SYSDATE,"
+        strSql = strSql & "     SYSDATE,"
+        strSql = strSql & "     '" & UPDATE_PGM_ID & "',"
+        strSql = strSql & "     '" & UPDATE_USER & "',"
+        strSql = strSql & "     '0'"
+        strSql = strSql & " )"
+    End With
+
+    '実行
+    blnRet = gclsdb.DoExequteSql(gcINSERT, strSql, vData, lngCol, lngRow, strErrCode)
+
+    If blnRet = False Then
+        If Trim(strErrCode) <> "" Then
+            strError = strErrCode
+        End If
+
+        Exit Function
+    End If
+
+    Erase vData
+    func_Ins_kyk_gi_shiharai_kikan = True
+
+    Exit Function
+
+ErrorSection:
+
+    func_Ins_kyk_gi_shiharai_kikan = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_Ins_kyk_gi_shiharai_kikan", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Erase vData
+
+End Function
+
+'*************************************************************************
+'関数名　　：外部委託計算期間テーブルの登録処理
+'
+'引　　数　：
+'           strGiNo         I       外部委託先番号
+'           lngSkikanId     I       支払期間ID
+'           vKeisanKikan    I       資産情報配列
+'           lngDataCnt      I       登録件数
+'           strError        O       エラーコード
+'
+'戻り値　　：Boolean (TRUE:正常、FALSE:エラー)
+'
+'機能説明　：外部委託計算期間テーブルへのUPDATE,INSERTを行う
+'
+'更新履歴　：2008/06/17 SRA T.Ichikawa    新規作成
+'更新履歴　：2008/08/29 SRA Y.Azuma       変更   連結障害対応(No.21)
+'更新履歴　：2008/11/12 SRA Y.Azuma    変更   ライセンスフィー期間延長条件変更
+'
+'*************************************************************************
+Private Function func_Ins_kyk_gi_keisan_kikan(ByVal strGiNo As String _
+                                          , ByVal lngSkikanId As Long _
+                                          , ByVal vKeisanKikan As Variant _
+                                          , ByVal lngDataCnt As Long _
+                                          , ByRef strError As String) As Boolean
+
+On Error GoTo ErrorSection
+
+    Dim vData()                 As Variant
+    Dim strSql                  As String
+    Dim lngCol                  As Long
+    Dim lngRow                  As Long
+    Dim lngCnt                  As Long
+    Dim blnRet                  As Boolean
+    Dim strErrCode              As String
+    Dim lngKkikanId             As Long     '計算期間ID
+    
+    func_Ins_kyk_gi_keisan_kikan = False
+    
+    Erase vData
+    
+    For lngCnt = 0 To lngDataCnt - 1
+            
+        '計算期間ＩＤの採番
+        If func_GetIDfromSequence(lngKkikanId) = False Then
+            Exit Function
+        End If
+
+        '外部委託計算期間テーブルにINSERTする
+        strSql = ""
+        strSql = strSql & " INSERT INTO KYK_GI_KEISAN_KIKAN "
+        strSql = strSql & " ("
+        strSql = strSql & "     GI_NO,"                             '外部委託先番号
+        strSql = strSql & "     GI_SHIHARAI_KIKAN_ID,"              '支払期間ID
+        strSql = strSql & "     KOHZA_NO,"                          '口座番号
+        strSql = strSql & "     ISSCD,"                             '銘柄コード
+        strSql = strSql & "     GI_KEISAN_KIKAN_ID,"                '計算期間ID
+        strSql = strSql & "     GI_KEISAN_KIKAN_FROM,"              '計算期間FROM
+        strSql = strSql & "     GI_KEISAN_KIKAN_TO,"                '計算期間TO
+        strSql = strSql & "     GI_KEISAN_KIKAN_NISSU,"             '計算期間日数
+        strSql = strSql & "     GI_KEISAN_HOHHOH,"                  '計算方法
+        strSql = strSql & "     RATE_CODE,"                         '料率コード
+        strSql = strSql & "     UNYOH_HOHSHU_RATE_CODE,"            '運用報酬料率コード
+        strSql = strSql & "     SEIKOH_HOHSHU_WARIAI_BUNSHI,"       '成功報酬支払割合(分子)
+        strSql = strSql & "     SEIKOH_HOHSHU_WARIAI_BUNBO,"        '成功報酬支払割合(分母)
+        strSql = strSql & "     COMMITMENT_GAKU,"                   'コミットメント金額
+        strSql = strSql & "     COMMITMENT_MNGCD,"                  'コミットメント通貨
+        strSql = strSql & "     TAISHOH_SEIKYU_KIKAN_ID,"           '対象請求期間ID
+        strSql = strSql & "     TAISHOH_HIZUKE_SHURUI,"             '対象日付種類
+        strSql = strSql & "     GI_SAISHU_KBN,"                     '最終区分
+        strSql = strSql & "     BIKOH,"                             '備考
+        strSql = strSql & "     TOHROKU_YMD,"                       '登録日
+        strSql = strSql & "     KOHSHIN_YMD,"                       '更新日
+        strSql = strSql & "     KOHSHIN_PGM_ID,"                    '更新プログラムID
+        strSql = strSql & "     KOHSHIN_TANTOHSHA,"                 '更新担当者
+        strSql = strSql & "     SAKUJO_FLG"                         '削除フラグ
+        strSql = strSql & ") VALUES ("
+        strSql = strSql & "     '" & strGiNo & "',"
+        strSql = strSql & "     " & lngSkikanId & ","
+        strSql = strSql & "     '" & vKeisanKikan(C_GKK_KOHZA_NO, lngCnt) & "',"
+'------------<Modify Start azuma 2008/08/29 > 連結障害対応(No.21)-----------------------
+        strSql = strSql & "     '" & func_ChkQuoteshon(CStr(vKeisanKikan(C_GKK_ISSCD, lngCnt)), "'") & "',"
+'''        strSql = strSql & "     '" & vKeisanKikan(C_GKK_ISSCD, lngCnt) & "',"
+'------------<Modify End   azuma 2008/08/29 > 連結障害対応(No.21)-----------------------
+        strSql = strSql & "     " & lngKkikanId & ","
+        strSql = strSql & "     '" & vKeisanKikan(C_GKK_KEISAN_KIKAN_FROM, lngCnt) & "',"
+        strSql = strSql & "     '" & vKeisanKikan(C_GKK_KEISAN_KIKAN_TO, lngCnt) & "',"
+        strSql = strSql & "     '" & vKeisanKikan(C_GKK_KEISAN_KIKAN_NISSU, lngCnt) & "',"
+        strSql = strSql & "     '" & vKeisanKikan(C_GKK_KEISAN_HOHHOH, lngCnt) & "',"
+        strSql = strSql & "     '" & vKeisanKikan(C_GKK_RATE_CODE, lngCnt) & "',"
+        strSql = strSql & "     '" & vKeisanKikan(C_GKK_UNYOH_HOHSHU_RATE_CODE, lngCnt) & "',"
+        strSql = strSql & "     NULL,"                              '<-- RAFIのみ対応のためNULL固定
+        strSql = strSql & "     NULL,"                              '<-- 同上
+        strSql = strSql & "     NULL,"                              '<-- 同上
+        strSql = strSql & "     NULL,"                              '<-- 同上
+        strSql = strSql & "     NULL,"                              '<-- 同上
+        strSql = strSql & "     NULL,"                              '<-- 同上
+        strSql = strSql & "     '" & vKeisanKikan(C_GKK_SAISHU_KBN, lngCnt) & "',"
+'------------<Modify Start azuma 2008/11/12 > ライセンスフィー期間延長条件変更---------------
+        strSql = strSql & "     '" & func_ChkQuoteshon(CStr(vKeisanKikan(C_GKK_BIKOH, lngCnt)), "'") & "',"
+''        strSql = strSql & "     '" & vKeisanKikan(C_GKK_BIKOH, lngCnt) & "',"
+'------------<Modify End   azuma 2008/11/12 > ライセンスフィー期間延長条件変更---------------
+        strSql = strSql & "     SYSDATE, "
+        strSql = strSql & "     SYSDATE, "
+        strSql = strSql & "     '" & UPDATE_PGM_ID & "',"
+        strSql = strSql & "     '" & UPDATE_USER & "',"
+        strSql = strSql & "     '0'"
+        strSql = strSql & ")"
+        '実行
+        blnRet = gclsdb.DoExequteSql(gcINSERT, strSql, vData, lngCol, lngRow, strErrCode)
+        If blnRet = False Then
+            If Trim(strErrCode) <> "" Then
+                strError = strErrCode
+            End If
+            Exit Function
+        End If
+            
+    Next lngCnt
+
+    Erase vData
+
+    func_Ins_kyk_gi_keisan_kikan = True
+
+    Exit Function
+
+ErrorSection:
+
+    func_Ins_kyk_gi_keisan_kikan = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_Ins_kyk_gi_keisan_kikan", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+    Erase vData
+
+End Function
+

@@ -1,0 +1,68 @@
+VERSION 1.0 CLASS
+BEGIN
+  MultiUse = -1  'True
+END
+Attribute VB_Name = "ThisWorkbook"
+Attribute VB_GlobalNameSpace = False
+Attribute VB_Creatable = False
+Attribute VB_PredeclaredId = True
+Attribute VB_Exposed = True
+Option Explicit
+Const MODULE_NAME = "ThisWorkBook"
+
+
+
+'ブッククローズ処理
+Private Sub Workbook_BeforeClose(Cancel As Boolean)
+    
+    'ブックの保護
+    Call gCom01_BookProtect(ThisWorkbook, True)
+
+'    Call 再表示
+
+
+    '強制終了
+    If Me.Saved = False Then
+        ThisWorkbook.Application.DisplayAlerts = False
+        ThisWorkbook.Saved = True
+    End If
+
+End Sub
+
+
+'ブックオープン処理
+Private Sub Workbook_Open()
+
+    ThisWorkbook.Application.ScreenUpdating = False
+    
+    Call HideItem
+    
+    '初期起動関数呼出
+    Call g_subKeisanInitialize
+    
+    '印刷ボタンの無効
+    ThisWorkbook.Worksheets(MAIN_SHEETNAME).cmdPrint.Enabled = False
+    
+    ThisWorkbook.Worksheets(MAIN_SHEETNAME).Activate
+    ThisWorkbook.Application.ActiveWindow.ScrollRow = 1
+    ThisWorkbook.Application.ActiveWindow.ScrollColumn = 1
+    ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range("口座番号").Select
+    
+'*** 2007/03/14 PH3対応 Added By H.Anpo Start
+    With ThisWorkbook.Worksheets(MAIN_SHEETNAME)
+        'ボタンの可否制御
+        '調整資産(+/-)
+        .cmdAdd2.Enabled = True
+        .cmdDel2.Enabled = True
+        'T21調整資産
+        .cmdAdd3.Enabled = True
+        .cmdDel3.Enabled = True
+    End With
+'*** 2007/03/14 PH3対応 Added By H.Anpo End
+
+    ThisWorkbook.Application.ScreenUpdating = True
+End Sub
+
+
+
+

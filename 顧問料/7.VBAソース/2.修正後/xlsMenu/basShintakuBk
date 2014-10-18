@@ -1,0 +1,34 @@
+Attribute VB_Name = "basShintakuBk"
+Option Explicit
+
+Const MODULE_NAME = "basShintakuBk"
+
+'*************************************************************************
+'関数名　　：信託銀行一覧取得SQL作成
+'
+'引　　数　：   strSql      O       リスト一覧検索SQL
+'
+'戻り値　　：なし
+'
+'機能説明　：
+'
+'更新履歴　：2007/01/17 SRA Y.Azuma    新規作成
+'          ：2013/04/12 GUT金 顧問バック更改対応
+'
+'*************************************************************************
+Public Sub gsub_CreateSql_ShintakuBk(ByRef strSql As String)
+
+    strSql = ""
+    strSql = strSql & " SELECT DISTINCT"
+    strSql = strSql & "        TRIM(A.CD_1)||'" & LIST_SEPARATER & "'||TRIM(A.NAME_J) AS ReqData"
+    strSql = strSql & "   FROM VW_DT301D A, VW_DT001D B"
+    strSql = strSql & "  WHERE A.CD_KBN ='15'"
+'------------<顧問バック更改対応 2013/04/12 GUT金 START> ------------
+    'strSql = strSql & "    AND B.SETTEI_KBN ='1'"
+    strSql = strSql & "    AND B.settei_kbn ='0'"
+    strSql = strSql & "    AND B.gengo ='0'"
+'------------<顧問バック更改対応 2013/04/12 GUT金 END> --------------
+    strSql = strSql & "    AND trim(A.CD_1) = trim(B.SINTAKU_BANK_CD)"
+    strSql = strSql & "  ORDER BY ReqData"
+
+End Sub

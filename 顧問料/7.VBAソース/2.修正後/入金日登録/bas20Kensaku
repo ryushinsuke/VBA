@@ -1,0 +1,1086 @@
+Attribute VB_Name = "bas20Kensaku"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：国内顧問料計算システム・計算方法
+'
+'オブジェクト名：bas20Kensaku
+'
+'機能概要　：検索ボタン処理
+'
+'更新履歴　：2006/08/28 SRA H.早川    新規作成
+'
+'*************************************************************************
+
+Const MODULE_NAME = "bas20Kensaku"
+
+
+
+'*************************************************************************
+'関数名　　：検索処理メイン処理
+'
+'引　　数　：
+'           objTarget        I           対象のシート
+'           blnRefresh       I           画面再表示指定(True:再表示する)
+'
+'戻り値　　：
+'
+'機能説明　：
+'
+'更新履歴　：2006/08/28 SRA H.早川    新規作成
+'
+'*************************************************************************
+Public Sub gsub_KensakuMain(ByRef objTarget As Object _
+                          , ByVal blnRefresh As Boolean)
+
+On Error GoTo ErrorSection
+
+    Dim blnRet As Boolean
+    Dim lngCnt As Long
+    
+    blnRet = False
+    
+    '画面クリア処理
+    Call g_subKeisanIniScreenH(objTarget)   'ヘッダー部
+    Call g_subKeisanIniScreenD(objTarget)   '明細部
+    
+    '入力チェック処理(検索時)
+    blnRet = gfuncSeikyu_SearchInputCheck(objTarget)
+    
+    If blnRet = False Then
+        Exit Sub
+    End If
+    
+    blnRet = False
+    
+    If blnRefresh Then
+        With Application
+            lngCnt = fncKsCmnSearchDataTopRow(objTarget, 1)  '明細先頭行取得
+            
+            objTarget.Range(Cells(lngCnt, DTCol.入金Chk), _
+                            Cells(lngCnt, DTCol.入金Chk)).Select
+            .ScreenUpdating = True
+            objTarget.Cells(lngCnt, DTCol.入金Chk).Activate
+            .ScreenUpdating = False
+        End With
+    End If
+    
+    '検索処理とデータ設定
+    blnRet = gfuncSeikyu_DoSearch(objTarget)
+    
+    If blnRet = False Then
+        'システムエラー
+        Call gfunc_ErrorMsg(4, 1, "", "")
+        objTarget.cmdSearch.Activate   'フォーカスを検索ボタンに戻す
+        
+        Exit Sub
+    End If
+        
+    lngCnt = fncKsCmnSearchDataTopRow(objTarget, 1)  '明細先頭行取得
+    objTarget.Cells(lngCnt, DTCol.入金Chk).Activate
+    Exit Sub
+    
+ErrorSection:
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gsub_KensakuMain", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Sub
+
+
+'*************************************************************************
+'関数名　　：入力チェック処理(検索時)
+'
+'引　　数　：
+'           TargetSheets        I           チェック対象のシート
+'
+'戻り値　　：
+'
+'機能説明　：
+'
+'更新履歴　：2006/08/28 SRA H.早川    新規作成
+'
+'*************************************************************************
+Public Function gfuncSeikyu_SearchInputCheck(ByRef TargetSheets As Object) As Boolean
+On Error GoTo ErrorSection
+    Dim strKozaNo       As String
+    Dim strDateNm       As String
+    
+    gfuncSeikyu_SearchInputCheck = False
+    strKozaNo = ""
+    
+'１．【口座番号】
+    strKozaNo = Trim(TargetSheets.Range("口座番号"))
+
+    '①桁数ﾁｪｯｸ
+    If strKozaNo <> "" Then     ''入力なしなら何もしない
+        If Len(strKozaNo) >= 8 Then
+            '"口座番号：入力に誤りがあります。"
+            subCmnSetFocus TargetSheets.Range("口座番号") 'フォーカス位置付け
+            Call gfunc_ErrorMsg(3, 10000, "", "")   ' "口座番号", "7桁以内で入力して下さい。")
+            Exit Function
+        Else
+        '8桁未満はゼロパディングする。
+             strKozaNo = gfunc_KozaNoFormat(strKozaNo)
+             TargetSheets.Range("口座番号") = strKozaNo
+        End If
+        
+        '②口座の存在チェック
+        If func_KozaNoExist(TargetSheets, strKozaNo) = False Then
+            '"該当する口座番号が存在しません。"
+            subCmnSetFocus TargetSheets.Range("口座番号") 'フォーカス位置付け
+            Call gfunc_ErrorMsg(3, 14, "", "")          ', "口座番号", "")
+            Exit Function
+        End If
+    End If
+    
+'２．【請求期間FROM,TO】
+    strDateNm = "請求期間"
+    If Not func_DateRangeChk(Trim(TargetSheets.Range(strDateNm & "FROM")) _
+                           , Trim(TargetSheets.Range(strDateNm & "TO")) _
+                                       , strDateNm, TargetSheets) Then Exit Function
+
+'３．【請求日FROM,TO】
+    strDateNm = "請求日"
+    If Not func_DateRangeChk(Trim(TargetSheets.Range(strDateNm & "FROM")) _
+                           , Trim(TargetSheets.Range(strDateNm & "TO")) _
+                                       , strDateNm, TargetSheets) Then Exit Function
+
+'４．【入金予定日FROM,TO】
+    strDateNm = "入金予定日"
+    If Not func_DateRangeChk(Trim(TargetSheets.Range(strDateNm & "FROM")) _
+                           , Trim(TargetSheets.Range(strDateNm & "TO")) _
+                                       , strDateNm, TargetSheets) Then Exit Function
+
+'５．【入金日FROM,TO】
+    strDateNm = "入金日"
+    If Not func_DateRangeChk(Trim(TargetSheets.Range(strDateNm & "FROM")) _
+                           , Trim(TargetSheets.Range(strDateNm & "TO")) _
+                                       , strDateNm, TargetSheets) Then Exit Function
+
+'６．【入金日FROM,TO】と「未入金だけを表示」の関連チェック
+    strDateNm = "入金日"
+    Select Case True
+    Case Trim(TargetSheets.Range(strDateNm & "FROM")) & _
+         Trim(TargetSheets.Range(strDateNm & "TO")) = ""        '入金日入力なしならチェック不要
+    Case TargetSheets.OptionButton1
+        subCmnSetFocus TargetSheets.Range("未入金だけを表示")    'フォーカス位置付け
+        Call gfunc_ErrorMsg(3, 10001, "", "")                   ', "「未入金だけを表示」の選択と「入金日（範囲）」の指定は矛盾してます。")
+        Exit Function
+    End Select
+
+    gfuncSeikyu_SearchInputCheck = True
+
+    Exit Function
+    
+ErrorSection:
+
+    gfuncSeikyu_SearchInputCheck = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gfuncSeikyu_SearchInputCheck", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+
+End Function
+
+'*************************************************************************
+'関数名　　：日付範囲の指定チェック処理
+'
+'引　　数　：
+'           strDateFm    I       開始日付
+'           strDateTo    I       終了日付
+'           strDateNm    I       データ表記名
+'           TargetSheets I       対象シート
+'
+'戻り値　　：Boolean
+'
+'機能説明　：日付範囲の指定チェック
+'
+'更新履歴　：2006/08/28 SRA H.早川    新規作成
+'
+'*************************************************************************
+Private Function func_DateRangeChk(ByRef strDateFm As String _
+                                  , ByRef strDateTo As String _
+                                  , ByRef strDateNm As String _
+                                  , ByRef TargetSheets As Object) As Boolean
+
+    func_DateRangeChk = False       'エラーで初期化
+    
+    '①開始日付カレンダーﾁｪｯｸ
+    If Trim(strDateFm) <> "" Then
+    '入力あり
+        If gfunc_CheckDate(strDateFm) = False Then
+            '"日付(開始)：入力に誤りがあります。"
+            subCmnSetFocus TargetSheets.Range(strDateNm & "FROM") 'フォーカス位置付け
+            Call gfunc_ErrorMsg(3, 3, strDateNm & "(開始)", "")
+            Exit Function
+        End If
+    End If
+    
+    '②終了日付カレンダーﾁｪｯｸ　＆　大小判定
+    If Trim(strDateTo) <> "" Then
+    '入力あり
+        If gfunc_CheckDate(strDateTo) = False Then
+            '"日付(終了)：入力に誤りがあります。"
+            subCmnSetFocus TargetSheets.Range(strDateNm & "TO") 'フォーカス位置付け
+            Call gfunc_ErrorMsg(3, 3, strDateNm & "(終了)", "")
+            Exit Function
+        End If
+        
+        If strDateTo < strDateFm Then
+            '"日付(開始/終了)：期間の指定に誤りがあります。"
+            subCmnSetFocus (TargetSheets.Range(strDateNm & "FROM"))
+            Call gfunc_ErrorMsg(3, 5, strDateNm & "(開始/終了)", "")
+            Exit Function
+        End If
+    End If
+
+    func_DateRangeChk = True       '異常なし
+
+End Function
+    
+
+    
+    
+'*************************************************************************
+'関数名　　：口座番号の存在チェック処理
+'
+'引　　数　：
+'           strKozaNo   I       口座番号
+'
+'戻り値　　：Boolean
+'
+'機能説明　：口座番号の存在チェック
+'
+'更新履歴　：2006/08/28 SRA H.早川    新規作成
+'更新履歴　：2008/01/23 SRA Y.Azuma   変更     (PH4)特殊文字バグ対応
+'          : 2013/04/10 GUT 梁賀松 顧問バック更改対応
+'
+'*************************************************************************
+Private Function func_KozaNoExist(ByRef TargetSheets As Object, ByVal strKozaNo As String) As Boolean
+    Dim strSql      As String
+    Dim vData()     As Variant
+    Dim lngCol      As Long
+    Dim lngRow      As Long
+    Dim lngCnt      As Long
+    Dim strData1    As String
+
+    func_KozaNoExist = False
+
+   strSql = ""
+   strSql = strSql & " SELECT"
+   strSql = strSql & "     NAME_RJ"      '略称を表示
+   strSql = strSql & " FROM"
+   strSql = strSql & "     VW_DT001D"
+   strSql = strSql & " WHERE"
+'------------<Modify Start azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+'   strSql = strSql & "     PRTCD='" & strKozaNo & "'   AND"
+'------------<顧問バック更改対応 2013/04/10 GUT梁賀松 START> ------------
+'   strSql = strSql & "     PRTCD='" & func_ChkQuoteshon(strKozaNo, "'") & "'   AND"
+   strSql = strSql & "     PRTCD='" & func_ChkQuoteshon(strKozaNo, "'") & "'   "
+'------------<Modify End   azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+'   strSql = strSql & "     DELT_FLG='0'"
+'------------<顧問バック更改対応 2013/04/10 GUT梁賀松 END> ------------
+   strSql = strSql & " "
+
+    'データ取得
+    Call gclsdb.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow)
+
+''''''    strData1 = ""
+''''''    '取得データがある場合を名称をセルに設定
+''''''    If lngRow > 0 Then
+''''''         strData1 = vData(0, 0)
+''''''    Else
+''''''        strData1 = ""
+''''''    End If
+''''''
+''''''    TargetSheets.Range("口座名称") = strData1
+''''''
+
+    Erase vData
+
+    'データありの場合のみ正常
+    If lngRow > 0 Then
+        func_KozaNoExist = True
+    End If
+
+    Exit Function
+
+ErrHandler:
+    func_KozaNoExist = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_KozaNoExist", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Erase vData
+'    MsgBox "Error:func_KozaNoExist" & vbCrLf & Err.Description
+
+
+End Function
+
+
+
+'*************************************************************************
+'関数名　　：
+'
+'引　　数　：
+'           TargetSheets       I       対象シート
+'
+'戻り値　　：
+'
+'機能説明　：
+'
+'更新履歴　：2006/08/28 SRA H.早川    新規作成
+'
+'*************************************************************************
+Public Function gfuncSeikyu_DoSearch(ByRef TargetSheets As Object) As Boolean
+On Error GoTo Error_Section
+    
+    Dim blnRet          As Boolean
+    Dim strKozaNo       As String
+    Dim strKikan        As String
+    
+    Dim vDatSeikyu()    As Variant      '請求情報データ
+    Dim lngSeikyuCnt    As Long         '請求情報データ件数
+    
+    Erase vDatSeikyu
+    
+    gfuncSeikyu_DoSearch = False
+
+'3.請求情報の取得
+    blnRet = func_GetSeikyuInfo(TargetSheets, strKozaNo, Replace(strKikan, "/", "") _
+                                   , vDatSeikyu, lngSeikyuCnt)
+    Select Case True
+    Case Not blnRet         '例外エラー発生
+        Exit Function
+    Case lngSeikyuCnt = 0   '該当データなし
+        Call gfunc_ErrorMsg(3, 9, "", "")
+        gfuncSeikyu_DoSearch = True
+        Exit Function
+    End Select
+    
+'4.取得データの表示
+
+    blnRet = func_SetSeikyuInfo(TargetSheets, 1, vDatSeikyu, lngSeikyuCnt)
+    
+    If blnRet = False Then
+        Exit Function
+    End If
+    
+    '取得データをメモリーから破棄
+    Erase vDatSeikyu
+    
+'5.変更判定書式の設定
+    With TargetSheets
+        .Range("変更比較FLAG合計").Formula = "=SUM(" & _
+            fncCmnCellAdrCnv(列→英字, DTCol.変更比較Flag) & Trim(Str(fncKsCmnSearchDataTopRow(TargetSheets, 1))) & _
+            ":" & _
+            fncCmnCellAdrCnv(列→英字, DTCol.変更比較Flag) & Trim(Str(fncKsCmnSearchDataTopRow(TargetSheets, 1) + lngSeikyuCnt - 1)) & ")"
+    End With
+
+'6.ボタンを使用可能とする。
+    With TargetSheets
+        .CmdAll.Enabled = True
+    End With
+    
+    gfuncSeikyu_DoSearch = True
+
+
+    Exit Function
+
+Error_Section:
+
+    gfuncSeikyu_DoSearch = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gfuncSeikyu_DoSearch", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+    Erase vDatSeikyu
+
+End Function
+
+
+
+
+
+'*************************************************************************
+'関数名　　：請求情報取得処理
+'
+'引　　数　：
+'           TargetSheets    I       処理対象ワークシート
+'           strKozaNo       I       口座番号
+'           strKikan        I       顧問料請求期間
+'           vdata()         O       取得結果
+'           lngRow          O       取得件数
+'
+'戻り値　　：Boolean
+'
+'機能説明　：請求情報を取得する
+'
+'更新履歴　：2006/08/28 SRA H.早川    新規作成
+'　　　　　：2006/12/11 SRA H.早川    SQLにTRUNC関数付加（ｶｽﾀﾑ集計関数が少数に非対応）
+'　　　　　：2007/01/17 SRA Y.Azuma    変更     (仕変)総No.185 信託銀行リストのコード入力対応
+'　　　　　：2007/02/15 SRA H.早川    SQL のORDER 条件を追加（従来GROUP BY によっていた）
+'　　　　　：2007/04/10 SRA T.Ichikawa 変更     SQLを修正(平残と断面のSQLをわける、返戻金の場合は表示しない)
+'　　　　　：2007/05/09 SRA T.Ichikawa 変更     SQLを修正(返戻金を表示する)
+'　　　　　：2007/08/23 SRA T.Ichikawa 変更     SQLを修正(修正額採用フラグが"1"の場合、請求顧問料に強制修正額を表示する)
+'更新履歴　：2008/01/23 SRA Y.Azuma    変更     (PH4)特殊文字バグ対応
+'          : 2013/04/10 GUT 梁賀松 顧問バック更改対応
+'
+'*************************************************************************
+Private Function func_GetSeikyuInfo(ByRef TargetSheets As Object _
+                                   , ByVal strKozaNo As String _
+                                   , ByVal strKikan As String _
+                                   , ByRef vData() As Variant _
+                                   , ByRef lngRow As Long) As Boolean
+    Dim strSql       As String
+    Dim strSqlWhere  As String
+    Dim strWhereItem As String
+    Dim lngCol       As Long
+    Dim lngCnt       As Long
+    Dim strErrCode   As String
+    
+'------------<Add Start T.Ichikawa 2007/04/10 > -----------------------
+    Dim lngPoint    As Long
+'------------<Add End   T.Ichikawa 2007/04/10 > -----------------------
+    
+    func_GetSeikyuInfo = False
+    
+'------------<Modify Start T.Ichikawa 2007/04/10 > -----------------------
+'    strSql = _
+'        "SELECT" & _
+'            " MAX(DECODE(A.STATUS,'2','TRUE','FALSE'))" & _
+'            ",MAX(NVL(A.NYUKIN_YMD,NVL(A.NYUKIN_YOTEI_YMD,TO_CHAR(SYSDATE,'YYYYMMDD'))))" & _
+'            ",MAX(A.NYUKIN_YOTEI_YMD)" & _
+'                ",A.KOHZA_NO" & _
+'            ",MAX(B.NAME_RJ)" & _
+'            ",MAX(A.SEIKYUSHO_KIKAN_FROM)" & _
+'            ",MAX(A.SEIKYUSHO_KIKAN_TO)" & _
+'            ",MAX(A.SEIKYU_YMD)" & _
+'            ",MAX(DECODE(A.HIZUKE_SHURUI,'1','上期','2','下期','3','通期',''))" & _
+'            ",TRUNC(SUM(C.KAZEI_ATO_KONKAI_SEIKYU_GAKU))" & _
+'            ",TRUNC(SUM(C.SHOHIZEI_GAKU))" & _
+'                ",A.SEIKYU_KIKAN_ID" & _
+'                ",A.HIZUKE_SHURUI" & _
+'        " FROM" & _
+'             " KYK_SEIKYU_KANRI A" & _
+'                    ",VW_DT001D B" & _
+'            ",KYK_KOMONRYOH_SUM C" & _
+'                        ",KYK_KOMONRYOH_SUM C" & _
+'        " WHERE "
+'
+'    strSqlWhere = ""
+'    With TargetSheets
+'        strWhereItem = Trim(.Range("口座番号"))
+'        If strWhereItem <> "" Then
+'            strSqlWhere = strSqlWhere & " AND A.KOHZA_NO = '" & strWhereItem & "'"
+'        End If
+'
+''------------<Modify Start azuma 2007/01/17 > -----------------------
+'        Dim lngPoint    As Long
+'
+'        lngPoint = InStr(1, .Range("信託銀行コード").Text, LIST_SEPARATER)
+'        If lngPoint = 0 Then
+'            strWhereItem = .Range("信託銀行コード").Text
+'        Else
+'            strWhereItem = Mid(.Range("信託銀行コード").Text, 1, lngPoint - 1)
+'            strWhereItem = Left(strWhereItem & String(6, " "), 6)
+'        End If
+''        strWhereItem = Trim(Left(.Range("信託銀行コード"), 3))
+''------------<Modify End   azuma 2007/01/17 > -----------------------
+'        If strWhereItem <> "" Then
+'            strSqlWhere = strSqlWhere & " AND A.KOHZA_NO IN " & _
+'                        "(SELECT PRTCD FROM VW_DT001D WHERE SINTAKU_BANK_CD = '" & _
+'                        strWhereItem & "')"
+'        End If
+'
+'        strWhereItem = Trim(.Range("請求期間FROM"))
+'        If strWhereItem <> "" Then
+'            strSqlWhere = strSqlWhere & " AND A.SEIKYUSHO_KIKAN_FROM = '" & strWhereItem & "'"
+'        End If
+'
+'        strWhereItem = Trim(.Range("請求期間TO"))
+'        If strWhereItem <> "" Then
+'            strSqlWhere = strSqlWhere & " AND A.SEIKYUSHO_KIKAN_TO = '" & strWhereItem & "'"
+'        End If
+'
+'        strWhereItem = Trim(.Range("請求日FROM"))
+'        If strWhereItem <> "" Then
+'            strSqlWhere = strSqlWhere & " AND A.SEIKYU_YMD >= '" & strWhereItem & "'"
+'        End If
+'
+'        strWhereItem = Trim(.Range("請求日TO"))
+'        If strWhereItem <> "" Then
+'            strSqlWhere = strSqlWhere & " AND A.SEIKYU_YMD <= '" & strWhereItem & "'"
+'        End If
+'
+'        strWhereItem = Trim(.Range("入金予定日FROM"))
+'        If strWhereItem <> "" Then
+'            strSqlWhere = strSqlWhere & " AND (A.NYUKIN_YOTEI_YMD >= '" & strWhereItem & _
+'                            "' OR A.NYUKIN_YOTEI_YMD IS NULL)"
+'        End If
+'
+'        strWhereItem = Trim(.Range("入金予定日TO"))
+'        If strWhereItem <> "" Then
+'            strSqlWhere = strSqlWhere & " AND A.NYUKIN_YOTEI_YMD <= '" & strWhereItem & "'"
+'        End If
+'
+'        strWhereItem = Trim(.Range("入金日FROM"))
+'        If strWhereItem <> "" Then
+'            strSqlWhere = strSqlWhere & " AND (A.NYUKIN_YMD >= '" & strWhereItem & _
+'                            "' OR A.NYUKIN_YMD IS NULL)"
+'        End If
+'
+'        strWhereItem = Trim(.Range("入金日TO"))
+'        If strWhereItem <> "" Then
+'            strSqlWhere = strSqlWhere & " AND A.NYUKIN_YMD <= '" & strWhereItem & "'"
+'        End If
+'
+'        If .OptionButton1 Then
+'            strSqlWhere = strSqlWhere & " AND A.STATUS = '1'"
+'        Else
+'            strSqlWhere = strSqlWhere & " AND A.STATUS >= '1'"
+'        End If
+'
+'        strSqlWhere = strSqlWhere & _
+'                    " AND A.SAKUJO_FLG = '0'" & _
+'                    " AND A.HIZUKE_SHURUI != '0'" & _
+'                    " AND A.KOHZA_NO = B.PRTCD   (+)" & _
+'                    " AND '0'        = B.DELT_FLG(+)" & _
+'                    " AND A.KOHZA_NO        = C.KOHZA_NO" & _
+'                    " AND A.SEIKYU_KIKAN_ID = C.SEIKYU_KIKAN_ID" & _
+'                    " AND A.HIZUKE_SHURUI   = C.HIZUKE_SHURUI" & _
+'                    " AND '0'               = C.SAKUJO_FLG"
+'
+'        If Mid(strSqlWhere, 1, 4) = " AND" Then
+'            strSqlWhere = Mid(strSqlWhere, 5)
+'        End If
+'
+'    End With
+'
+'    strSql = strSql & strSqlWhere & " GROUP BY A.KOHZA_NO,A.SEIKYU_KIKAN_ID,A.HIZUKE_SHURUI"
+'
+'''' 07/2/15 Insert Start By H.Haya
+'    strSql = strSql & " ORDER BY A.KOHZA_NO,MAX(A.SEIKYUSHO_KIKAN_FROM),MAX(A.SEIKYUSHO_KIKAN_TO)"
+'''' 07/2/15 Insert End   By H.Haya
+
+    
+    strSql = ""
+    strSql = strSql & "SELECT" & vbCrLf
+    strSql = strSql & "    MAX(DECODE(A.STATUS,'2','TRUE','FALSE'))," & vbCrLf
+    strSql = strSql & "    MAX(NVL(A.NYUKIN_YMD,NVL(A.NYUKIN_YOTEI_YMD,TO_CHAR(SYSDATE,'YYYYMMDD'))))," & vbCrLf
+    strSql = strSql & "    MAX(A.NYUKIN_YOTEI_YMD)," & vbCrLf
+    strSql = strSql & "    A.KOHZA_NO KN," & vbCrLf
+    strSql = strSql & "    MAX(B.NAME_RJ)," & vbCrLf
+    strSql = strSql & "    MAX(A.SEIKYUSHO_KIKAN_FROM) SKF," & vbCrLf
+    strSql = strSql & "    MAX(A.SEIKYUSHO_KIKAN_TO) SKT," & vbCrLf
+    strSql = strSql & "    MAX(A.SEIKYU_YMD)," & vbCrLf
+    strSql = strSql & "    MAX(DECODE(A.HIZUKE_SHURUI,'1','上期','2','下期','3','通期',''))," & vbCrLf
+    
+'------------<Modify Start T.Ichikawa 2007/08/23 > -----------------------
+'    strSql = strSql & "    TRUNC(SUM(C.KAZEI_ATO_KONKAI_SEIKYU_GAKU))," & vbCrLf
+'    strSql = strSql & "    TRUNC(SUM(C.SHOHIZEI_GAKU))," & vbCrLf
+    
+    strSql = strSql & "    TRUNC(SUM(DECODE(C.SHUUSEIGAKU_SAIYOU_FLG,'1', C.KAZEI_ATO_SEIKYU_SHUUSEIGAKU, C.KAZEI_ATO_KONKAI_SEIKYU_GAKU)))," & vbCrLf
+    strSql = strSql & "    TRUNC(SUM(DECODE(C.SHUUSEIGAKU_SAIYOU_FLG,'1', C.SHOHIZEI_SHUUSEIGAKU, C.SHOHIZEI_GAKU)))," & vbCrLf
+'------------<Modify End   T.Ichikawa 2007/08/23 > -----------------------
+    
+    strSql = strSql & "    A.SEIKYU_KIKAN_ID," & vbCrLf
+    strSql = strSql & "    A.HIZUKE_SHURUI" & vbCrLf
+    strSql = strSql & "FROM" & vbCrLf
+    strSql = strSql & "    KYK_SEIKYU_KANRI A," & vbCrLf
+    strSql = strSql & "    VW_DT001D B," & vbCrLf
+    strSql = strSql & "    KYK_KOMONRYOH_SUM C," & vbCrLf
+    strSql = strSql & "    KYK_SEIKYU_KIKAN D" & vbCrLf
+    strSql = strSql & "WHERE" & vbCrLf
+
+    strSqlWhere = ""
+    With TargetSheets
+        strWhereItem = Trim(.Range("口座番号"))
+        If strWhereItem <> "" Then
+'------------<Modify Start azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+'            strSqlWhere = strSqlWhere & "AND A.KOHZA_NO = '" & strWhereItem & "'" & vbCrLf
+            strSqlWhere = strSqlWhere & "AND A.KOHZA_NO = '" & func_ChkQuoteshon(strWhereItem, "'") & "'" & vbCrLf
+'------------<Modify End   azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+        End If
+            
+        lngPoint = InStr(1, .Range("信託銀行コード").Text, LIST_SEPARATER)
+        If lngPoint = 0 Then
+            strWhereItem = .Range("信託銀行コード").Text
+        Else
+            strWhereItem = Mid(.Range("信託銀行コード").Text, 1, lngPoint - 1)
+            strWhereItem = Left(strWhereItem & String(6, " "), 6)
+        End If
+        
+        If strWhereItem <> "" Then
+            strSqlWhere = strSqlWhere & "AND A.KOHZA_NO IN" & vbCrLf
+            strSqlWhere = strSqlWhere & "       (SELECT" & vbCrLf
+            strSqlWhere = strSqlWhere & "            PRTCD" & vbCrLf
+            strSqlWhere = strSqlWhere & "        FROM" & vbCrLf
+            strSqlWhere = strSqlWhere & "            VW_DT001D" & vbCrLf
+            strSqlWhere = strSqlWhere & "        WHERE" & vbCrLf
+'------------<Modify Start azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+            strSqlWhere = strSqlWhere & "            SINTAKU_BANK_CD = '" & func_ChkQuoteshon(strWhereItem, "'") & "')" & vbCrLf
+'            strSqlWhere = strSqlWhere & "            SINTAKU_BANK_CD = '" & strWhereItem & "')" & vbCrLf
+'------------<Modify End   azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+        End If
+    
+        strWhereItem = Trim(.Range("請求期間FROM"))
+        If strWhereItem <> "" Then
+            strSqlWhere = strSqlWhere & "AND A.SEIKYUSHO_KIKAN_FROM = '" & strWhereItem & "'" & vbCrLf
+        End If
+    
+        strWhereItem = Trim(.Range("請求期間TO"))
+        If strWhereItem <> "" Then
+            strSqlWhere = strSqlWhere & "AND A.SEIKYUSHO_KIKAN_TO = '" & strWhereItem & "'" & vbCrLf
+        End If
+    
+        strWhereItem = Trim(.Range("請求日FROM"))
+        If strWhereItem <> "" Then
+            strSqlWhere = strSqlWhere & "AND A.SEIKYU_YMD >= '" & strWhereItem & "'" & vbCrLf
+        End If
+    
+        strWhereItem = Trim(.Range("請求日TO"))
+        If strWhereItem <> "" Then
+            strSqlWhere = strSqlWhere & "AND A.SEIKYU_YMD <= '" & strWhereItem & "'" & vbCrLf
+        End If
+    
+        strWhereItem = Trim(.Range("入金予定日FROM"))
+        If strWhereItem <> "" Then
+            strSqlWhere = strSqlWhere & "AND (A.NYUKIN_YOTEI_YMD >= '" & strWhereItem & "'" & vbCrLf
+            strSqlWhere = strSqlWhere & " OR  A.NYUKIN_YOTEI_YMD IS NULL)" & vbCrLf
+        End If
+    
+        strWhereItem = Trim(.Range("入金予定日TO"))
+        If strWhereItem <> "" Then
+            strSqlWhere = strSqlWhere & "AND A.NYUKIN_YOTEI_YMD <= '" & strWhereItem & "'" & vbCrLf
+        End If
+    
+        strWhereItem = Trim(.Range("入金日FROM"))
+        If strWhereItem <> "" Then
+            strSqlWhere = strSqlWhere & "AND (A.NYUKIN_YMD >= '" & strWhereItem & "'" & vbCrLf
+            strSqlWhere = strSqlWhere & " OR A.NYUKIN_YMD IS NULL)" & vbCrLf
+        End If
+    
+        strWhereItem = Trim(.Range("入金日TO"))
+        If strWhereItem <> "" Then
+            strSqlWhere = strSqlWhere & "AND A.NYUKIN_YMD <= '" & strWhereItem & "'" & vbCrLf
+        End If
+    
+        If .OptionButton1 Then
+            strSqlWhere = strSqlWhere & "AND A.STATUS = '1'" & vbCrLf
+        Else
+            strSqlWhere = strSqlWhere & "AND A.STATUS >= '1'" & vbCrLf
+        End If
+    
+        strSqlWhere = strSqlWhere & "AND A.SAKUJO_FLG = '0'" & vbCrLf
+        strSqlWhere = strSqlWhere & "AND A.HIZUKE_SHURUI != '0'" & vbCrLf
+        strSqlWhere = strSqlWhere & "AND A.KOHZA_NO = B.PRTCD   (+)" & vbCrLf
+'------------<顧問バック更改対応 2013/04/10 GUT梁賀松 START> ------------
+'        strSqlWhere = strSqlWhere & "AND '0'        = B.DELT_FLG(+)" & vbCrLf
+'------------<顧問バック更改対応 2013/04/10 GUT梁賀松 END> ------------
+        strSqlWhere = strSqlWhere & "AND A.KOHZA_NO        = C.KOHZA_NO" & vbCrLf
+        strSqlWhere = strSqlWhere & "AND A.SEIKYU_KIKAN_ID = C.SEIKYU_KIKAN_ID" & vbCrLf
+        strSqlWhere = strSqlWhere & "AND A.HIZUKE_SHURUI   = C.HIZUKE_SHURUI" & vbCrLf
+        strSqlWhere = strSqlWhere & "AND '0'               = C.SAKUJO_FLG" & vbCrLf
+        strSqlWhere = strSqlWhere & "AND A.SEIKYUSHO_KIKAN_FROM = C.KEISAN_FROM_YMD" & vbCrLf
+        strSqlWhere = strSqlWhere & "AND A.KOHZA_NO        = D.KOHZA_NO" & vbCrLf
+        strSqlWhere = strSqlWhere & "AND A.SEIKYU_KIKAN_ID = D.SEIKYU_KIKAN_ID" & vbCrLf
+        strSqlWhere = strSqlWhere & "AND SUBSTR(A.KOHZA_NO,1,1) != 'G'" & vbCrLf
+        strSqlWhere = strSqlWhere & "AND D.HEIZAN_DANMEN_KBN = '1'" & vbCrLf
+        strSqlWhere = strSqlWhere & "AND D.SAKUJO_FLG = '0'" & vbCrLf
+
+        If Mid(strSqlWhere, 1, 3) = "AND" Then
+            strSqlWhere = "    " & Mid(strSqlWhere, 5)
+        End If
+    
+    End With
+    
+    strSql = strSql & strSqlWhere
+    strSql = strSql & "GROUP BY" & vbCrLf
+    strSql = strSql & "    A.KOHZA_NO," & vbCrLf
+    strSql = strSql & "    A.SEIKYU_KIKAN_ID," & vbCrLf
+    strSql = strSql & "    A.HIZUKE_SHURUI," & vbCrLf
+    strSql = strSql & "    A.SEIKYUSHO_KIKAN_FROM" & vbCrLf
+    
+    strSql = strSql & "UNION" & vbCrLf
+    
+    strSql = strSql & "SELECT" & vbCrLf
+    strSql = strSql & "    MAX(DECODE(A.STATUS,'2','TRUE','FALSE'))," & vbCrLf
+    strSql = strSql & "    MAX(NVL(A.NYUKIN_YMD,NVL(A.NYUKIN_YOTEI_YMD,TO_CHAR(SYSDATE,'YYYYMMDD'))))," & vbCrLf
+    strSql = strSql & "    MAX(A.NYUKIN_YOTEI_YMD)," & vbCrLf
+    strSql = strSql & "    A.KOHZA_NO KN," & vbCrLf
+    strSql = strSql & "    MAX(B.NAME_RJ)," & vbCrLf
+    strSql = strSql & "    MAX(A.SEIKYUSHO_KIKAN_FROM) SKF," & vbCrLf
+    strSql = strSql & "    MAX(A.SEIKYUSHO_KIKAN_TO) SKT," & vbCrLf
+    strSql = strSql & "    MAX(A.SEIKYU_YMD)," & vbCrLf
+    strSql = strSql & "    MAX(DECODE(A.HIZUKE_SHURUI,'1','上期','2','下期','3','通期',''))," & vbCrLf
+    
+'------------<Modify Start T.Ichikawa 2007/08/23 > -----------------------
+'    strSql = strSql & "    TRUNC(SUM(C.KAZEI_ATO_KONKAI_SEIKYU_GAKU))," & vbCrLf
+'    strSql = strSql & "    TRUNC(SUM(C.SHOHIZEI_GAKU))," & vbCrLf
+    
+    strSql = strSql & "    TRUNC(SUM(DECODE(C.SHUUSEIGAKU_SAIYOU_FLG,'1', C.KAZEI_ATO_SEIKYU_SHUUSEIGAKU, C.KAZEI_ATO_KONKAI_SEIKYU_GAKU)))," & vbCrLf
+    strSql = strSql & "    TRUNC(SUM(DECODE(C.SHUUSEIGAKU_SAIYOU_FLG,'1', C.SHOHIZEI_SHUUSEIGAKU, C.SHOHIZEI_GAKU)))," & vbCrLf
+'------------<Modify End   T.Ichikawa 2007/08/23 > -----------------------
+    
+    strSql = strSql & "    A.SEIKYU_KIKAN_ID," & vbCrLf
+    strSql = strSql & "    A.HIZUKE_SHURUI" & vbCrLf
+    strSql = strSql & "FROM" & vbCrLf
+    strSql = strSql & "    KYK_SEIKYU_KANRI A," & vbCrLf
+    strSql = strSql & "    VW_DT001D B," & vbCrLf
+    strSql = strSql & "    KYK_KOMONRYOH_SUM C," & vbCrLf
+    strSql = strSql & "    KYK_SEIKYU_KIKAN D," & vbCrLf
+    strSql = strSql & "    KYK_RATE_TEKIYOH_KIKAN E" & vbCrLf
+    strSql = strSql & "WHERE" & vbCrLf
+
+    strSqlWhere = ""
+    With TargetSheets
+        strWhereItem = Trim(.Range("口座番号"))
+        If strWhereItem <> "" Then
+'------------<Modify Start azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+'            strSqlWhere = strSqlWhere & "AND A.KOHZA_NO = '" & strWhereItem & "'" & vbCrLf
+            strSqlWhere = strSqlWhere & "AND A.KOHZA_NO = '" & func_ChkQuoteshon(strWhereItem, "'") & "'" & vbCrLf
+'------------<Modify End   azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+        End If
+            
+        lngPoint = InStr(1, .Range("信託銀行コード").Text, LIST_SEPARATER)
+        If lngPoint = 0 Then
+            strWhereItem = .Range("信託銀行コード").Text
+        Else
+            strWhereItem = Mid(.Range("信託銀行コード").Text, 1, lngPoint - 1)
+            strWhereItem = Left(strWhereItem & String(6, " "), 6)
+        End If
+        
+        If strWhereItem <> "" Then
+            strSqlWhere = strSqlWhere & "AND A.KOHZA_NO IN" & vbCrLf
+            strSqlWhere = strSqlWhere & "       (SELECT" & vbCrLf
+            strSqlWhere = strSqlWhere & "            PRTCD" & vbCrLf
+            strSqlWhere = strSqlWhere & "        FROM" & vbCrLf
+            strSqlWhere = strSqlWhere & "            VW_DT001D" & vbCrLf
+            strSqlWhere = strSqlWhere & "        WHERE" & vbCrLf
+'------------<Modify Start azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+            strSqlWhere = strSqlWhere & "            SINTAKU_BANK_CD = '" & func_ChkQuoteshon(strWhereItem, "'") & "')" & vbCrLf
+'            strSqlWhere = strSqlWhere & "            SINTAKU_BANK_CD = '" & strWhereItem & "')" & vbCrLf
+'------------<Modify End   azuma 2008/01/23 (PH4)> ★★★☆-----------------------
+        End If
+    
+        strWhereItem = Trim(.Range("請求期間FROM"))
+        If strWhereItem <> "" Then
+            strSqlWhere = strSqlWhere & "AND A.SEIKYUSHO_KIKAN_FROM = '" & strWhereItem & "'" & vbCrLf
+        End If
+    
+        strWhereItem = Trim(.Range("請求期間TO"))
+        If strWhereItem <> "" Then
+            strSqlWhere = strSqlWhere & "AND A.SEIKYUSHO_KIKAN_TO = '" & strWhereItem & "'" & vbCrLf
+        End If
+    
+        strWhereItem = Trim(.Range("請求日FROM"))
+        If strWhereItem <> "" Then
+            strSqlWhere = strSqlWhere & "AND A.SEIKYU_YMD >= '" & strWhereItem & "'" & vbCrLf
+        End If
+    
+        strWhereItem = Trim(.Range("請求日TO"))
+        If strWhereItem <> "" Then
+            strSqlWhere = strSqlWhere & "AND A.SEIKYU_YMD <= '" & strWhereItem & "'" & vbCrLf
+        End If
+    
+        strWhereItem = Trim(.Range("入金予定日FROM"))
+        If strWhereItem <> "" Then
+            strSqlWhere = strSqlWhere & "AND (A.NYUKIN_YOTEI_YMD >= '" & strWhereItem & "'" & vbCrLf
+            strSqlWhere = strSqlWhere & " OR  A.NYUKIN_YOTEI_YMD IS NULL)" & vbCrLf
+        End If
+    
+        strWhereItem = Trim(.Range("入金予定日TO"))
+        If strWhereItem <> "" Then
+            strSqlWhere = strSqlWhere & "AND A.NYUKIN_YOTEI_YMD <= '" & strWhereItem & "'" & vbCrLf
+        End If
+    
+        strWhereItem = Trim(.Range("入金日FROM"))
+        If strWhereItem <> "" Then
+            strSqlWhere = strSqlWhere & "AND (A.NYUKIN_YMD >= '" & strWhereItem & "'" & vbCrLf
+            strSqlWhere = strSqlWhere & " OR A.NYUKIN_YMD IS NULL)" & vbCrLf
+        End If
+    
+        strWhereItem = Trim(.Range("入金日TO"))
+        If strWhereItem <> "" Then
+            strSqlWhere = strSqlWhere & "AND A.NYUKIN_YMD <= '" & strWhereItem & "'" & vbCrLf
+        End If
+    
+        If .OptionButton1 Then
+            strSqlWhere = strSqlWhere & "AND A.STATUS = '1'" & vbCrLf
+        Else
+            strSqlWhere = strSqlWhere & "AND A.STATUS >= '1'" & vbCrLf
+        End If
+    
+        strSqlWhere = strSqlWhere & "AND A.SAKUJO_FLG = '0'" & vbCrLf
+        strSqlWhere = strSqlWhere & "AND A.HIZUKE_SHURUI != '0'" & vbCrLf
+        strSqlWhere = strSqlWhere & "AND A.KOHZA_NO = B.PRTCD   (+)" & vbCrLf
+'------------<顧問バック更改対応 2013/04/10 GUT梁賀松 START> ------------
+'        strSqlWhere = strSqlWhere & "AND '0'        = B.DELT_FLG(+)" & vbCrLf
+'------------<顧問バック更改対応 2013/04/10 GUT梁賀松 END> ------------
+        strSqlWhere = strSqlWhere & "AND A.KOHZA_NO        = C.KOHZA_NO" & vbCrLf
+        strSqlWhere = strSqlWhere & "AND A.SEIKYU_KIKAN_ID = C.SEIKYU_KIKAN_ID" & vbCrLf
+        strSqlWhere = strSqlWhere & "AND A.HIZUKE_SHURUI   = C.HIZUKE_SHURUI" & vbCrLf
+        strSqlWhere = strSqlWhere & "AND '0'               = C.SAKUJO_FLG" & vbCrLf
+        strSqlWhere = strSqlWhere & "AND A.SEIKYUSHO_KIKAN_FROM = C.KEISAN_FROM_YMD" & vbCrLf
+        strSqlWhere = strSqlWhere & "AND A.KOHZA_NO        = D.KOHZA_NO" & vbCrLf
+        strSqlWhere = strSqlWhere & "AND A.SEIKYU_KIKAN_ID = D.SEIKYU_KIKAN_ID" & vbCrLf
+        strSqlWhere = strSqlWhere & "AND A.KOHZA_NO        = E.KOHZA_NO" & vbCrLf
+        strSqlWhere = strSqlWhere & "AND A.SEIKYU_KIKAN_ID = E.SEIKYU_KIKAN_ID" & vbCrLf
+        strSqlWhere = strSqlWhere & "AND A.SEIKYUSHO_KIKAN_FROM = E.RATE_TEKIYOH_KIKAN_FROM" & vbCrLf
+        strSqlWhere = strSqlWhere & "AND SUBSTR(A.KOHZA_NO,1,1) != 'G'" & vbCrLf
+        strSqlWhere = strSqlWhere & "AND D.HEIZAN_DANMEN_KBN = '2'" & vbCrLf
+        strSqlWhere = strSqlWhere & "AND D.SAKUJO_FLG = '0'" & vbCrLf
+'------------<Modify Start T.Ichikawa 2007/05/09 > -----------------------
+'        strSqlWhere = strSqlWhere & "AND E.KISO_SUCHI_KEISAN_HOHHOH != '9'" & vbCrLf
+'------------<Modify End   T.Ichikawa 2007/05/09 > -----------------------
+        strSqlWhere = strSqlWhere & "AND E.SAKUJO_FLG = '0'" & vbCrLf
+
+        If Mid(strSqlWhere, 1, 3) = "AND" Then
+            strSqlWhere = "    " & Mid(strSqlWhere, 5)
+        End If
+    
+    End With
+    
+    strSql = strSql & strSqlWhere
+    strSql = strSql & "GROUP BY" & vbCrLf
+    strSql = strSql & "    A.KOHZA_NO," & vbCrLf
+    strSql = strSql & "    A.SEIKYU_KIKAN_ID," & vbCrLf
+    strSql = strSql & "    A.HIZUKE_SHURUI," & vbCrLf
+    strSql = strSql & "    A.SEIKYUSHO_KIKAN_FROM" & vbCrLf
+    
+    strSql = strSql & "ORDER BY" & vbCrLf
+    strSql = strSql & "    KN," & vbCrLf
+    strSql = strSql & "    SKF," & vbCrLf
+    strSql = strSql & "    SKT" & vbCrLf
+    
+'------------<Modify End   T.Ichikawa 2007/04/10 > -----------------------
+    
+    'データ取得
+    Call gclsdb.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow, strErrCode)
+    
+    If Trim(strErrCode) <> "" Then
+        Exit Function
+    End If
+    
+    func_GetSeikyuInfo = True
+    
+    Exit Function
+
+ErrHandler:
+    func_GetSeikyuInfo = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_GetSeikyuInfo", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    MsgBox "Error:func_GetSeikyuInfo" & vbCrLf & Err.Description
+
+
+End Function
+
+
+
+
+'*************************************************************************
+'関数名　　：ワークシートに請求情報を設定する
+'
+'引　　数　：
+'           TargetSheets    O       処理対象ワークシート
+'           strType         I       取得タイプ(1:請求情報)
+'           vdata()         I       設定データ
+'           lngRow          I       設定データ件数
+'
+'戻り値　　：Boolean
+'
+'機能説明　：処理対象ワークシートにデータを設定する。
+'
+'更新履歴　：2006/08/28 SRA H.早川    新規作成
+'
+'*************************************************************************
+Private Function func_SetSeikyuInfo(ByRef TargetSheets As Object _
+                                   , ByVal strType As String _
+                                   , ByVal vData As Variant _
+                                   , ByVal lngRow As Long) As Boolean
+On Error GoTo ErrHandler
+
+    Dim lngCnt      As Long
+    Dim lngStartRow As Long
+    
+    func_SetSeikyuInfo = False
+    
+    '明細行の追加
+    With TargetSheets
+''        .EnableCalculation = False
+        lngStartRow = fncKsCmnSearchDataTopRow(TargetSheets, 1) '明細開始行取得
+        
+        '明細行の追加
+        Call gsub_NewClick(1, lngStartRow + lngCnt, lngRow)
+                
+        For lngCnt = 0 To lngRow - 1
+            Select Case strType
+            Case "1"
+            '請求情報のデータ表示
+                
+                'データの設定
+                .Cells(lngStartRow + lngCnt, DTCol.入金ChkLink) = vData(0, lngCnt)
+                .Cells(lngStartRow + lngCnt, DTCol.入金日) = Trim(vData(1, lngCnt))         'この項目は変更比較をするのでTrim付きでｾｯﾄ
+                .Cells(lngStartRow + lngCnt, DTCol.入金予定日) = vData(2, lngCnt)
+                .Cells(lngStartRow + lngCnt, DTCol.口座番号) = vData(3, lngCnt)
+                .Cells(lngStartRow + lngCnt, DTCol.口座名称) = vData(4, lngCnt)
+                .Cells(lngStartRow + lngCnt, DTCol.請求期間FROM) = vData(5, lngCnt)
+                .Cells(lngStartRow + lngCnt, DTCol.請求期間TO) = vData(6, lngCnt)
+                .Cells(lngStartRow + lngCnt, DTCol.請求日) = vData(7, lngCnt)
+                .Cells(lngStartRow + lngCnt, DTCol.上下区分) = vData(8, lngCnt)
+                .Cells(lngStartRow + lngCnt, DTCol.請求顧問料) = vData(9, lngCnt)
+                .Cells(lngStartRow + lngCnt, DTCol.内消費税) = vData(10, lngCnt)
+                .Cells(lngStartRow + lngCnt, DTCol.請求期間ID) = vData(11, lngCnt)
+                .Cells(lngStartRow + lngCnt, DTCol.日付種類) = vData(12, lngCnt)
+                .Cells(lngStartRow + lngCnt, DTCol.更新前入金Chk) = vData(0, lngCnt)
+                .Cells(lngStartRow + lngCnt, DTCol.更新前入金日) = Trim(vData(1, lngCnt))    'この項目は変更比較をするのでTrim付きでｾｯﾄ
+                
+            End Select
+            
+        Next lngCnt
+        
+''        .EnableCalculation = True
+        
+        With .Range("請求顧問料合計")
+            Call subCmnSumEX(TargetSheets, .Row, .Column _
+                            , lngStartRow, DTCol.請求顧問料 _
+                            , lngStartRow + lngRow - 1)             '請求顧問料合計
+        End With
+        With .Range("消費税合計")
+            Call subCmnSumEX(TargetSheets, .Row, .Column _
+                            , lngStartRow, DTCol.内消費税 _
+                            , lngStartRow + lngRow - 1)             '消費税合計
+        End With
+    End With
+    
+    func_SetSeikyuInfo = True
+
+    Exit Function
+
+ErrHandler:
+''    TargetSheets.EnableCalculation = True
+    
+    func_SetSeikyuInfo = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_SetSeikyuInfo", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+'    MsgBox "Error:func_SetSeikyuInfo" & vbCrLf & Err.Description
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：コンボ表示検索
+'
+'引　　数　：
+'           strCode     I       コード(DBなどから取得したコード)
+'           strName     I       サーチするリスト名
+'
+'戻り値　　：コンボ表示文字列
+'
+'機能説明　：コード値を入力するとその文字列を返す
+'
+'更新履歴　：2006/08/28 SRA H.早川    新規作成
+'
+'*************************************************************************
+Private Function func_SearchComboItem(ByVal strCode As String _
+                                     , ByVal strName As String) As String
+
+    Dim c       As Variant
+    Dim lngCut  As Long
+    
+    func_SearchComboItem = ""
+    
+    'コードと名称の区切り位置取得
+    lngCut = gfunc_Separate(strName)
+    
+    If lngCut = 0 Then
+        func_SearchComboItem = strCode
+        Set c = Nothing
+        Exit Function
+    End If
+
+    For Each c In Worksheets(DATA_SHEETNAME).Range(strName)
+        
+        If Trim(c.Value) <> "" Then
+            If strCode = Left(c.Value, lngCut) Then
+                func_SearchComboItem = c.Value
+                Exit For
+            End If
+        End If
+    
+    Next c
+    
+    Set c = Nothing
+
+End Function
+
+'*************************************************************************
+'関数名　　：コードと名称の区切り位置取得処理
+'
+'引　　数　：
+'           strName     I       対象コンボ名
+'
+'戻り値　　：コードの桁数
+'
+'機能説明　：対象コンボ名からコード部桁数を返す
+'
+'更新履歴　：2006/08/28 SRA H.早川    新規作成
+'
+'*************************************************************************
+Public Function gfunc_Separate(ByVal strName As String) As Long
+
+    Dim lngCut As Long
+    
+    gfunc_Separate = 0
+    
+    
+    Select Case strName
+    Case "入金日区分リスト", "年間日数リスト", "基礎数値種類リスト"
+        lngCut = 1
+    Case "基礎数値計算方法リスト", "顧問料計算方法リスト"
+        lngCut = 1
+    Case "資産リスト"
+        lngCut = 5
+    Case "料率コードリスト"
+        lngCut = 3
+    Case Else
+        lngCut = 0
+    End Select
+
+    gfunc_Separate = lngCut
+
+End Function
+

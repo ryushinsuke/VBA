@@ -1,0 +1,197 @@
+Attribute VB_Name = "bas10Initialize"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：外部委託ライセンスフィー計算システム
+'
+'オブジェクト名：bas10Initialize
+'
+'機能概要　：初期処理
+'
+'更新履歴　：2008/06/17 SRA T.Ichikawa      新規作成
+'
+'*************************************************************************
+Const MODULE_NAME = "bas10Initialize"
+
+
+'*************************************************************************
+'関数名　　：初期化メイン
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：初期起動時に行われる初期処理のメイン
+'
+'更新履歴　：2008/06/17 SRA T.Ichikawa    新規作成
+'
+'*************************************************************************
+Public Sub g_subKeisanInitialize()
+
+    With ThisWorkbook
+        '画面の初期化
+        Call gCom01_SheetProtect(.Worksheets(MAIN_SHEETNAME), False)
+        
+        .Worksheets(MAIN_SHEETNAME).Range("外部委託先").Value = mC_INIT_VALUE_GINO
+        .Worksheets(MAIN_SHEETNAME).Range("基準日").Value = ""
+                
+        Call g_subKikanIniScreenD(.Worksheets(MAIN_SHEETNAME))   '明細部
+    End With
+    
+    'コンボ項目の初期化
+    Call keisanIniCombo
+    
+End Sub
+
+'*************************************************************************
+'関数名　　：支払期間情報部のクリア処理
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：支払期間情報部を全て削除する
+'
+'更新履歴　：2008/06/17 SRA T.Ichikawa    新規作成
+'
+'*************************************************************************
+Public Sub g_subKikanIniScreenD(ByRef TargetSheets As Object)
+        
+    Call gCom01_SheetProtect(TargetSheets, False)
+    
+    '明細行を全行削除
+    Call gKsC_fncKsCmnCheckRowDelete(ThisWorkbook.Worksheets(MAIN_SHEETNAME))
+    
+    Call gCom01_SheetProtect(TargetSheets, True)
+
+End Sub
+
+'コンボ項目の初期化
+Private Sub keisanIniCombo()
+
+    Dim strErrMsg As String
+    
+    strErrMsg = ""
+    
+    'コード値のデータ取得
+    If fncGet_Code = False Then
+        Call gfunc_ErrorMsg(3, 25100, "", "(コード値テーブル取得で失敗)")
+        Exit Sub
+    End If
+    
+    'コード値の名前定義
+    Call subNameDefine
+
+End Sub
+
+'*************************************************************************
+'関数名　　：コード値テーブル抽出処理
+'
+'引　　数　：無し
+'
+'戻り値　　：Boolean
+'
+'機能説明　：コード値テーブルからコンボ項目を取得し「data」シートに記入
+'
+'更新履歴　：2008/06/17 SRA T.Ichikawa     新規作成
+'
+'*************************************************************************
+Private Function fncGet_Code() As Boolean
+       
+On Error GoTo ErrHandler
+    
+    Dim lngCnt                  As Long
+    
+    Dim strSql                  As String
+    Dim vData()                 As Variant
+    Dim lngCol                  As Long
+    Dim lngRow                  As Long
+    
+    fncGet_Code = False
+    
+    'mC_CODENO_KEIYAKU_KBN(契約区分)           コードNO: 56
+    strSql = ""
+    strSql = strSql & " SELECT"
+    strSql = strSql & "     CODE_VALUE || ':' || NVL(VALUE_NAME,'')"
+    strSql = strSql & " FROM"
+    strSql = strSql & "     KYK_CODE_VALUE"
+    strSql = strSql & " WHERE"
+    strSql = strSql & "     SAKUJO_FLG ='0'"
+    strSql = strSql & " AND CODE_NO    = '" & mC_CODENO_KEIYAKU_KBN & "'"
+    
+    strSql = strSql & " ORDER BY "
+    strSql = strSql & "     CODE_VALUE "
+    'データ取得
+    Call gclsdb.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow)
+    
+    ThisWorkbook.Worksheets(DATA_SHEETNAME).Activate
+    
+    'データセル範囲をクリア
+    With ThisWorkbook.Worksheets(DATA_SHEETNAME)
+        .Range(.Cells(2, 1), .Cells(65536, 1)).ClearContents
+    
+        '取得データをセルに設定
+        For lngCnt = 0 To lngRow - 1
+             .Cells(3 + lngCnt, 1).Value = vData(0, lngCnt)
+        Next lngCnt
+    
+    End With
+    
+    Erase vData
+    
+    fncGet_Code = True
+    
+    Exit Function
+ErrHandler:
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "fncGet_Code", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Erase vData
+'    MsgBox "Error:fncGet_Code" & vbCrLf & Err.Description
+
+End Function
+
+'*************************************************************************
+'関数名　　：名前定義設定
+'
+'引　　数　：無し
+'
+'戻り値　　：無し
+'
+'機能説明　：リストデータの名前定義を再設定する。
+'
+'更新履歴　：2008/06/17 SRA T.Ichikawa     新規作成
+'
+'*************************************************************************
+Private Sub subNameDefine()
+    
+    Dim lngRowCnt                           As Long
+    Dim lngListCol                          As Long
+    Dim vListName(mC_DATASHEET_COLNO_END)   As Variant
+    
+    '契約区分
+    vListName(mC_DATASHEET_COLNO_KEIYAKU_KBN) = mC_NAME_LIST_KEIYAKU_KBN
+    
+    For lngListCol = 1 To mC_DATASHEET_COLNO_END
+        
+        For lngRowCnt = 3 To 65536
+            If Trim(ThisWorkbook.Worksheets(DATA_SHEETNAME).Cells(lngRowCnt, lngListCol).Value) = "" Then
+                lngRowCnt = lngRowCnt - 1
+                Exit For
+            End If
+        Next lngRowCnt
+        
+        '再定義
+        ThisWorkbook.Names.Add Name:=vListName(lngListCol), _
+         RefersToR1C1:="=data!R2C" & lngListCol & ":R" & lngRowCnt & "C" & lngListCol
+    Next lngListCol
+    
+    Erase vListName
+    
+End Sub

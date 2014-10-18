@@ -1,0 +1,177 @@
+Attribute VB_Name = "mdlProcess"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：契約管理システム・信託時価データ取込処理
+'
+'オブジェクト名：basProcess
+'
+'機能概要　：プロセス管理
+'
+'更新履歴　：2006/01/17 SRA T.Tanaka    新規作成
+'
+'
+'*************************************************************************
+Private Const MODULE_NAME As String = "mdlProcess"
+Private Const PROCESS_LOG As String = "Process.log"
+
+'------------<Modify Start azuma 2006/11/08 > -----------------------
+Public strMyDocPath As String
+'------------<Modify End   azuma 2006/11/08 > -----------------------
+
+
+'*************************************************************************
+'関数名　　：プロセス開始
+'
+'引　　数　：ARG1   I   Module      Strinng モジュール名
+'　　　　　：ARG2   I   Procedure   Strinng プロシージャ名
+'
+'戻り値　　：なし
+'
+'機能説明　：
+'
+'更新履歴　：2006/01/17 SRA T.Tanaka    新規作成
+'
+'*************************************************************************
+Public Function subBeginProcess(ByVal Module As String, ByVal Procedure As String)
+    
+    Const PROCEDURE_NAME As String = "subBeginProcess"
+    
+    On Error GoTo ErrHandler
+    
+    Select Case Left(Procedure, 3)
+    Case "fnc", "sub"
+    Case Else
+        Application.ScreenUpdating = False
+    End Select
+    
+'------------<Modify Start azuma 2006/11/08 > -----------------------
+    'ログ出力パスの取得
+    If Trim(strMyDocPath) = "" Then
+        If gfunc_GetMyDocPath(strMyDocPath) = False Then
+            MsgBox "ログ出力パスの取得に失敗しました。 (" & PROCEDURE_NAME & ")", vbCritical
+            Exit Function
+        End If
+    End If
+'------------<Modify End   azuma 2006/11/08 > -----------------------
+    
+    
+'------------<Modify Start azuma 2006/11/08 > -----------------------
+    Open strMyDocPath & PROCESS_LOG For Append Access Write As #1
+'    Open PROCESS_LOG For Append Access Write As #1
+'------------<Modify End   azuma 2006/11/08 > -----------------------
+    
+    Write #1, Format(Now, "General Date"), "開始", Module, Procedure
+    Close #1
+
+    Exit Function
+ErrHandler:
+     
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+'*************************************************************************
+'関数名　　：プロセス終了
+'
+'引　　数　：ARG1   I   Module      Strinng モジュール名
+'　　　　　：ARG2   I   Procedure   Strinng プロシージャ名
+'
+'戻り値　　：なし
+'
+'機能説明　：
+'
+'更新履歴　：2006/01/17 SRA T.Tanaka    新規作成
+'
+'*************************************************************************
+Public Function subEndProcess(ByVal Module As String, ByVal Procedure As String)
+    
+    Const PROCEDURE_NAME As String = "subEndProcess"
+    
+    On Error GoTo ErrHandler
+    
+'------------<Modify Start azuma 2006/11/08 > -----------------------
+    'ログ出力パスの取得
+    If Trim(strMyDocPath) = "" Then
+        If gfunc_GetMyDocPath(strMyDocPath) = False Then
+            MsgBox "ログ出力パスの取得に失敗しました。 (" & PROCEDURE_NAME & ")", vbCritical
+            Exit Function
+        End If
+    End If
+'------------<Modify End   azuma 2006/11/08 > -----------------------
+    
+    
+'------------<Modify Start azuma 2006/11/08 > -----------------------
+    Open strMyDocPath & PROCESS_LOG For Append Access Write As #1
+'    Open PROCESS_LOG For Append Access Write As #1
+'------------<Modify End   azuma 2006/11/08 > -----------------------
+    
+    Write #1, Format(Now, "General Date"), "終了", Module, Procedure
+    Close #1
+    
+        Select Case Left(Procedure, 3)
+    Case "fnc", "sub"
+    Case Else
+        Application.ScreenUpdating = True
+    End Select
+    
+
+    
+    Exit Function
+ErrHandler:
+     
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+'*************************************************************************
+'関数名　　：エラー共通処理
+'
+'引　　数　：ARG1   I   Module      Strinng モジュール名
+'　　　　　：ARG2   I   Procedure   Strinng プロシージャ名
+'　　　　　：ARG3   I   ErrNum      Long    エラー番号
+'　　　　　：ARG4   I   ErrMsg      Strinng エラーメッセージ
+'
+'戻り値　　：なし
+'
+'機能説明　：サンプル
+'
+'更新履歴　：2006/01/17 SRA T.Tanaka    新規作成
+'
+'*************************************************************************
+Public Function subErrProcess(ByVal Module As String, ByVal Procedure As String, _
+                         ByVal ErrNum As Long, ByVal ErrMsg As String)
+    
+    Const PROCEDURE_NAME As String = "subErrProcess"
+    
+    On Error GoTo ErrHandler
+    
+    Debug.Print ErrNum & ":" & ErrMsg
+    
+'------------<Modify Start azuma 2006/11/08 > -----------------------
+    'ログ出力パスの取得
+    If Trim(strMyDocPath) = "" Then
+        If gfunc_GetMyDocPath(strMyDocPath) = False Then
+            MsgBox "ログ出力パスの取得に失敗しました。 (" & PROCEDURE_NAME & ")", vbCritical
+            Exit Function
+        End If
+    End If
+'------------<Modify End   azuma 2006/11/08 > -----------------------
+    
+    
+'------------<Modify Start azuma 2006/11/08 > -----------------------
+    Open strMyDocPath & PROCESS_LOG For Append Access Write As #1
+'    Open PROCESS_LOG For Append Access Write As #1
+'------------<Modify End   azuma 2006/11/08 > -----------------------
+    
+    Write #1, Format(Now, "General Date"), "エラー", Module, Procedure
+    Write #1, "番号", ErrNum
+    Write #1, "詳細", ErrMsg
+    
+    Close #1
+    
+    'エラーメッセージ出力
+    Call MsgBox("システムエラーが発生しました。" & vbCrLf & Module & "." & Procedure & vbCrLf & "(" & ErrNum & ":" & ErrMsg & ")", vbCritical)
+
+    Exit Function
+ErrHandler:
+     
+    Rem Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function

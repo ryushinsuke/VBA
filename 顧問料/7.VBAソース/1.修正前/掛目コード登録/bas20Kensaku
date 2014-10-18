@@ -1,0 +1,530 @@
+Attribute VB_Name = "bas20Kensaku"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：国内顧問料・掛目コード登録
+'
+'オブジェクト名：bas20Kensaku
+'
+'機能概要　：検索ボタン処理
+'
+'更新履歴　：2006/11/30 SRA 東       新規作成
+'
+'*************************************************************************
+
+Const MODULE_NAME = "bas20Kensaku"
+
+
+Public Const SELECT_KAKEME_TABLE_NO = 0       '段階順番
+Public Const SELECT_SHUEKI_RATE = 1     '収益率
+Public Const SELECT_FUGOU = 2           '符号
+Public Const SELECT_KAKEME_A = 3        '掛け目A
+Public Const SELECT_KAKEME_B = 4        '掛け目B
+Public Const SELECT_KOUSHIN_YMD = 5     '更新日
+
+
+
+'*************************************************************************
+'関数名　　：検索処理メイン処理
+'
+'引　　数　：
+'           objTarget        I           対象のシート
+'
+'戻り値　　：
+'
+'機能説明　：
+'
+'更新履歴　：2006/11/30 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Sub gsub_KensakuMain(ByRef objTarget As Object)
+
+On Error GoTo ErrorSection
+
+    Dim blnRet As Boolean
+    
+    blnRet = False
+    
+    Call sub_SetFugouTable
+    
+    With objTarget
+    
+        
+        '入力チェック処理(検索時)
+        blnRet = gfuncKakemCodeInputCheck(Worksheets(MAIN_SHEETNAME))
+        
+        If blnRet = False Then
+'            Call g_subKakemeIniScreenH(Worksheets(MAIN_SHEETNAME))   'ヘッダー部
+            Call g_subKakemeIniScreenD(Worksheets(MAIN_SHEETNAME))   '明細部
+            Exit Sub
+        End If
+        
+        blnRet = False
+        
+        '検索処理とデータ設定
+        blnRet = gfuncKakeme_DoSearch(Worksheets(MAIN_SHEETNAME))
+        
+        If blnRet = False Then
+            
+            'システムエラー
+            Call gfunc_ErrorMsg(4, 11202, "", "")
+            
+            Call g_subKakemeIniScreenH(Worksheets(MAIN_SHEETNAME))   'ヘッダー部
+            Call g_subKakemeIniScreenD(Worksheets(MAIN_SHEETNAME))   '明細部
+            Exit Sub
+        End If
+        
+    End With
+    
+    Exit Sub
+    
+ErrorSection:
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(MODULE_NAME, "gsub_KensakuMain", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Call g_subKakemeIniScreenH(Worksheets(MAIN_SHEETNAME))   'ヘッダー部
+    Call g_subKakemeIniScreenD(Worksheets(MAIN_SHEETNAME))   '明細部
+
+End Sub
+
+
+'*************************************************************************
+'関数名　　：掛目コード入力チェック処理
+'
+'引　　数　：
+'           TargetSheets        I           チェック対象のシート
+'
+'戻り値　　：
+'
+'機能説明　：
+'
+'更新履歴　：2006/11/30 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Function gfuncKakemCodeInputCheck(ByRef TargetSheets As Object) As Boolean
+
+On Error GoTo ErrorSection
+    Dim strKakemeCode       As String
+    Dim strKikan        As String
+    Dim strDate         As String
+    Dim strTime         As String
+    
+    gfuncKakemCodeInputCheck = False
+    strKakemeCode = ""
+    
+'１．【掛目コード】
+    strKakemeCode = Trim(TargetSheets.Range("掛目コード"))
+
+    '①入力ﾁｪｯｸ
+      If Trim(strKakemeCode) = "" Then
+        '"掛目コード：掛目コードが未入力です。"
+            Call gfunc_ErrorMsg(3, 11200, "掛目コード", "４桁で入力して下さい。")
+            TargetSheets.Range("掛目コード").Select
+        Exit Function
+      End If
+    
+    '②桁数ﾁｪｯｸ
+    If Len(strKakemeCode) <> 4 Then
+        '"掛目コード：入力に誤りがあります。"
+            Call gfunc_ErrorMsg(3, 11201, "掛目コード", "４桁で入力して下さい。")
+            TargetSheets.Range("掛目コード").Select
+        Exit Function
+    End If
+    
+'------------<Modify Start azuma 2007/01/10 > -----------------------
+    '③バイト数チェック
+    If LenB(StrConv(strKakemeCode, vbFromUnicode)) > 4 Then
+        '"掛目コード：入力に誤りがあります。"
+            Call gfunc_ErrorMsg(3, 11204, "掛目コード", "半角４桁で入力して下さい。")
+            TargetSheets.Range("掛目コード").Select
+        Exit Function
+    End If
+'------------<Modify End   azuma 2007/01/10 > -----------------------
+    
+    gfuncKakemCodeInputCheck = True
+
+
+    Exit Function
+    
+ErrorSection:
+
+    gfuncKakemCodeInputCheck = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(MODULE_NAME, "gfuncKakemCodeInputCheck", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+
+End Function
+
+    
+
+    
+    
+
+'*************************************************************************
+'関数名　　：掛目コード検索処理
+'
+'引　　数　：
+'           TargetSheets       I       シート
+'
+'戻り値　　：
+'
+'機能説明　：
+'
+'更新履歴　：2006/11/30 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Function gfuncKakeme_DoSearch(ByRef TargetSheets As Object) As Boolean
+On Error GoTo Error_Section
+    
+    Dim blnRet              As Boolean
+    Dim strKakemeCode       As String
+    Dim strKakemeName       As String
+    
+    Dim vDataKakemeName()   As Variant      '取得データ(掛目名)
+    Dim vDatKakeme()        As Variant      '取得データ(掛目)
+    Dim lngDataCnt          As Long         '取得データ数
+    
+    
+    Erase vDataKakemeName
+    Erase vDatKakeme
+    
+    
+    gfuncKakeme_DoSearch = False
+
+
+'*******************************************************
+'* 関数開始　                                        　*
+'*******************************************************
+
+    '検索キー情報取得
+    strKakemeCode = Trim(TargetSheets.Range("掛目コード"))
+
+'2.掛目名の取得
+    lngDataCnt = 0
+    strKakemeName = ""
+    blnRet = func_GetKakemeName(strKakemeCode, vDataKakemeName, lngDataCnt)
+                                   
+    If blnRet = False Then
+        Erase vDataKakemeName
+        Erase vDatKakeme
+        Exit Function
+    Else
+        
+        If lngDataCnt > 0 Then
+        '更新又は削除
+        
+            '情報の画面設定
+            strKakemeName = CStr(vDataKakemeName(0, 0))
+            Call gCom01_SheetProtect(ThisWorkbook.Worksheets(MAIN_SHEETNAME), False)
+            TargetSheets.Range("検索時更新日") = vDataKakemeName(1, 0)
+            Call gCom01_SheetProtect(ThisWorkbook.Worksheets(MAIN_SHEETNAME), False)
+            
+        Else
+        '新規登録
+            Call gfunc_ErrorMsg(3, 11203, "掛目コード", "")
+            strKakemeName = ""
+            With TargetSheets
+                Call gCom01_SheetProtect(TargetSheets, False)
+                .Range("検索時更新日").Value = ""
+                Call gCom01_SheetProtect(TargetSheets, True)
+            End With
+        End If
+    End If
+    
+    '画面への表示
+    TargetSheets.Range("掛目名称").Value = strKakemeName
+
+
+'3.掛目の取得
+    If lngDataCnt > 0 Then
+    
+        lngDataCnt = 0
+        blnRet = func_GetKakemeInfo(strKakemeCode, vDatKakeme, lngDataCnt)
+                                       
+        If blnRet = False Then
+            Erase vDataKakemeName
+            Erase vDatKakeme
+            Exit Function
+        End If
+        
+    End If
+    
+'4.画面明細の初期化
+    Call g_subKakemeIniScreenD(Worksheets(MAIN_SHEETNAME))   '明細部
+    
+'5.取得データの表示
+
+    If lngDataCnt > 0 Then
+    '更新又は削除
+    
+        '情報の画面設定
+        blnRet = func_SetKakemeInfo(TargetSheets, vDatKakeme, lngDataCnt)
+        
+        If blnRet = False Then
+            Erase vDataKakemeName
+            Erase vDatKakeme
+            Exit Function
+        End If
+    Else
+    '新規登録
+'        With TargetSheets
+'            Call gCom01_SheetProtect(TargetSheets, False)
+'            .Range("検索時更新日").Value = ""
+'            Call gCom01_SheetProtect(TargetSheets, True)
+'        End With
+    End If
+    
+    '取得データをメモリーから破棄
+    Erase vDataKakemeName
+    Erase vDatKakeme
+    
+    gfuncKakeme_DoSearch = True
+
+    Exit Function
+
+Error_Section:
+
+    gfuncKakeme_DoSearch = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(MODULE_NAME, "gfuncKakeme_DoSearch", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+    Erase vDataKakemeName
+    Erase vDatKakeme
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：契約名取得処理
+'
+'引　　数　：
+'           strKakemeCode   I       掛目コード
+'           vdata()         O       取得結果
+'           lngRow          O       取得件数
+'
+'戻り値　　：Boolean
+'
+'機能説明　：契約名を取得する
+'
+'更新履歴　：2006/11/30 SRA Y.Azuma    新規作成
+'更新履歴　：2008/01/21 SRA Y.Azuma    変更     (PH4)特殊文字バグ対応
+'
+'*************************************************************************
+Public Function func_GetKakemeName(ByVal strKakemeCode As String _
+                                   , ByRef vData() As Variant _
+                                   , ByRef lngRow As Long) As Boolean
+    Dim strSql      As String
+    Dim lngCol      As Long
+    Dim lngCnt      As Long
+    Dim strErrCode  As String
+    
+    func_GetKakemeName = False
+    
+    strSql = ""
+    strSql = strSql & " SELECT"
+    strSql = strSql & "     KAKEME_NAME"
+    strSql = strSql & "    ,KOUSHIN_YMD"
+    strSql = strSql & " FROM"
+    strSql = strSql & "     KYK_KAKEME_NAME"
+    strSql = strSql & " WHERE"
+'------------<Modify Start azuma 2008/01/21 (PH4)> ★★★☆-----------------------
+    strSql = strSql & "     KAKEME_CD='" & func_ChkQuoteshon(strKakemeCode, "'") & "'"
+'    strSql = strSql & "     KAKEME_CD='" & strKakemeCode & "'"
+'------------<Modify End   azuma 2008/01/21 (PH4)> ★★★☆-----------------------
+    strSql = strSql & " AND SAKUJO_FLG='0'"
+    
+    
+    'データ取得
+    Call gclsdb.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow, strErrCode)
+    
+    If Trim(strErrCode) <> "" Then
+        lngRow = 0
+        Exit Function
+    End If
+    
+    func_GetKakemeName = True
+    
+    Exit Function
+
+ErrHandler:
+    func_GetKakemeName = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(MODULE_NAME, "func_GetKakemeName", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+'    Erase vData
+    lngRow = 0
+
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：契約情報取得処理
+'
+'引　　数　：
+'           strKakemeCode   I       掛目コード
+'           vdata()         O       取得結果
+'           lngRow          O       取得件数
+'           blnLock         I       排他ロック
+'
+'戻り値　　：Boolean
+'
+'機能説明　：契約情報を取得する
+'
+'更新履歴　：2006/11/30 SRA Y.Azuma    新規作成
+'更新履歴　：2008/01/21 SRA Y.Azuma    変更     (PH4)特殊文字バグ対応
+'
+'*************************************************************************
+Public Function func_GetKakemeInfo(ByVal strKakemeCode As String _
+                                   , ByRef vData() As Variant _
+                                   , ByRef lngRow As Long _
+                                   , Optional ByVal blnLock = False) As Boolean
+    Dim strSql      As String
+    Dim lngCol      As Long
+    Dim lngCnt      As Long
+    Dim strErrCode  As String
+    
+    func_GetKakemeInfo = False
+    
+    strSql = ""
+    strSql = strSql & " SELECT"
+    strSql = strSql & "     KAKEME_TABLE_NO,"
+    strSql = strSql & "     SHUEKI_RATE_HANI,"
+    strSql = strSql & "     FUGOU,"
+    strSql = strSql & "     A,"
+    strSql = strSql & "     B,"
+    strSql = strSql & "     KOUSHIN_YMD"
+    strSql = strSql & " FROM"
+    strSql = strSql & "     KYK_KAKEME"
+    strSql = strSql & " WHERE"
+'------------<Modify Start azuma 2008/01/21 (PH4)> ★★★☆-----------------------
+    strSql = strSql & "     KAKEME_CD='" & func_ChkQuoteshon(strKakemeCode, "'") & "'"
+'    strSql = strSql & "     KAKEME_CD='" & strKakemeCode & "'"
+'------------<Modify End   azuma 2008/01/21 (PH4)> ★★★☆-----------------------
+    strSql = strSql & " AND SAKUJO_FLG='0'"
+    
+    '排他ロック
+    If blnLock Then
+        strSql = strSql & " FOR UPDATE NOWAIT"
+    End If
+    
+    strSql = strSql & " ORDER BY"
+    strSql = strSql & "     KAKEME_TABLE_NO"
+    
+    
+    'データ取得
+    Call gclsdb.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow, strErrCode)
+    
+    If Trim(strErrCode) <> "" Then
+        lngRow = 0
+        Exit Function
+    End If
+    
+    func_GetKakemeInfo = True
+    
+    Exit Function
+
+ErrHandler:
+    func_GetKakemeInfo = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(MODULE_NAME, "func_GetKakemeInfo", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+'    Erase vData
+    lngRow = 0
+
+
+End Function
+
+
+
+
+'*************************************************************************
+'関数名　　：ワークシートに取得情報を設定する
+'
+'引　　数　：
+'           TargetSheets    O       処理対象ワークシート
+'           vdata()         I       設定データ
+'           lngRow          I       設定データ件数
+'
+'戻り値　　：Boolean
+'
+'機能説明　：処理対象ワークシートにデータを設定する。
+'
+'更新履歴　：2006/11/30 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Private Function func_SetKakemeInfo(ByRef TargetSheets As Object _
+                                   , ByVal vData As Variant _
+                                   , ByVal lngRow As Long) As Boolean
+On Error GoTo ErrHandler
+
+    Dim lngCnt   As Long
+    Dim lngDankai   As Long
+    
+
+    func_SetKakemeInfo = False
+    
+'    Call gCom01_SheetProtect(ThisWorkbook.Worksheets(MAIN_SHEETNAME), False)
+'    TargetSheets.Range("検索時更新日") = vData(SELECT_KOUSHIN_YMD, 0)
+'    Call gCom01_SheetProtect(ThisWorkbook.Worksheets(MAIN_SHEETNAME), False)
+    
+    For lngCnt = 0 To lngRow - 1
+        lngDankai = lngCnt + 1
+        With TargetSheets
+            .Range("収益率").Offset(lngDankai, 0) = CStr(vData(SELECT_SHUEKI_RATE, lngCnt - 0))
+            .Range("符号").Offset(lngDankai, 0) = func_GetFugouChar(CStr(vData(SELECT_FUGOU, lngCnt - 0)))
+            .Range("A").Offset(lngDankai, 0) = CStr(vData(SELECT_KAKEME_A, lngCnt - 0))
+            .Range("B").Offset(lngDankai, 0) = CStr(vData(SELECT_KAKEME_B, lngCnt - 0))
+        End With
+        
+    Next lngCnt
+
+    func_SetKakemeInfo = True
+
+    Exit Function
+
+ErrHandler:
+    func_SetKakemeInfo = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(MODULE_NAME, "func_SetKakemeInfo", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+'    MsgBox "Error:func_SetKakemeInfo" & vbCrLf & Err.Description
+
+End Function
+
+
+
+
+

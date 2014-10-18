@@ -1,0 +1,171 @@
+VERSION 1.0 CLASS
+BEGIN
+  MultiUse = -1  'True
+END
+Attribute VB_Name = "Sheet1"
+Attribute VB_GlobalNameSpace = False
+Attribute VB_Creatable = False
+Attribute VB_PredeclaredId = True
+Attribute VB_Exposed = True
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：国内顧問料・コード登録
+'
+'オブジェクト名：Sheet1
+'
+'機能概要　：メイン画面
+'
+'更新履歴　：2007/11/26 SRA 東       新規作成
+'
+'*************************************************************************
+Private Const MODULE_NAME As String = "main"
+
+
+'*************************************************************************
+'関数名　　：一覧削除ボタン・イベントプロシージャ
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：検索ボタンを押下された場合の処理
+'
+'更新履歴　：2007/11/26 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Private Sub cmdDel_Click()
+    
+    Application.ScreenUpdating = False
+    Call gCom01_SheetProtect(Worksheets(MAIN_SHEETNAME), False)
+    Call gKsC_fncKsCmnCheckRowDelete(ThisWorkbook.Worksheets(MAIN_SHEETNAME))
+    Call gCom01_SheetProtect(Worksheets(MAIN_SHEETNAME), True)
+    Application.ScreenUpdating = True
+
+End Sub
+
+'*************************************************************************
+'関数名　　：一覧新規ボタン・イベントプロシージャ
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：検索ボタンを押下された場合の処理
+'
+'更新履歴　：2007/11/26 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Private Sub cmdNew_Click()
+
+    Dim lngAddRow As Long       '追加開始行番号
+    
+    Application.ScreenUpdating = False
+    'コードのチェック
+    If gfuncCodeInputCheck(ThisWorkbook.Worksheets(MAIN_SHEETNAME)) = False Then
+        Exit Sub
+    End If
+    
+    '追加行番号取得
+    lngAddRow = fncKsCmnSearchNewRow(ThisWorkbook.Worksheets(MAIN_SHEETNAME))
+    
+    
+    '行追加
+    If lngAddRow > ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range("対象").Row Then
+        Call gCom01_SheetProtect(Worksheets(MAIN_SHEETNAME), False)
+        Call gKsC_fncKsCmnInsRow(ThisWorkbook.Worksheets(MAIN_SHEETNAME), lngAddRow, LIST_COPY_ROW)
+        Call gCom01_SheetProtect(Worksheets(MAIN_SHEETNAME), True)
+    End If
+    
+    Application.ScreenUpdating = True
+    
+
+End Sub
+
+'*************************************************************************
+'関数名　　：検索ボタン・イベントプロシージャ
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：検索ボタンを押下された場合の処理
+'
+'更新履歴　：2007/11/26 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Private Sub cmdSearch_Click()
+
+On Error GoTo Error_Section
+
+    
+    Application.ScreenUpdating = False
+    blnProcessing = True
+    '検索メイン
+    Call gCom01_SheetProtect(Worksheets(MAIN_SHEETNAME), False)
+    Call gsub_KensakuMain(Worksheets(MAIN_SHEETNAME))
+    Call gCom01_SheetProtect(Worksheets(MAIN_SHEETNAME), True)
+    blnProcessing = False
+    Application.ScreenUpdating = True
+
+    
+    Exit Sub
+
+Error_Section:
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "cmdSearch_Click", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    blnProcessing = False
+    Application.ScreenUpdating = True
+    
+    
+End Sub
+
+
+'*************************************************************************
+'関数名　　：更新ボタン・イベントプロシージャ
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：更新ボタンを押下された場合の処理
+'
+'更新履歴　：2007/11/26 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Private Sub cmdUp_Click()
+
+On Error GoTo Error_Section
+
+    Application.ScreenUpdating = False
+    
+    '検索メイン
+    Call gsub_KoushinMain(Worksheets(MAIN_SHEETNAME))
+    
+    Application.ScreenUpdating = True
+    
+    
+    Exit Sub
+Error_Section:
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "cmdUp_Click", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Application.ScreenUpdating = True
+    
+
+
+End Sub
+
+
+
+

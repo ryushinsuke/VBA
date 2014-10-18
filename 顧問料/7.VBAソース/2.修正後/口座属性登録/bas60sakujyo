@@ -1,0 +1,223 @@
+Attribute VB_Name = "bas60sakujyo"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：国内顧問料計算システム・口座属性登録
+'
+'オブジェクト名：bas60sakujyo
+'
+'機能概要　：削除処理
+'
+'更新履歴　：2013/04/18 GUT 董 新規作成 顧問バック更改対応
+'
+'*************************************************************************
+
+Const MODULE_NAME = "bas60sakujyo"
+'*************************************************************************
+'関数名　　：入力チェック処理(削除時)
+'
+'引　　数　：
+'           TargetSheets        I           チェック対象のシート
+'
+'戻り値　　：
+'
+'機能説明　：
+'
+'更新履歴　：2013/04/18 GUT 董 新規作成 顧問バック更改対応
+'
+'*************************************************************************
+Public Function gfuncKohza_DelInputCheck(ByRef TargetSheets As Object) As Boolean
+On Error GoTo ErrorSection
+    Dim strKozaNo       As String
+    Dim strKikan        As String
+    Dim strDate         As String
+    Dim strTime         As String
+    
+    gfuncKohza_DelInputCheck = False
+    strKozaNo = ""
+
+    strKozaNo = Trim(TargetSheets.Range("口座番号"))         '口座番号
+
+    '①口座番号の検索時同一チェック
+    strKozaNo = gfunc_KozaNoFormat(Trim(TargetSheets.Range("口座番号")))
+    If StrComp(Worksheets(TIMESTAMP_SHEETNAME).Range("検索時口座ＮＯ"), strKozaNo) <> 0 Then
+        '"口座番号：検索時と口座番号が異なります。"
+        Call gfunc_ErrorMsg(3, 4182, "口座番号", "")
+        TargetSheets.Range("口座番号").Select
+        Exit Function
+    End If
+
+    gfuncKohza_DelInputCheck = True
+
+    Exit Function
+    
+ErrorSection:
+    
+    gfuncKohza_DelInputCheck = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gfuncKohza_DelInputCheck", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+'*************************************************************************
+'関数名　　：削除処理(メイン)(海外口座)
+'
+'引　　数　：
+'           TargetSheets        I           チェック対象のシート
+'
+'戻り値　　：Boolean
+'
+'機能説明　：削除
+'
+'更新履歴　：2013/04/18 GUT 董 新規作成 顧問バック更改対応
+'
+'*************************************************************************
+Public Function gfuncKohza_DoDelete(ByRef TargetSheets As Object) As Boolean
+
+On Error GoTo ErrorSection
+
+    Dim strKohzaNo      As String       '口座番号
+    Dim strTime         As String
+    Dim strError        As String
+    Dim lngWork         As Long
+    Dim lngStatus       As Long         '更新済みチェックのステータス
+    Dim lngMsgId        As Long         'エラーメッセージID
+    
+    
+    
+    gfuncKohza_DoDelete = False
+    
+    '口座番号　取得
+    strKohzaNo = gfunc_KozaNoFormat(TargetSheets.Range("口座番号").Value2)
+    
+    'トランザクション開始
+    cnAdo.BeginTrans
+    
+    '更新済みチェックと排他処理
+    If func_UpdateCheck(TargetSheets, lngStatus) = False Then
+        
+        If lngStatus = 1 Or lngStatus = 2 Then
+            '0:正常,1:ロック,2:削除済,-1:その他
+            Select Case lngStatus
+                Case 1
+                '他セッションからのロック
+                    lngMsgId = 1522
+                Case 2
+                '削除済み
+                    lngMsgId = 1523
+            End Select
+            
+            'エラーメッセージ出力
+            Call gfunc_ErrorMsg(3, lngMsgId, "", "")
+        End If
+        
+        GoTo RollbackSection
+        Exit Function
+    End If
+    
+    '　口座属性テーブルへの論理削除
+    If func_DelKohzaZokusei(TBL_KOHZA_ZOKUSEI, strKohzaNo) = False Then
+        GoTo RollbackSection
+        Exit Function
+    End If
+    
+    '　口座コードテーブルへの物理削除
+    If func_DelCommon(TBL_KOHZA_CODE, strKohzaNo) = False Then
+        GoTo RollbackSection
+        Exit Function
+    End If
+
+    'コミット
+    cnAdo.CommitTrans
+
+    gfuncKohza_DoDelete = True
+    
+    Exit Function
+    
+RollbackSection:
+    'ロールバック
+    cnAdo.RollbackTrans
+    
+    gfuncKohza_DoDelete = False
+    Exit Function
+    
+ErrorSection:
+
+    gfuncKohza_DoDelete = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gfuncKohza_DoDelete", Err.Number, Err.Description)
+    On Error GoTo 0
+    On Error Resume Next
+    'ロールバック
+    cnAdo.RollbackTrans
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+'*************************************************************************
+'関数名　　：論理削除顧問料口座属性テーブル
+'
+'引　　数　：
+'           strTableName    I       処理対象ワークシート
+'           strKohzaNo      I       削除対象口座番号
+'
+'戻り値　　：なし
+'
+'機能説明　：顧問料口座属性テーブルの論理削除
+'
+'更新履歴　：2013/04/18 GUT 董 新規作成 顧問バック更改対応
+'
+'*************************************************************************
+Private Function func_DelKohzaZokusei(ByVal strTableName As String _
+                              , ByVal strKohzaNo As String) As Boolean
+On Error GoTo ErrorSection
+
+    Dim vData()                 As Variant
+    Dim strSql                  As String
+    Dim lngCol                  As Long
+    Dim lngRow                  As Long
+    Dim lngCnt                  As Long
+    Dim strErrCode              As String
+    Dim blnRet                  As Boolean
+
+    func_DelKohzaZokusei = False
+    
+    strSql = ""
+    strSql = strSql & " UPDATE " & strTableName
+    strSql = strSql & " SET SAKUJO_FLG = '1'"
+    strSql = strSql & " WHERE KOHZA_NO = '" & strKohzaNo & "'"
+       
+    '実行
+    blnRet = gclsdb.DoExequteSql(gcUPDATE, strSql, vData, lngCol, lngRow, strErrCode)
+    
+    If blnRet = False Then
+        Exit Function
+    End If
+    
+    Erase vData
+    func_DelKohzaZokusei = True
+
+    Exit Function
+
+ErrorSection:
+
+    func_DelKohzaZokusei = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_DelKohzaZokusei", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Erase vData
+
+End Function
+

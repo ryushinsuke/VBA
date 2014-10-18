@@ -1,0 +1,457 @@
+Attribute VB_Name = "bas50Sakujo"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：国内顧問料・海外資産額登録
+'
+'オブジェクト名：bas50Sakujo
+'
+'機能概要　：削除ボタン処理
+'
+'更新履歴　：2007/11/30 SRA 東       新規作成
+'
+'*************************************************************************
+
+Const MODULE_NAME = "bas50Sakujo"
+
+'*************************************************************************
+'関数名　　：検索処理メイン処理
+'
+'引　　数　：
+'           objTarget        I           対象のシート
+'
+'戻り値　　：
+'
+'機能説明　：
+'
+'更新履歴　：2007/11/30 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Sub gsub_SakujoMain(ByRef objTarget As Object)
+
+On Error GoTo ErrorSection
+
+    Dim blnRet      As Boolean
+    Dim DelRows()   As Long
+    Dim lngRow      As Long
+    Dim lngCnt      As Long
+    Dim strDate     As Long
+    Dim strUpdDate  As String
+    Dim dtUpdDate   As Date
+    Dim strKohzaNo  As String
+    Dim strMsg      As String
+    Dim lngRet      As Long
+    
+    blnRet = False
+    
+    
+    With objTarget
+    
+        
+        '基準年月入力チェック処理
+        blnRet = gfuncHeaderInputCheck(objTarget)
+        
+        If blnRet = False Then
+            Exit Sub
+        End If
+        
+        '明細の対象チェック
+        blnRet = gfuncCheckOnExists(objTarget, DelRows())
+        If blnRet = False Then
+            Exit Sub
+        End If
+        
+        If UBound(DelRows) <= 0 Then
+            Call gfunc_ErrorMsg(3, 16006, "", "対象データが選択されていません。")
+            Exit Sub
+        End If
+        
+        '削除確認
+        strMsg = gfunc_ErrorMsg(2, 16020, "", "", False)
+        lngRet = MsgBox(strMsg, vbQuestion + vbOKCancel, Application.ActiveWorkbook.Name)
+        If lngRet = vbCancel Then
+            Exit Sub
+        End If
+        
+        strDate = Trim(objTarget.Range("基準月").Value)
+        
+        '基準月末日の取得
+        strDate = func_GetLastDay(strDate)
+        
+        For lngCnt = UBound(DelRows) To 1 Step -1
+            blnRet = False
+            
+            '口座番号
+            strKohzaNo = objTarget.Cells(DelRows(lngCnt), .Range("口座番号").Column).Text
+        
+            '更新年月日
+            strUpdDate = objTarget.Cells(DelRows(lngCnt), .Range("更新年月日").Column).Text
+            If Trim(objTarget.Cells(DelRows(lngCnt), .Range("更新年月日").Column).Value) <> "" Then
+                dtUpdDate = objTarget.Cells(DelRows(lngCnt), .Range("更新年月日").Column).Value
+            End If
+            
+            'DBからの削除処理を行う
+            If Trim(strUpdDate) <> "" Then
+            
+                '海外資産額テーブルから削除する。
+                blnRet = gfunc_DoDelete(objTarget, strDate, strKohzaNo, dtUpdDate)
+            
+                If blnRet = False Then
+                    
+                    'システムエラー
+                    Call gfunc_ErrorMsg(1, 16007, "", "")
+                    
+'                    .cmdUp.Enabled = False
+        
+                    Exit Sub
+                End If
+            End If
+            
+            '画面からの削除処理を行う
+            Call fncKsCmnDeleteRow(objTarget, DelRows(lngCnt))
+        
+        Next
+        
+    End With
+    
+    Exit Sub
+    
+ErrorSection:
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gsub_SakujoMain", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Sub
+
+'*************************************************************************
+'関数名　　：削除対象チェック処理
+'
+'引　　数　：
+'           TargetSheets        I           チェック対象のシート
+'           DelRows()           I           削除対象行配列
+'
+'戻り値　　：Boolean
+'
+'機能説明　：対象がチェックONの行を調べる
+'
+'更新履歴　：2007/11/30 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Private Function gfuncCheckOnExists(ByRef objTarget As Object, ByRef DelRows() As Long) As Boolean
+On Error GoTo ErrorSection
+
+    Dim lngLastRow  As Long       '行番号
+    Dim lngRow      As Long
+    Dim lngCount    As Long
+    
+    gfuncCheckOnExists = False
+    
+    lngCount = 0
+    
+    ReDim DelRows(lngCount)
+
+    '最終行番号取得
+    lngLastRow = fncKsCmnSearchNewRow(ThisWorkbook.Worksheets(MAIN_SHEETNAME)) - 1
+    
+    For lngRow = objTarget.Range("対象").Row To lngLastRow
+        If UCase(objTarget.Range(mLINKCELLNAME & lngRow).Value) = CHECK_ON Then
+            lngCount = lngCount + 1
+            ReDim Preserve DelRows(lngCount)
+            DelRows(lngCount) = lngRow
+        End If
+    Next lngRow
+    
+    gfuncCheckOnExists = True
+    
+Exit Function
+
+ErrorSection:
+    gfuncCheckOnExists = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gfuncCheckOnExists", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+
+End Function
+
+
+'*************************************************************************
+'関数名　　：削除処理(メイン)
+'
+'引　　数　：
+'           TargetSheets        I      処理対象のシート
+'           strLastDate         I      基準年月月末日
+'           strKohzaNo          I      削除口座番号
+'           dtDate              I      削除更新年月日
+'
+'戻り値　　：Boolean
+'
+'機能説明　：更新
+'
+'更新履歴　：2007/11/30 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Function gfunc_DoDelete(ByRef TargetSheets As Object _
+                             , ByVal strLastDate As String _
+                             , ByVal strKohzaNo As String _
+                             , ByVal dtDate As Date) As Boolean
+
+
+On Error GoTo ErrorSection
+
+    Dim lngStatus           As Long         '更新済みチェックのステータス
+    Dim lngMsgId            As Long         'エラーメッセージID
+    Dim lngRow              As Long
+    Dim dtDbDate            As Date
+
+    gfunc_DoDelete = False
+    
+
+    'トランザクション開始
+    cnAdo.BeginTrans
+    
+    '排他チェック
+    If func_CheckKaigaiShisanGaku(strLastDate, strKohzaNo, lngRow, dtDate, lngStatus) = False Then
+        
+        If lngStatus = 1 Or lngStatus = 2 Then
+            '0:正常,1:ロック,2:削除済,-1:その他
+            Select Case lngStatus
+                Case 1
+                '他セッションからのロック
+                    lngMsgId = 16008
+                Case 2
+                '削除済み
+                    lngMsgId = 16009
+            End Select
+            
+            'エラーメッセージ出力
+            Call gfunc_ErrorMsg(3, lngMsgId, "", "口座番号：" & strKohzaNo)
+        End If
+        
+        GoTo RollbackSection
+        Exit Function
+    End If
+    
+
+
+    '海外資産額テーブルへの処理
+    If func_DEL_KAIGAI_SHISAN(strLastDate, strKohzaNo) = False Then
+        GoTo RollbackSection
+        Exit Function
+    End If
+
+
+    'コミット
+    cnAdo.CommitTrans
+
+    gfunc_DoDelete = True
+
+    Exit Function
+
+RollbackSection:
+    'ロールバック
+    cnAdo.RollbackTrans
+
+    gfunc_DoDelete = False
+    Exit Function
+
+ErrorSection:
+
+    gfunc_DoDelete = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gfunc_DoDelete", Err.Number, Err.Description)
+    On Error GoTo 0
+    On Error Resume Next
+    'ロールバック
+    cnAdo.RollbackTrans
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+
+
+End Function
+
+'*************************************************************************
+'関数名　　：海外資産更新チェック
+'
+'引　　数　：
+'           strLastDate     I      基準年月日
+'           strKohzaNo      I      画面口座番号
+'           lngRow          I      画面行番号
+'           dtDate          I      検索時更新年月日
+'           lngStatus       O      ステータス
+'
+'戻り値　　：Boolean
+'
+'機能説明　：更新
+'
+'更新履歴　：2007/11/30 SRA Y.Azuma    新規作成
+'更新履歴　：2008/01/22 SRA Y.Azuma    変更     (PH4)特殊文字バグ対応
+'
+'*************************************************************************
+Public Function func_CheckKaigaiShisanGaku(ByVal strLastDate As String _
+                                          , ByVal strKohzaNo As String _
+                                          , ByVal lngRow As Long _
+                                          , ByRef dtDate As Date _
+                                          , ByRef lngStatus As Long) As Boolean
+On Error GoTo ErrorSection
+    
+    Dim vData()     As Variant
+    Dim strSql      As String
+    Dim lngCol      As Long
+    Dim strErrCode  As String
+    Dim dtDbDate    As Date
+    Dim blnRet      As Boolean
+    
+    func_CheckKaigaiShisanGaku = False
+
+    strErrCode = "ORA-00054"    '除外エラーコード
+
+    strSql = ""
+    strSql = strSql & " SELECT KOHSHIN_YMD"
+    strSql = strSql & "       ,SAKUJO_FLG"
+    strSql = strSql & "   FROM " & TBL_KAIGAI_SHISAN_GAKU
+'------------<Modify Start azuma 2008/01/22 (PH4)> ★★★☆-----------------------
+    strSql = strSql & "  WHERE KOHZA_NO  = '" & func_ChkQuoteshon(strKohzaNo, "'") & "'"
+'    strSql = strSql & "  WHERE KOHZA_NO  = '" & strKohzaNo & "'"
+'------------<Modify End   azuma 2008/01/22 (PH4)> ★★★☆-----------------------
+    strSql = strSql & "    AND KIJYUN_YMD = '" & strLastDate & "'"
+    strSql = strSql & "    FOR UPDATE NOWAIT"
+    
+    'データ取得
+    blnRet = gclsDB.DoExequteSql(gcSELECT, strSql, vData, lngCol, lngRow, strErrCode)
+    
+    
+    If blnRet Then
+        '削除フラグの確認
+        If lngRow > 0 Then
+            dtDbDate = vData(0, 0)
+            If CStr(vData(1, 0)) <> "0" Then
+                '削除フラグが"0"以外の場合、他ユーザーから更新済み
+                lngStatus = 2
+                Exit Function
+            End If
+            
+            '更新日付が異なる場合
+            If dtDate <> dtDbDate Then
+                '他ユーザーから更新済み
+                lngStatus = 2
+                Exit Function
+            End If
+            
+        End If
+    Else
+        If Trim(strErrCode) <> "" Then
+        
+            If strErrCode = "ORA-00054" Then
+            '他セッションからのロック状態
+                lngStatus = 1
+            Else
+            'その他エラー
+                lngStatus = -1
+            End If
+            
+            Exit Function
+        End If
+        Exit Function
+    End If
+
+    
+    Erase vData
+    
+    func_CheckKaigaiShisanGaku = True
+    
+    Exit Function
+
+ErrorSection:
+    func_CheckKaigaiShisanGaku = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_CheckKaigaiShisanGaku", Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Erase vData
+
+
+End Function
+
+'*************************************************************************
+'関数名　　：海外資産削除処理
+'
+'引　　数　：
+'           strLastDate     I       基準年月日
+'           strKohzaNo      I       削除対象口座番号
+'
+'戻り値　　：Boolean
+'
+'機能説明　：海外資産テーブルの論理削除
+'
+'更新履歴　：2007/11/30 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Private Function func_DEL_KAIGAI_SHISAN(ByVal strLastDate As String, ByVal strKohzaNo As String) As Boolean
+On Error GoTo ErrorSection
+
+    Dim vData()                 As Variant
+    Dim strSql                  As String
+    Dim lngCol                  As Long
+    Dim lngRow                  As Long
+    Dim strErrCode              As String
+    Dim blnRet                  As Boolean
+
+    func_DEL_KAIGAI_SHISAN = False
+    
+    
+    strSql = ""
+    strSql = strSql & " UPDATE " & TBL_KAIGAI_SHISAN_GAKU
+    strSql = strSql & " SET "
+    strSql = strSql & " KOHSHIN_YMD       = SYSDATE "
+    strSql = strSql & ",KOHSHIN_PGM_ID    = '" & UPDATE_PGM_ID & "'"
+    strSql = strSql & ",KOHSHIN_TANTOHSHA = '" & UPDATE_USER & "'"
+    strSql = strSql & ",SAKUJO_FLG        = '1'"
+    strSql = strSql & " WHERE "
+    strSql = strSql & " KOHZA_NO          = '" & strKohzaNo & "' AND"
+    strSql = strSql & " KIJYUN_YMD        = '" & strLastDate & "'"
+    
+    '実行
+    blnRet = gclsDB.DoExequteSql(gcUPDATE, strSql, vData, lngCol, lngRow, strErrCode)
+    
+    
+    If blnRet = False Then
+        Exit Function
+    End If
+    
+    Erase vData
+    func_DEL_KAIGAI_SHISAN = True
+
+    Exit Function
+
+ErrorSection:
+
+    func_DEL_KAIGAI_SHISAN = False
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "func_DEL_KAIGAI_SHISAN", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Erase vData
+
+End Function
+

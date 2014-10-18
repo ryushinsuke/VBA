@@ -1,0 +1,522 @@
+Attribute VB_Name = "basKsCommon"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：外部委託ライセンスフィー算出システム・支払日登録
+'
+'オブジェクト名：basKsCommon
+'
+'機能概要　：共通処理
+'
+'更新履歴　：2008/06/10 SRA吉井   新規作成
+'
+'*************************************************************************
+
+Const MODULE_NAME = "basKsCommon"
+
+Public Const MAIN_SHEETNAME = "main"
+Public Const TEMPLATE_SHEETNAME = "Template"
+Public Const DATA_SHEETNAME = "Data"
+
+'------------<Modify Start azuma 2008/08/08 > 連結障害対応(No.24)-----------------------
+'明細行の開始行番号
+Public Const DATA_TOP_ROW As Long = 16
+
+'''終了時の更新確認Msg 'BeforeClose時にはMsg取得しないほうがいいので事前に取得しておく
+''Public gstrQuitMsg As String
+''
+'''明細行の開始行番号
+''Public lngDataTopRow As Long
+'------------<Modify End   azuma 2008/08/08 > 連結障害対応(No.24)-----------------------
+
+Public Enum DTCol                   '明細行の列書式定義
+    支払Chk = 2
+    支払日
+    支払予定日 = 6
+    外部委託先 = 9
+    支払期間FROM = 12
+    支払期間TO = 15
+    送付日 = 18
+    外部委託支払計算額 = 21
+    内消費税 = 25
+    支払ChkLink = 38
+    支払期間ID
+    支払フラグ
+    更新前支払Chk
+    更新前支払日
+    変更比較Flag
+End Enum
+
+'*************************************************************************
+'関数名　　：明細行追加メイン処理
+'
+'引　数　　：TargetSheets  I/O     処理対象ワークシート
+'　　　　　　iInsRow       I       追加対象ROW
+'　　　　　　iSrcRow       I       複写元ROW
+'　　　　　　lngInsCnt     I       追加行数
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：指定された明細行の追加を行う。
+'
+'更新履歴　：2008/06/12 SRA吉井   新規作成
+'
+'*************************************************************************
+Public Function gKsC_fncKsCmnInsRow(TargetSheets As Object, _
+                                    iInsRow As Long, _
+                                    iSrcRow As Long, _
+                     Optional ByVal lngInsCnt As Long = 1) As Long
+On Error GoTo ErrorHandler
+    
+    Dim lngCnt As Long
+    Dim str1 As String
+    Dim str2 As String
+
+    gKsC_fncKsCmnInsRow = 0
+    
+    Sheets(TEMPLATE_SHEETNAME).Rows(iSrcRow & ":" & iSrcRow).Copy
+    
+    Sheets(MAIN_SHEETNAME).Select
+    Rows(iInsRow & ":" & iInsRow + lngInsCnt - 1).Select
+    Selection.Insert Shift:=xlDown
+    Application.CutCopyMode = False
+
+    'チェックボックスの追加
+    str1 = fncCmnCellAdrCnv(DTCol.支払Chk)
+    str2 = fncCmnCellAdrCnv(DTCol.支払ChkLink)
+    For lngCnt = 1 To lngInsCnt
+        Call fncCmnSetCheckBox(TargetSheets, str1 & iInsRow + lngCnt - 1, str2 & iInsRow + lngCnt - 1)
+    Next
+    TargetSheets.Cells(iInsRow, 3).Select
+    
+    Exit Function
+
+ErrorHandler:
+    gKsC_fncKsCmnInsRow = Err.Number
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gKsC_fncKsCmnInsRow", Err.Number, Err.Description)
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    On Error GoTo 0
+    
+End Function
+
+'*************************************************************************
+'関数名　　：明細行削除メイン処理
+'
+'引　数　　：TargetSheets I/O     削除対象シートオブジェクト
+'　　　　　　AllDel       I       全削除フラグ(初期値:False)　True:全削除
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：明細行の削除を行う。
+'
+'更新履歴　：2008/06/13 SRA吉井   新規作成
+'更新履歴　：2008/08/08 SRA Y.Azuma    変更   連結障害対応(No.24)
+'
+'*************************************************************************
+Public Function gKsC_fncKsCmnCheckRowDelete(TargetSheets As Object, _
+                                   Optional AllDel As Boolean = False) As Long
+On Error GoTo ErrorHandler
+
+    Dim lngCnt As Long
+
+    gKsC_fncKsCmnCheckRowDelete = 0
+    
+    '支払情報
+'------------<Modify Start azuma 2008/08/08 > 連結障害対応(No.24)-----------------------
+    lngCnt = DATA_TOP_ROW
+'    lngCnt = lngDataTopRow
+'------------<Modify End   azuma 2008/08/08 > 連結障害対応(No.24)-----------------------
+        
+    With TargetSheets
+        If AllDel Then
+            Call fncCmnDelCheckBox(TargetSheets, "", True)  '全チェックボックス削除
+            '明細行の削除処理
+            TargetSheets.Rows(lngCnt & ":65536").Select
+            Application.CutCopyMode = False
+            Selection.Delete Shift:=xlUp
+        Else
+
+            Do While (.Cells(lngCnt, DTCol.支払期間ID) <> vbNullString)
+                If AllDel = False Then
+                '選択削除
+                    If .Cells(lngCnt, DTCol.支払期間ID) Then
+                        Call fncKsCmnDeleteRow(TargetSheets, lngCnt, AllDel)
+                    Else
+                        lngCnt = lngCnt + 1
+                    End If
+                Else
+                '全削除
+                    Call fncKsCmnDeleteRow(TargetSheets, lngCnt, AllDel)
+                End If
+            Loop
+        End If
+    End With
+    
+    Exit Function
+
+ErrorHandler:
+    gKsC_fncKsCmnCheckRowDelete = Err.Number
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "gKsC_fncKsCmnCheckRowDelete", Err.Number, Err.Description)
+    On Error GoTo 0
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+'*************************************************************************
+'関数名　　：明細行削除処理
+'
+'引　数　　：TargetSheets  I/O     削除対象シートオブジェクト
+'　　　　　　iDelRow       I       削除対象ROW
+'　　　　　　AllDel        I       全削除フラグ(初期値:False)　True:全削除
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：指定された明細行の削除を行う。
+'
+'更新履歴　：2008/06/13 SRA吉井   新規作成
+'
+'*************************************************************************
+Private Function fncKsCmnDeleteRow(TargetSheets As Object, _
+                                   iDelRow As Long, _
+                          Optional AllDel As Boolean = False) As Long
+On Error GoTo ErrorHandler
+
+    fncKsCmnDeleteRow = 0
+    
+    If TargetSheets.Cells(iDelRow, DTCol.支払期間ID) = "" Then
+        Exit Function
+    End If
+    
+    'チェックボックスの削除処理
+    If Not AllDel Then      '全削除では、一括で削除するので、ここでは実施しない。
+        Call fncCmnDelCheckBox(TargetSheets, fncCmnCellAdrCnv(DTCol.支払ChkLink) & iDelRow)
+    End If
+    
+    '明細行の削除処理
+    TargetSheets.Rows(iDelRow & ":" & iDelRow).Select
+    Application.CutCopyMode = False
+    Selection.Delete Shift:=xlUp
+
+    TargetSheets.Cells(iDelRow, 2).Select
+
+    Exit Function
+
+ErrorHandler:
+    fncKsCmnDeleteRow = Err.Number
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "fncKsCmnDeleteRow", Err.Number, Err.Description)
+    On Error GoTo 0
+    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+'*************************************************************************
+'関数名　　：チェックボックスの作成
+'
+'引　数　　：TargetSheets  I/O     処理対象ワークシート
+'　　　　　　CellName      I       作成対象セル
+'　　　　　　LinkCellName  I       作成対象セル
+'
+'戻り値　　：Long
+'
+'機能説明　：チェックボックス作成
+'
+'更新履歴　：2008/06/12 SRA吉井   新規作成
+'
+'*************************************************************************
+Public Function fncCmnSetCheckBox(ByRef objTarget As Object _
+                                , ByVal CellName As String _
+                                , ByVal LinkCellName As String) As Long
+On Error GoTo ErrorHandler
+    
+    fncCmnSetCheckBox = 0
+    
+    Dim lngZoom As Long
+    Dim objX    As Object
+    
+    With objTarget.Range(CellName)
+        Set objX = Worksheets(MAIN_SHEETNAME).Shapes.AddFormControl( _
+            xlCheckBox, _
+            .Left + 3, _
+            .Top - 1, _
+            10.5, _
+            10)
+        With objX.OLEFormat.Object
+            .Display3DShading = True
+            .Caption = ""
+            .LinkedCell = LinkCellName
+        End With
+    End With
+
+    Exit Function
+
+ErrorHandler:
+    fncCmnSetCheckBox = Err.Number
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "fncCmnSetCheckBox", Err.Number, Err.Description)
+    On Error GoTo 0
+'---- Error Log End   ----------------------------------------------------
+    
+End Function
+
+'*************************************************************************
+'関数名　　：チェックボックスの削除
+'
+'引　数　　：TargetSheets  I/O     処理対象ワークシート
+'　　　　　　CellName      I       削除対象セル
+'　　　　　　AllDel        I       全削除フラグ(初期値:False)　True:全削除
+'
+'戻り値　　：Long
+'
+'機能説明　：チェックボックスを削除する
+'
+'更新履歴　：2008/06/10 SRA吉井   新規作成
+'
+'*************************************************************************
+Public Function fncCmnDelCheckBox(ByRef objTarget As Object, _
+                                        CellName As String, _
+                               Optional AllDel As Boolean = False) As Long
+On Error GoTo ErrorHandler
+    
+    Dim c As Object
+    
+    With objTarget
+        For Each c In .Shapes
+            If c.Type = msoFormControl Then
+                If c.FormControlType = xlCheckBox Then
+                    Select Case True
+                    Case AllDel
+                        c.Delete
+                    Case c.OLEFormat.Object.LinkedCell = CellName
+                        c.Delete
+                        Exit For
+                    End Select
+                End If
+            End If
+        Next
+    End With
+
+    Exit Function
+
+ErrorHandler:
+    fncCmnDelCheckBox = Err.Number
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "fncCmnDelCheckBox", Err.Number, Err.Description)
+    On Error GoTo 0
+'---- Error Log End   ----------------------------------------------------
+End Function
+
+'*************************************************************************
+'関数名　　：フォーカス設定
+'
+'引　数　　：TargetObj     I       対象レンジ
+'
+'戻り値　　：なし
+'
+'機能説明　：フォーカス設定
+'
+'更新履歴　：2008/06/12 SRA吉井   新規作成
+'
+'*************************************************************************
+Public Sub subCmnSetFocus(TargetObj As Object)
+
+On Error GoTo ErrorHandler
+    
+    Dim blnScrUpd As Boolean
+    
+    blnScrUpd = Application.ScreenUpdating  'Save
+    Application.ScreenUpdating = True       '強制表示
+    TargetObj.Activate                      'フォーカス設定
+    Application.ScreenUpdating = blnScrUpd  'Restore
+    
+    Exit Sub
+
+ErrorHandler:
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    Application.ScreenUpdating = True
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "subCmnSetFocus", Err.Number, Err.Description)
+    On Error GoTo 0
+    subCmnEnd       'Program Stop
+'---- Error Log End   ----------------------------------------------------
+
+End Sub
+
+'*************************************************************************
+'関数名　　：セルアドレス変換
+'
+'引　数　　：P_Par1          I       入力パラメータ１
+'　　　　　　P_Par2          I       入力パラメータ２(省略可能)
+'
+'戻り値　　：Variant         O       変換結果
+'
+'機能説明　：１～256の列番号をA～ZZに変換
+'
+'更新履歴　：2008/06/13 SRA吉井   新規作成
+'
+'*************************************************************************
+Public Function fncCmnCellAdrCnv(ByVal P_Par1 As Variant _
+                      , Optional ByVal P_Par2 As Variant = Null) As Variant
+On Error GoTo ErrorHandler
+    
+    Dim lngNo  As Long
+    Dim lngNo2 As Long
+    Dim str1   As String
+    
+    lngNo = (P_Par1 - 1) Mod 26
+    lngNo2 = Int((P_Par1 - 1) / 26)
+    str1 = Chr(Asc("A") + lngNo)
+    If lngNo2 > 0 Then str1 = Chr(Asc("A") + lngNo2 - 1) & str1
+    fncCmnCellAdrCnv = str1
+    
+    Exit Function
+
+ErrorHandler:
+    fncCmnCellAdrCnv = Null
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "fncCmnCellAdrCnv", Err.Number, Err.Description)
+    On Error GoTo 0
+    subCmnEnd       'Program Stop
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+
+'*************************************************************************
+'関数名　　：桁落防止SUM処理
+'
+'引　数　　：TargetSheet   I       対象ワークシート
+'　　　　　　lngRowX       I       集計先行
+'　　　　　　lngColX       I       集計先列
+'　　　　　　lngRow1       I       集計元行(開始)
+'　　　　　　lngCol1       I       集計元列(開始)
+'　　　　　　lngRow2       I       集計元行(終了)　（省略可能）
+'　　　　　　lngCol2       I       集計元列(終了)　（省略可能）
+'
+'戻り値　　：なし
+'
+'機能説明　：合計算出
+'
+'更新履歴　：2008/06/13 SRA吉井   新規作成
+'
+'*************************************************************************
+Public Sub subCmnSumEX(TargetSheet As Object _
+                      , ByVal lngRowX As Long, ByVal lngColX As Long _
+                      , ByVal lngRow1 As Long, ByVal lngCol1 As Long _
+                      , Optional ByVal lngRow2 As Long = 0 _
+                      , Optional ByVal lngCol2 As Long = 0)
+On Error GoTo ErrorHandler
+
+    Dim lng1 As Long, lng2 As Long, lngSum1 As Long, lngSum2 As Long
+    Dim lngCnt1 As Long, lngCnt2 As Long
+    Dim str1 As String, str2 As String
+    
+    Const lngOvrNb As Long = 10000000
+    
+    If lngRow2 = 0 Then             '省略時初期化、ByValパラメータ
+        lngRow2 = lngRow1
+    End If
+    If lngCol2 = 0 Then             '省略時初期化、ByValパラメータ
+        lngCol2 = lngCol1
+    End If
+
+    lngSum1 = 0: lngSum2 = 0        '集計値初期化
+    
+    With TargetSheet
+
+        For lngCnt1 = lngRow1 To lngRow2: For lngCnt2 = lngCol1 To lngCol2        '行列Loop Start
+
+'(1)文字列分割
+            str1 = Trim(.Cells(lngCnt1, lngCnt2))
+            str2 = ""
+            Select Case True
+            Case Len(str1) = 8 And Left(str1, 1) = "-"  'pass case
+            Case Len(str1) > 7
+                str2 = Left(str1, Len(str1) - 7)
+                str1 = Right(str1, 7)
+                If Left(str2, 1) = "-" Then str1 = "-" & str1
+            End Select
+            
+'(2)分割加算
+            lngSum1 = lngSum1 + Val(str1)
+            lngSum2 = lngSum2 + Val(str2)
+                    
+            Select Case True
+            Case lngSum1 < 0 And lngSum2 > 0    '符号乖離の更正（）
+                lngSum1 = lngSum1 + lngOvrNb
+                lngSum2 = lngSum2 - 1
+            Case lngSum1 > 0 And lngSum2 < 0    '符号乖離の更正
+                lngSum1 = lngSum1 - lngOvrNb
+                lngSum2 = lngSum2 + 1
+            Case lngSum1 >= lngOvrNb            '桁あふれの更正（正値）
+                lngSum1 = lngSum1 - lngOvrNb
+                lngSum2 = lngSum2 + 1
+            Case lngSum1 <= -1 * lngOvrNb       '桁あふれの更正（負値）
+                lngSum1 = lngSum1 + lngOvrNb
+                lngSum2 = lngSum2 - 1
+            End Select
+
+        Next: Next        '行列Loop END
+        
+'(3)結果格納
+        If lngSum2 = 0 Then
+            str1 = Trim(Str(lngSum1))
+        Else
+            str1 = Right("0000000" & Trim(Str(Abs(lngSum1))), 7)
+            str1 = Trim(Str(lngSum2)) & str1
+        End If
+        .Cells(lngRowX, lngColX) = str1
+        
+    End With
+
+    Exit Sub
+
+ErrorHandler:
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, "subCmnSumEX", Err.Number, Err.Description)
+    On Error GoTo 0
+    subCmnEnd       'Program Stop
+'---- Error Log End   ----------------------------------------------------
+
+End Sub
+
+'*************************************************************************
+'関数名　　：強制終了処理
+'
+'引　数　　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：強制終了
+'
+'更新履歴　：2008/06/12 SRA吉井   新規作成
+'
+'*************************************************************************
+Public Sub subCmnEnd()
+    
+    Call gCom01_SheetProtect(Worksheets(MAIN_SHEETNAME), True)         'シート保護/イベント/画面Refresh
+    Application.EnableEvents = True
+    Application.ScreenUpdating = True
+    
+    End     '強制終了
+    
+End Sub

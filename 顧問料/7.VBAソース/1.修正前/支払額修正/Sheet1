@@ -1,0 +1,88 @@
+VERSION 1.0 CLASS
+BEGIN
+  MultiUse = -1  'True
+END
+Attribute VB_Name = "Sheet1"
+Attribute VB_GlobalNameSpace = False
+Attribute VB_Creatable = False
+Attribute VB_PredeclaredId = True
+Attribute VB_Exposed = True
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：外部委託ライセンスフィー算出システム・支払額修正
+'
+'オブジェクト名：Sheet1
+'
+'機能概要　：メイン画面
+'
+'更新履歴　：2008/06/18 SRA吉井   新規作成
+'
+'*************************************************************************
+
+Private Const MODULE_NAME As String = "Sheet1"
+    
+'検索ボタン
+Private Sub cmdSearch_Click()
+    'シート保護解除
+    gCom01_SheetProtect ActiveSheet, False
+    
+    cmdSearch.Enabled = False
+    fncSearch
+    cmdSearch.Enabled = True
+    
+    'シート保護
+    gCom01_SheetProtect ActiveSheet, True
+End Sub
+
+'更新ボタン
+Private Sub cmdUpdate_Click()
+    'シート保護解除
+    gCom01_SheetProtect ActiveSheet, False
+    
+    cmdUpdate.Enabled = False
+    fncUpdate
+    cmdUpdate.Enabled = True
+
+    'シート保護
+    gCom01_SheetProtect ActiveSheet, True
+End Sub
+
+'課税後外部委託支払計算修正額を変更した時、消費税フラグがＯＮ（1）かつ消費税率がゼロでない場合に消費税額を自動計算する
+Private Sub Worksheet_Change(ByVal Target As Range)
+    
+    Dim lngRet  As Long
+    
+    '課税後外部委託支払計算修正額が変更された場合
+    If Target.Column = COLN_SHIHARAI_SHUSEI_GAKU Then
+    
+        '課税後外部委託支払計算修正額がブランクの場合
+        If Trim(Sheets(SHEET_MAIN).Cells(Target.Row, COLN_SHIHARAI_SHUSEI_GAKU).Value) = "" Then
+            Sheets(SHEET_MAIN).Cells(Target.Row, COLN_SHOHIZEI_SHUSEI_GAKU).Value = ""
+            Exit Sub
+        End If
+        
+        '課税後外部委託支払計算修正額チェック
+        lngRet = fncChkShuseiGakuFormat(Sheets(SHEET_MAIN).Cells(Target.Row, COLN_SHIHARAI_SHUSEI_GAKU).Value, MSG1_SHIHARAI_SHUSEI_GAKU)
+        If lngRet <> 0 Then
+            Target.Select
+            Exit Sub
+        End If
+        
+        '消費税フラグがＯＮ（1）かつ消費税率がゼロでない場合
+        If Sheets(SHEET_MAIN).Cells(Target.Row, COLN_SHOHIZEI_FLG).Value = "1" And _
+           Sheets(SHEET_MAIN).Cells(Target.Row, COLN_SHOHIZEI_RITSU).Value <> 0 Then
+            '消費税額を計算
+            Sheets(SHEET_MAIN).Cells(Target.Row, COLN_SHOHIZEI_SHUSEI_GAKU).Value = _
+            Fix(Sheets(SHEET_MAIN).Cells(Target.Row, COLN_SHIHARAI_SHUSEI_GAKU).Value * _
+            Sheets(SHEET_MAIN).Cells(Target.Row, COLN_SHOHIZEI_RITSU).Value / _
+            (100 + Sheets(SHEET_MAIN).Cells(Target.Row, COLN_SHOHIZEI_RITSU).Value))
+        Else
+            '消費税額をクリア
+            Sheets(SHEET_MAIN).Cells(Target.Row, COLN_SHOHIZEI_SHUSEI_GAKU).Value = 0
+        End If
+    
+    End If
+    
+End Sub

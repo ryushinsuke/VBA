@@ -1,0 +1,101 @@
+Attribute VB_Name = "basCommon"
+'*************************************************************************
+'
+'プロジェクト名：外部委託ライセンスフィー算出システム・共通モジュール
+'
+'オブジェクト名：basCommon
+'
+'機能概要　：共通機能
+'
+'更新履歴　：2008/06/18 SRA吉井   新規作成
+'
+'*************************************************************************
+
+Private Const MODULE_NAME As String = "basCommon"
+
+'*************************************************************************
+'
+'関数名　　：チェックボックス作成
+'
+'引　数　　：CellName       I          作成セル
+'　　　　　：LinkCellName   I          リンクセル
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：チェックボックスを作成する
+'
+'更新履歴　：2008/06/20 SRA吉井   新規作成
+'
+'*************************************************************************
+Public Function fncCmnSetCheckBox(CellName As String, LinkCellName As String) As Long
+    
+On Error GoTo ErrorHandler
+    
+    fncCmnSetCheckBox = 0
+    
+    Dim lngZoom As Long
+    Dim objX    As Object
+    
+    lngZoom = ActiveWindow.Zoom
+    ActiveWindow.Zoom = 100
+    
+    With ThisWorkbook.ActiveSheet.Range(CellName)
+        Set objX = ThisWorkbook.ActiveSheet.Shapes.AddFormControl( _
+            xlCheckBox, _
+            .Left + 14, _
+            .Top - 0.5, _
+            5, _
+            5)
+        With objX.OLEFormat.Object
+            .Display3DShading = True
+            .Caption = ""
+            .LinkedCell = LinkCellName
+        End With
+    End With
+    
+    ActiveWindow.Zoom = lngZoom
+    
+    Exit Function
+
+ErrorHandler:
+    MsgBox Err.Description
+    fncCmnSetCheckBox = Err.Number
+End Function
+
+'*************************************************************************
+'
+'関数名　　：チェックボックス削除
+'
+'引　数　　：なし
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：チェックボックスを削除する
+'
+'更新履歴　：2008/06/20 SRA吉井   新規作成
+'
+'*************************************************************************
+Function fncCmnDelCheckBox() As Long
+
+On Error GoTo ErrorHandler
+    
+    Dim ccc As Object
+
+    fncCmnDelCheckBox = 0
+
+    With ActiveSheet
+        For Each ccc In .Shapes
+            If ccc.Type = msoFormControl Then
+                If ccc.FormControlType = xlCheckBox Then
+                    ccc.Delete
+                End If
+            End If
+        Next
+    End With
+
+    Exit Function
+
+ErrorHandler:
+    MsgBox Err.Description
+    fncCmnDelCheckBox = Err.Number
+End Function

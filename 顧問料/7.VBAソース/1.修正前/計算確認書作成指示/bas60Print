@@ -1,0 +1,104 @@
+Attribute VB_Name = "bas60Print"
+Option Explicit
+'*************************************************************************
+'
+'プロジェクト名：外部委託ライセンスフィー算出システム・計算確認書作成指示
+'
+'オブジェクト名：bas60Print
+'
+'機能概要　：帳票印刷処理
+'
+'更新履歴　：2008/06/30 SRA 東       新規作成
+'
+'*************************************************************************
+
+Const MODULE_NAME = "bas60Print"
+
+
+'*************************************************************************
+'関数名　　：計算確認書印刷
+'
+'引　　数　：   strBookName     I       ブック名
+'
+'戻り値　　：
+'
+'機能説明　：全シートの印刷を行う
+'
+'更新履歴　：2008/06/30 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Sub KakuninshoPrint(ByVal strBookName As String)
+
+On Error GoTo Error_Section
+
+    Const PROCEDURE_NAME    As String = "KakuninshoPrint"
+
+    Dim lngSheetCnt         As Long
+    Dim lngSheetMax         As Long
+    Dim lngCnt              As Long
+    Dim arySheetName        As Variant
+    Dim wkPrintBook         As Workbook
+    
+    lngSheetMax = Workbooks(strBookName).Sheets.Count
+    
+    ReDim arySheetName(0)
+    lngCnt = 0
+
+    For lngSheetCnt = 1 To lngSheetMax
+        With Workbooks(strBookName).Worksheets(lngSheetCnt)
+    
+'            If InStr(1, .Name, "レター") = 0 Then
+'                'レター以外は印刷範囲を縦1ページに収まるよう設定
+'                .PageSetup.Zoom = False
+''                .PageSetup.FitToPagesWide = 1
+'    '            .PageSetup.FitToPagesTall = 1
+'            Else
+'                '処理なし
+'            End If
+            
+            '印刷のサイズをＡ４に設定
+            .PageSetup.PaperSize = xlPaperA4
+            
+            If lngSheetCnt > 1 Then
+                If lngCnt > 0 Then
+                    ReDim Preserve arySheetName(lngCnt)
+                Else
+                    '処理なし
+                End If
+                arySheetName(lngCnt) = .Name
+                lngCnt = lngCnt + 1
+            Else
+                '処理なし
+            End If
+            
+        End With
+    Next lngSheetCnt
+    
+    Set wkPrintBook = Workbooks(strBookName)
+    
+    wkPrintBook.Sheets(arySheetName).Select
+    DoEvents
+    wkPrintBook.Application.ActiveWindow.SelectedSheets.PrintOut
+    DoEvents
+    
+    Set wkPrintBook = Nothing
+    Set arySheetName = Nothing
+    
+    Exit Sub
+
+Error_Section:
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Set wkPrintBook = Nothing
+    Set arySheetName = Nothing
+    
+    ThisWorkbook.Application.ScreenUpdating = True
+    
+End Sub
+

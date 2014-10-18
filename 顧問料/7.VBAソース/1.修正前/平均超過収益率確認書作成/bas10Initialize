@@ -1,0 +1,151 @@
+Attribute VB_Name = "bas10Initialize"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：国内顧問料計算システム・平均超過収益率確認書作成
+'
+'オブジェクト名：bas10Initialize
+'
+'機能概要　：初期処理
+'
+'更新履歴　：2011/02/01 SRA 宮嵜     新規作成
+'
+'*************************************************************************
+Const MODULE_NAME = "bas10Initialize"
+
+
+
+'*************************************************************************
+'関数名　　：平均超過収益率確認書作成画面の初期化メイン
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：初期起動時に行われる初期処理のメイン
+'
+'更新履歴　：2011/02/01 SRA 宮嵜     新規作成
+'
+'*************************************************************************
+Public Sub g_subKeisanInitialize()
+
+    '画面の初期化
+    Call gCom01_SheetProtect(ThisWorkbook.Worksheets(MAIN_SHEETNAME), False)
+    ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range("口座番号").Value = ""
+    ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range("基準日").Value = ""
+    ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range("成功報酬From").Value = ""
+    ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range("成功報酬To").Value = ""
+
+    Call g_subKeisanIniScreenH(ThisWorkbook.Worksheets(MAIN_SHEETNAME))   'ヘッダー部
+    
+    ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range("目標超過収益率").Value = "FALSE"
+    ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range("目標超過収益率2").Value = ""
+    ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range("ローリング年数").Value = ""
+    ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range("保存フォルダ").Value = "C:\EXT\KEIYAKU2\FILE_NEW"
+    
+    Call g_subKeisanIniScreenD(ThisWorkbook.Worksheets(MAIN_SHEETNAME))   '明細部
+    
+End Sub
+
+
+'*************************************************************************
+'関数名　　：平均超過収益率確認書作成画面のクリア処理(ヘッダー部)
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：ヘッダー部のセルをクリアする
+'
+'更新履歴　：2011/02/01 SRA 宮嵜     新規作成
+'
+'*************************************************************************
+Public Sub g_subKeisanIniScreenH(ByRef TargetSheets As Object)
+
+    ' ヘッダー部の初期化
+    With ThisWorkbook.Worksheets(MAIN_SHEETNAME)
+
+        Call gCom01_SheetProtect(TargetSheets, False)
+        
+        .Range("口座名称").Value = ""
+        .Range("協会報告区分").Value = ""
+        .Range("顧問請求From").Value = ""
+        .Range("顧問請求To").Value = ""
+        .Range("信託From").Value = ""
+        .Range("信託To").Value = ""
+        .Range("契約From").Value = ""
+        .Range("契約To").Value = ""
+        .Range("入金日区分").Value = ""
+        .Range("年間日数").Value = ""
+        .Range("初回最終区分").Value = ""
+        .Range("平残断面区分").Value = ""
+        .Range("前払後払区分").Value = ""
+        .Range("ゼロ円請求書区分").Value = ""
+        
+        .chkSeiko = False
+        .Range("成功報酬タイプ").Value = ""
+        .Range("上期未収掛け目").Value = ""
+
+        Call gCom01_SheetProtect(TargetSheets, True)
+    
+    End With
+End Sub
+
+'*************************************************************************
+'関数名　　：平均超過収益率確認書作成画面のクリア処理(明細部)
+'
+'引　　数　：なし
+'
+'戻り値　　：なし
+'
+'機能説明　：明細部行を全て削除する
+'
+'更新履歴　：2011/02/01 SRA 宮嵜     新規作成
+'
+'*************************************************************************
+Public Sub g_subKeisanIniScreenD(ByRef TargetSheets As Object)
+        
+    Call gCom01_SheetProtect(TargetSheets, False)
+    
+    With ThisWorkbook.Worksheets(MAIN_SHEETNAME)
+        .chkMokuhyo = False
+        .Range("目標超過収益率2").Value = ""
+        .Range("ローリング年数").Value = ""
+    End With
+    
+    Call gKsC_fncKsCmnCheckRowDelete(ThisWorkbook.Worksheets(MAIN_SHEETNAME), 1, True)  'ローリング期間
+    
+    Call gCom01_SheetProtect(TargetSheets, True)
+
+End Sub
+
+'*************************************************************************
+'関数名　　：コマンドボタンの表示・非表示設定
+'
+'引　　数　：
+'           blnType       I       表示：True、非表示：False
+'
+'戻り値　　：なし
+'
+'機能説明　：コマンドボタン表示・非表示の設定をする。
+'
+'更新履歴　：2011/02/01 SRA 宮嵜     新規作成
+'
+'*************************************************************************
+Public Sub gfunc_VisibleCommandBtn(blnType As Boolean)
+
+    With ThisWorkbook.Worksheets(MAIN_SHEETNAME)
+    
+        .cmdAdd1.Visible = blnType
+        .cmdDel1.Visible = blnType
+        
+        .cmdSearch.Visible = blnType
+        .cmdUp.Visible = blnType
+        .cmdPrint.Visible = blnType
+        .cmdSakusei.Visible = blnType
+        .cmdSansyo.Visible = blnType
+                
+    End With
+
+End Sub

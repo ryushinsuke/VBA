@@ -1,0 +1,582 @@
+Attribute VB_Name = "basClickRunBtn5200"
+Option Explicit
+
+'*************************************************************************
+'プロジェクト名：新契約管理システム・業務帳票作成指示
+'オブジェクト名：basClickRunBtn5200
+'機能概要　：顧問料支払い口座一覧（予定）
+'更新履歴　：2008/04/22 SRA 吉井     新規作成
+'　　　　　：2008/07/25 SRA 吉井     顧問料支払い口座一覧の修正
+'
+'*************************************************************************
+
+Const MODULE_NAME = "basClickRunBtn5200"
+
+Private Const cBaseFile = gc帳票Base10
+Private Const cPreFName = gc帳票名10
+
+Private Const cDateTitle = "出力日："               '出力日
+
+'*************************************************************************
+'関数名　　：顧問料支払い口座一覧（予定）(帳票作成)
+'引　数　　：
+'           objTarget        I           対象のシート
+'戻り値　　：
+'機能説明　：
+'更新履歴　：2008/04/22 SRA 吉井     新規作成
+'　　　　　：2008/07/25 SRA 吉井     顧問料支払い口座一覧の修正
+'
+'*************************************************************************
+Public Function fncClickRunBtn5200(ByRef objTarget As Object) As Boolean
+
+    Const PROCEDURE_NAME As String = "fncClickRunBtn5200"
+
+On Error GoTo ErrSection
+
+    Dim strOutFName     As String
+    Dim strOutFNameOnly As String
+
+    Dim inData()        As Variant  '顧問料支払い口座一覧（予定）データ取得用
+
+    Dim strDate         As String   'システム日付(YYYY/MM/DD)
+    Dim strSvrDate      As String   'サーバーシステム日付(YYYYMMDD)
+    Dim strSvrTime      As String   'サーバーシステム時刻
+
+    Call subBeginProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+
+    fncClickRunBtn5200 = False
+
+    With objTarget
+
+        'マウスポインターをWAITにする
+        ThisWorkbook.Application.Cursor = xlWait
+
+        ' 作成選択の場合
+        If .chkMake.Value = True Then
+            
+            'システム日付を取得する
+'=== 顧問料支払い口座一覧の修正 2008/07/25 Modified By SRA吉井 START
+'            strDate = Format(Date, "YYYY/MM/DD")
+            Call gfunc_GetSvDateTime(strSvrDate, strSvrTime)
+            strDate = Format(strSvrDate, "0000/00/00")
+'=== 顧問料支払い口座一覧の修正 2008/07/25 Modified By SRA吉井 END
+
+            ' データ取得
+'=== 顧問料支払い口座一覧の修正 2008/07/25 Modified By SRA吉井 START
+'            If fncGetDBData5200(Format(strDate, "YYYYMMDD"), inData()) = False Then
+            If fncGetDBData5200(strSvrDate, inData()) = False Then
+'=== 顧問料支払い口座一覧の修正 2008/07/25 Modified By SRA吉井 END
+                GoTo RtnErrSection
+            End If
+        
+            ' 帳票ファイル取得
+            If fncGetFile5200(strOutFNameOnly) = False Then
+                GoTo RtnErrSection
+            End If
+
+            strOutFName = strOutFNameOnly
+        
+            ' フォルダをつける。
+            strOutFName = .Range("保存フォルダ").Value & "\" & strOutFName
+            
+            ' ファイルコピー
+            If fncCopyBook(cBaseFile, strOutFName) = False Then
+                GoTo RtnErrSection
+            End If
+            
+            ' ファイル作成
+            If fncMakeBook5200(strDate, strOutFName, inData()) = False Then
+                ' ファイル削除
+                Call fncDeleteFile(strOutFName)
+
+                GoTo RtnErrSection
+            End If
+        End If
+    
+        ' 印刷のみ選択の場合
+        If .chkPrint.Value = True Then
+            ' ファイル印刷
+            If fncPrintBook(cPreFName, .Range("保存フォルダ").Value) = False Then
+                GoTo RtnErrSection
+            End If
+        End If
+    
+        'マウスポインターを戻す
+        ThisWorkbook.Application.Cursor = xlDefault
+    
+    End With
+   
+    fncClickRunBtn5200 = True
+    Erase inData
+    
+    Call subEndProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                     *
+'*******************************************************
+ErrSection:
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'---- Error Log End   ----------------------------------------------------
+    
+'*******************************************************
+'* リターンエラーセクション                              *
+'*******************************************************
+RtnErrSection:
+                
+    'マウスポインターを戻す
+    ThisWorkbook.Application.Cursor = xlDefault
+                
+    fncClickRunBtn5200 = False
+    Erase inData
+    
+End Function
+
+'*************************************************************************
+'関数名　　：顧問料支払い口座一覧（予定）(帳票データ取得)
+'引　数　　：
+'           strKjnYmd          I           基準年月日(yyyymmdd)
+'           inData()           O           取得データ
+'戻り値　　：処理結果
+'機能説明　：顧問料支払い口座一覧（予定）のデータを取得する。
+'更新履歴　：2008/04/22 SRA 吉井     新規作成
+'
+'*************************************************************************
+Public Function fncGetDBData5200( _
+    ByVal strKjnYmd As String, _
+    ByRef inData() As Variant _
+) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncGetDBData5200"
+
+On Error GoTo ErrSection
+    
+    Dim lngKohzaCnt         As Long
+    
+    fncGetDBData5200 = False
+    
+    '顧問料支払い口座一覧（予定）データ取得
+    If fncGetKomonryouShiharaiKohzaIchiranYoteiData(strKjnYmd, inData(), lngKohzaCnt) <> True Then
+        Exit Function
+    End If
+    
+    '口座が1件も存在しない場合
+    If lngKohzaCnt = 0 Then
+        ' 該当データが存在しません。
+        Call gfunc_ErrorMsg(gcMsgKbn_3, gcMsgId3001, cPreFName, "")
+        Exit Function
+    End If
+    
+    fncGetDBData5200 = True
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncGetDBData5200 = False
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'---- エラーログ出力 End  ---------------------------------
+   
+End Function
+
+'*************************************************************************
+'関数名　　：顧問料支払い口座一覧（予定）データ取得
+'引　数　　：
+'           strKjnYmd          I           基準年月日(yyyymmdd)
+'           inData()           O           取得データ
+'戻り値　　：処理結果
+'機能説明　：顧問料支払い口座一覧（予定）のデータを取得する
+'更新履歴　：2008/04/22 SRA 吉井     新規作成
+'　　　　　：2008/07/25 SRA 吉井     顧問料支払い口座一覧の修正
+'        　：2013/04/10 GUT 趙 顧問バック更改対応
+'
+'*************************************************************************
+Public Function fncGetKomonryouShiharaiKohzaIchiranYoteiData( _
+    ByVal strKjnYmd As String, _
+    ByRef inData() As Variant, _
+    ByRef lngRow As Long _
+) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncGetKomonryouShiharaiKohzaIchiranYoteiData"
+
+On Error GoTo ErrSection
+
+    Dim strSql      As String
+    Dim lngCol      As Long
+    
+    fncGetKomonryouShiharaiKohzaIchiranYoteiData = False
+    
+
+'*******************************************************
+'* SQL文作成                                           *
+'*******************************************************
+
+    strSql = ""
+    strSql = strSql & " select"
+    strSql = strSql & "        vd1.prtcd                       prtcd,"                        '-- 口座No
+    strSql = strSql & "        ("
+    strSql = strSql & "            select"
+    strSql = strSql & "                Trim (v002.name_rk)"
+    strSql = strSql & "            from"
+    strSql = strSql & "                vw_dt002r v002"
+    strSql = strSql & "            where"
+    strSql = strSql & "                v002.tekiyou_date = ("
+    strSql = strSql & "                    select"
+    strSql = strSql & "                        max(v2.tekiyou_date) tekiyou_date"
+    strSql = strSql & "                    from"
+    strSql = strSql & "                        vw_dt002r v2"
+    strSql = strSql & "                    where"
+    strSql = strSql & "                        v2.tekiyou_date <= vd1.kijyun_ymd"
+    strSql = strSql & "                    and v2.prtcd = vd1.prtcd"
+    strSql = strSql & "                )"
+    strSql = strSql & "            and v002.prtcd = vd1.prtcd"
+    strSql = strSql & "        ) 　　　　　　　　　　　　　　　kokyaku_name,"                   '-- 顧客名
+    strSql = strSql & "        ("
+    strSql = strSql & "            select"
+    strSql = strSql & "                Trim (v300.seimei_kj)"
+    strSql = strSql & "            from"
+'------------<顧問バック更改対応 2013/04/10 GUT趙 START> ------------
+'    strSql = strSql & "                vw_dt003r v003,"
+'    strSql = strSql & "                vw_dt300d v300"
+    strSql = strSql & "                kyk_am_shutantohsha v003,"
+    strSql = strSql & "                kyk_tantohsha v300"
+'------------<顧問バック更改対応 2013/04/10 GUT趙 END> ------------
+    strSql = strSql & "            where"
+    strSql = strSql & "                v003.tantou_kbn = '1'"
+    strSql = strSql & "            and v003.tekiyou_from <= vd1.kijyun_ymd"
+    strSql = strSql & "            and v003.tekiyou_to   >= vd1.kijyun_ymd"
+    strSql = strSql & "            and (v003.tantou_cd) = (v300.tantou_cd)"
+    strSql = strSql & "            and v300.tekiyou_from <= vd1.kijyun_ymd"
+    strSql = strSql & "            and v300.tekiyou_to   >= vd1.kijyun_ymd"
+    strSql = strSql & "            and v003.prtcd = vd1.prtcd"
+    strSql = strSql & "        )                               am_name,"                      '-- AM
+    strSql = strSql & "        ("
+    strSql = strSql & "            select"
+    strSql = strSql & "                Trim (v300.seimei_kj)"
+    strSql = strSql & "            from"
+'------------<顧問バック更改対応 2013/04/10 GUT趙 START> ------------
+'    strSql = strSql & "                vw_dt003r v003,"
+'    strSql = strSql & "                vw_dt300d v300"
+    strSql = strSql & "                kyk_am_shutantohsha v003,"
+    strSql = strSql & "                kyk_tantohsha v300"
+'------------<顧問バック更改対応 2013/04/10 GUT趙 END> ------------
+    strSql = strSql & "            where"
+    strSql = strSql & "                v003.tantou_kbn = '2'"
+    strSql = strSql & "            and v003.tekiyou_from <= vd1.kijyun_ymd"
+    strSql = strSql & "            and v003.tekiyou_to   >= vd1.kijyun_ymd"
+    strSql = strSql & "            and (v003.tantou_cd) = (v300.tantou_cd)"
+    strSql = strSql & "            and v300.tekiyou_from <= vd1.kijyun_ymd"
+    strSql = strSql & "            and v300.tekiyou_to   >= vd1.kijyun_ymd"
+    strSql = strSql & "            and v003.prtcd = vd1.prtcd"
+    strSql = strSql & "        )                               shu_pm_name,"                  '-- 主PM
+    strSql = strSql & "        ("
+    strSql = strSql & "            select"
+    strSql = strSql & "                Trim (v301.name_j)"
+    strSql = strSql & "            from"
+    strSql = strSql & "                vw_dt301d v301"
+    strSql = strSql & "            where"
+    strSql = strSql & "                v301.cd_kbn     = '15'"
+    strSql = strSql & "            and trim(v301.cd_1) = trim(vd1.sintaku_bank_cd)"
+    strSql = strSql & "        )                               sintaku_bank_name,"            '-- 信託BK
+    strSql = strSql & "        trim(vd1.sintaku_bank_prtcd)    sintaku_bank_no,"              '-- 信託No
+'=== 顧問料支払い口座一覧の修正 2008/07/25 Added By SRA吉井 START
+    strSql = strSql & "        ("
+    strSql = strSql & "            select"
+    strSql = strSql & "                Trim (kcv.value_name)"
+    strSql = strSql & "            from"
+    strSql = strSql & "                kyk_code_value kcv"
+    strSql = strSql & "            where"
+    strSql = strSql & "                kcv.code_no    = '33'"
+    strSql = strSql & "            and kcv.code_value = krtk.px_shintaku_kbn"
+    strSql = strSql & "            and kcv.sakujo_flg = '0'"
+    strSql = strSql & "        )                               px_shintaku_kbn,"              '-- 基礎数値種類
+    strSql = strSql & "        ("
+    strSql = strSql & "            select"
+    strSql = strSql & "                Trim (kcv.value_name)"
+    strSql = strSql & "            from"
+    strSql = strSql & "                kyk_code_value kcv"
+    strSql = strSql & "            where"
+    strSql = strSql & "                kcv.code_no    = '2'"
+    strSql = strSql & "            and kcv.code_value = krtk.kiso_suchi_keisan_hohhoh"
+    strSql = strSql & "            and kcv.sakujo_flg = '0'"
+    strSql = strSql & "        )                               kiso_suchi_keisan_hohhoh,"     '-- 基礎数値計算方法
+'=== 顧問料支払い口座一覧の修正 2008/07/25 Added By SRA吉井 END
+    strSql = strSql & "        ("
+    strSql = strSql & "            select"
+'=== 顧問料支払い口座一覧の修正 2008/07/25 Modified By SRA吉井 START
+'    strSql = strSql & "                trim(kcv1.value_name_e)"
+    strSql = strSql & "                trim(kcv.value_name)"
+'=== 顧問料支払い口座一覧の修正 2008/07/25 Modified By SRA吉井 END
+    strSql = strSql & "            from"
+'=== 顧問料支払い口座一覧の修正 2008/07/25 Modified  By SRA吉井 START
+'    strSql = strSql & "                kyk_code_value kcv1"
+    strSql = strSql & "                kyk_kohza_code kkc,"
+    strSql = strSql & "                kyk_code_value kcv"
+'=== 顧問料支払い口座一覧の修正 2008/07/25 Modified  By SRA吉井 END
+    strSql = strSql & "            where"
+'=== 顧問料支払い口座一覧の修正 2008/07/25 Modified By SRA吉井 START
+'    strSql = strSql & "                kcv1.code_no    = '116'"
+'    strSql = strSql & "            and kcv1.code_value = kcv.code_value"
+    strSql = strSql & "                kcv.code_no    = '1016'"
+    strSql = strSql & "            and kkc.code_no    = kcv.code_no"
+    strSql = strSql & "            and kkc.code_value = kcv.code_value"
+    strSql = strSql & "            and kkc.kohza_no   = vd1.prtcd"
+    strSql = strSql & "            and kkc.sakujo_flg = '0'"
+    strSql = strSql & "            and kcv.sakujo_flg = '0'"
+'=== 顧問料支払い口座一覧の修正 2008/07/25 Modified By SRA吉井 END
+    strSql = strSql & "        )                               hikiotosi_date,"               '-- 引落し日
+    strSql = strSql & "        ("
+    strSql = strSql & "            select"
+    strSql = strSql & "                Trim (kcv.value_name)"
+    strSql = strSql & "            from"
+    strSql = strSql & "                kyk_kohza_code kkc,"
+    strSql = strSql & "                kyk_code_value kcv"
+    strSql = strSql & "            where"
+    strSql = strSql & "                kkc.code_no    = '1017'"
+    strSql = strSql & "            and kkc.code_no    = kcv.code_no"
+    strSql = strSql & "            and kkc.code_value = kcv.code_value"
+    strSql = strSql & "            and kkc.kohza_no   = vd1.prtcd"
+'=== 顧問料支払い口座一覧の修正 2008/07/25 Added By SRA吉井 START
+    strSql = strSql & "            and kkc.sakujo_flg = '0'"
+    strSql = strSql & "            and kcv.sakujo_flg = '0'"
+'=== 顧問料支払い口座一覧の修正 2008/07/25 Added By SRA吉井 END
+    strSql = strSql & "        )                               siharai"                       '-- 支払
+    strSql = strSql & " from"
+    strSql = strSql & "        ("
+    strSql = strSql & "            select  v1.prtcd,"
+    strSql = strSql & "                    v1.sintaku_bank_cd,"
+    strSql = strSql & "                    v1.sintaku_bank_prtcd,"
+    strSql = strSql & "                    " & strKjnYmd & " kijyun_ymd"
+    strSql = strSql & "            from"
+'=== 2008/10/14 海外口座の契約日の管理 SRA水谷 Start ===
+'    strSql = strSql & "                    vw_dt001d v1"                                      '-- 口座属性（全項目）テーブル
+    strSql = strSql & "                    kyk_vw_dt001d v1"                                      '-- 口座属性（全項目）新テーブル
+'=== 2008/10/14 海外口座の契約日の管理 SRA水谷 End ===
+    strSql = strSql & "            where"
+    strSql = strSql & "            (v1.calloff_date = 0 or v1.calloff_date >= " & strKjnYmd & ")"
+    strSql = strSql & "            and     v1.settei_date <= " & strKjnYmd
+'------------<顧問バック更改対応 2013/04/10 GUT趙 START> ------------
+'    strSql = strSql & "            and     v1.delt_flg     = '0'"
+'    strSql = strSql & "            and     v1.settei_kbn   = '1'"
+    strSql = strSql & "            and     v1.settei_kbn    = '0'"
+    strSql = strSql & "            and     v1.gengo         = '0'"
+'------------<顧問バック更改対応 2013/04/10 GUT趙 END> ------------
+    strSql = strSql & "        )                               vd1,"
+'=== 顧問料支払い口座一覧の修正 2008/07/25 Modified By SRA吉井 START
+'    strSql = strSql & "        kyk_kohza_code                  kkc,"                          '-- 口座コードテーブル
+'    strSql = strSql & "        kyk_code_value                  kcv"                           '-- コード値テーブル
+    strSql = strSql & "        ("
+    strSql = strSql & "            select  distinct"
+    strSql = strSql & "                    krt.kohza_no,"
+    strSql = strSql & "                    krt.px_shintaku_kbn,"
+    strSql = strSql & "                    krt.kiso_suchi_keisan_hohhoh"
+    strSql = strSql & "            from"
+    strSql = strSql & "                    kyk_rate_tekiyoh_kikan krt"                        '-- 料率適用期間テーブル
+    strSql = strSql & "            where"
+    strSql = strSql & "                    krt.rate_tekiyoh_kikan_from <= " & strKjnYmd
+    strSql = strSql & "            and     krt.rate_tekiyoh_kikan_to   >= " & strKjnYmd
+    strSql = strSql & "            and     krt.sakujo_flg               = '0'"
+    strSql = strSql & "            and     krt.shisan_bunrui            = '0'"
+    strSql = strSql & "        )                               krtk"
+'=== 顧問料支払い口座一覧の修正 2008/07/25 Modified By SRA吉井 END
+    strSql = strSql & " where"
+'=== 顧問料支払い口座一覧の修正 2008/07/25 Modified By SRA吉井 START
+'    strSql = strSql & "     vd1.prtcd = kkc.kohza_no"
+'    strSql = strSql & " and kkc.code_no    = '1016'"
+'    strSql = strSql & " and kcv.code_no    = '116'"
+'    strSql = strSql & " and kkc.code_value = substr(kcv.code_value,1,2)"
+'    strSql = strSql & " order by vd1.prtcd, kcv.code_value"
+    strSql = strSql & "     vd1.prtcd      = krtk.kohza_no"
+    strSql = strSql & " order by vd1.prtcd, krtk.px_shintaku_kbn, krtk.kiso_suchi_keisan_hohhoh"
+'=== 顧問料支払い口座一覧の修正 2008/07/25 Modified By SRA吉井 END
+    'データ取得
+    Call gclsDB.DoExequteSql(gcSELECT, strSql, inData, lngCol, lngRow)
+    
+    fncGetKomonryouShiharaiKohzaIchiranYoteiData = True
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncGetKomonryouShiharaiKohzaIchiranYoteiData = False
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'---- エラーログ出力 End  ---------------------------------
+   
+End Function
+
+'*************************************************************************
+'関数名　　：顧問料支払い口座一覧（予定）(帳票ファイル取得)
+'引　数　　：
+'           strKjnYm           I           基準日
+'           strOutFNameOnly    O           出力ファイル名
+'戻り値　　：処理結果
+'機能説明　：顧問料支払い口座一覧（予定）を出力するファイルを取得する。
+'更新履歴　：2008/04/22 SRA 吉井     新規作成
+'
+'*************************************************************************
+Public Function fncGetFile5200(ByRef strOutFNameOnly As String) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncGetFile5200"
+
+On Error GoTo ErrSection
+
+    Dim strDate         As String
+    Dim strTime         As String
+
+    strOutFNameOnly = ""
+    
+    fncGetFile5200 = False
+    
+    Call gfunc_GetSvDateTime(strDate, strTime)
+       
+    ' 出力帳票ファイル
+    strOutFNameOnly = cPreFName
+    strOutFNameOnly = strOutFNameOnly & "_" & strDate
+    strOutFNameOnly = strOutFNameOnly & "_" & strTime
+    strOutFNameOnly = strOutFNameOnly & ".xls"
+    
+    fncGetFile5200 = True
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+    fncGetFile5200 = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'---- Error Log End   ----------------------------------------------------
+    
+End Function
+
+'*************************************************************************
+'関数名　　：顧問料支払い口座一覧（予定）(帳票作成)
+'引　数　　：
+'           strDate            I           システム日付
+'           strOutFName        I           出力ファイル名
+'           inData()           O           出力データ
+'戻り値　　：処理結果
+'機能説明　：顧問料支払い口座一覧（予定）のBOOKを作成する。
+'更新履歴　：2008/04/22 SRA 吉井     新規作成
+'
+'*************************************************************************
+Public Function fncMakeBook5200( _
+    ByVal strDate As String, _
+    ByVal strOutFName As String, _
+    ByRef inData() As Variant _
+) As Boolean
+    
+    Const PROCEDURE_NAME As String = "fncMakeBook5200"
+
+On Error GoTo ErrSection
+
+    Dim lngRowCnt           As Long
+    Dim strDesRange         As String
+    Dim vntArray()          As Variant
+    Dim lngRet              As Long
+    Dim lngStartRow         As Long
+    
+    Call subBeginProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    lngRowCnt = 0
+    
+    ' ファイルOpen
+    Workbooks.Open Filename:=strOutFName
+    
+    fncMakeBook5200 = False
+    
+Application.DisplayAlerts = False
+    
+    
+    '============================================
+    ' 顧問料支払い口座一覧（予定）
+    '============================================
+    '配列の添え字の階層を変更 array(X,Y) -> array(Y,X)
+    lngRet = fncKsCmnArrayIdxChange(inData, vntArray)
+    
+    lngRowCnt = UBound(inData, 2)
+    
+    With Workbooks(Workbooks.Count).Worksheets("顧問料支払い口座一覧（予定）")
+    
+        '出力日設定
+        .Range("出力日").Value = cDateTitle & strDate
+    
+        lngStartRow = .Range("一覧_明細TOP").Row
+        strDesRange = Cells(lngStartRow, .Range("見出し_口座No.").Column).Address & ":" & Cells(lngStartRow + lngRowCnt, .Range("見出し_支払").Column).Address
+    
+        '行を追加
+        .Rows(lngStartRow & ":" & lngStartRow).Copy
+        .Rows(lngStartRow & ":" & lngStartRow + lngRowCnt).Insert Shift:=xlDown
+        
+        'シートにデータをセット
+        .Range(strDesRange) = vntArray
+         
+        '不要な行を削除
+        .Range(lngStartRow + lngRowCnt + 1 & ":" & lngStartRow + lngRowCnt + 1).Delete
+        
+        'カーソル位置を移動する。
+        .Range("A1").Activate
+    End With
+    
+    ActiveWindow.ScrollRow = 1
+    ActiveWindow.ScrollColumn = 1
+    
+'    Workbooks(Workbooks.Count).Save
+    Workbooks(Workbooks.Count).Close SaveChanges:=True
+    
+'''Application.DisplayAlerts = True
+    
+    fncMakeBook5200 = True
+    
+    Call subEndProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+    
+'*******************************************************
+'* エラーセクション                                 　  *
+'*******************************************************
+ErrSection:
+
+Application.DisplayAlerts = True
+
+    Workbooks(Workbooks.Count).Close SaveChanges:=True
+    fncMakeBook5200 = False
+
+'---- エラーログ出力 Start --------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'---- エラーログ出力 End  ---------------------------------
+   
+End Function
+
+

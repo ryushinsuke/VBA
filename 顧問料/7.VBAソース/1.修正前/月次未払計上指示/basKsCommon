@@ -1,0 +1,451 @@
+Attribute VB_Name = "basKsCommon"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：外部委託ライセンスフィー算出システム・月次未払計上
+'
+'オブジェクト名：basKsCommon
+'
+'機能概要　：チェック機能
+'
+'更新履歴　：2008/07/02 SRA 吉井        新規作成
+'
+'*************************************************************************
+
+Private Const MODULE_NAME As String = "basKsCommon"
+
+'*************************************************************************
+'
+'関数名　　：未収顧問料計算処理実行(ストアドJAVA)
+'
+'引　数　　：ARG1   I   KijyunYm    Long    基準年月
+'　　　　　：ARG2   I   GINo        String  外部委託先番号
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：未収顧問料計算処理プロシジャー(ストアドJAVA)をCALLする。
+'　　　　　　（エラー発生時はエラーシートを作成する。）
+'
+'更新履歴　：2008/07/04 SRA 吉井        新規作成
+'
+'*************************************************************************
+Public Function fncExecMibaraiGI(ByVal KijyunYm As Long, Optional GINo As String = "") As Long
+       
+    Const PROCEDURE_NAME As String = "fncExecMibaraiGI"
+
+On Error GoTo ErrorHandler
+
+    Dim TranId      As String
+    Dim lngErrCd    As Long
+    Dim strErrMsg   As String
+    Dim lngRet      As Long
+
+    'プロシジャーCALL用
+    Dim objCmd As ADODB.Command
+    Dim objPrm As ADODB.Parameter
+
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+
+    fncExecMibaraiGI = 0
+
+    '時価取得プロシジャー(ストアドJAVA)をCALL
+    Set objCmd = New ADODB.Command
+    
+    With objCmd
+    
+        'コマンドの準備
+        .ActiveConnection = MainMenu.cnAdo
+        .CommandType = adCmdStoredProc
+        .CommandText = PROC_NAME_KEISAN 'SP名
+        .CommandTimeout = 0
+        
+        'パラメータの設定
+        
+        '年月
+        Set objPrm = .CreateParameter("pn_nengetsu", adInteger, adParamInput, , KijyunYm)
+        .Parameters.Append objPrm
+        '外部委託先番号
+        Set objPrm = .CreateParameter("ps_gi", adVarChar, adParamInput, 1, GINo)
+        .Parameters.Append objPrm
+        'TransactionID
+        Set objPrm = .CreateParameter("ps_tranId", adVarChar, adParamOutput, 38, TranId)
+        .Parameters.Append objPrm
+        'エラーステータス
+        Set objPrm = .CreateParameter("pn_err_status", adInteger, adParamOutput)
+        .Parameters.Append objPrm
+        'エラーメッセージ
+        Set objPrm = .CreateParameter("ps_err_message", adVarChar, adParamOutput, 4096)
+        .Parameters.Append objPrm
+        
+        '実行
+        .Execute
+        
+        If .Parameters("pn_err_status").Value <> 0 Then
+            '24007 JAVAプロシジャーでエラーが発生しました。
+            fncKsCmnMessageDisp MSGLVL_WARNNING, 24007, MSG1_KEISAN, IIf(IsNull(.Parameters("ps_err_message").Value), "", _
+                                .Parameters("ps_err_message").Value), True
+            TranId = .Parameters("ps_tranId").Value
+            fncExecMibaraiGI = .Parameters("pn_err_status").Value
+            
+            Call gCom01_BookProtect(ThisWorkbook, False)
+            'ログをエラーシートに貼り付け
+            lngRet = fncMakeErrorSheet(.Parameters("ps_tranId").Value, SHEET_MAIN, SHEET_ERROR)
+            Call gCom01_BookProtect(ThisWorkbook, True)
+        Else
+            Call gCom01_BookProtect(ThisWorkbook, False)
+            Application.DisplayAlerts = False
+            'ERRORシートを削除
+            On Error Resume Next
+            Sheets(SHEET_ERROR).Delete
+            Call gCom01_BookProtect(ThisWorkbook, True)
+            On Error GoTo ErrorHandler
+            Application.DisplayAlerts = True
+        End If
+    
+    End With
+    
+    '破棄
+    Set objCmd = Nothing
+
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+
+ErrorHandler:
+    fncExecMibaraiGI = Err.Number
+    Call subErrProcess(MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+
+'*************************************************************************
+'
+'関数名　　：エラーシート作成(ストアドJAVAのエラーログ情報)
+'
+'引　数　　：ARG1   I   TranId      String  トランザクションＩＤ
+'　　　　　：ARG2   I   MainSheetNm String  MAINシート名称
+'　　　　　：ARG3   I   ErrSheetNm  String  ERRORシート名称
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：ストアドJAVAのエラーログ情報のエラーシートを作成する
+'           MAINシートの後ろにERRORシートを追加する
+'
+'更新履歴　：2008/07/04 SRA 吉井        新規作成
+'
+'*************************************************************************
+Public Function fncMakeErrorSheet(ByVal TranId As String, _
+                                  ByVal MainSheetNm As String, _
+                                  ByVal ErrSheetNm As String) As Long
+       
+    Const PROCEDURE_NAME As String = "fncMakeErrorSheet"
+
+On Error GoTo ErrorHandler
+
+    Dim lngRet      As Long
+    Dim vntRec()    As Variant
+    Dim lngRow      As Long
+    Dim lngCol      As Long
+    
+    Dim lngRowCnt   As Long
+    Dim lngColCnt   As Long
+
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+
+    fncMakeErrorSheet = 0
+
+    'エラーシート追加
+On Error Resume Next
+    With ThisWorkbook
+        .Sheets(ErrSheetNm).Activate
+        If Err.Number <> 0 Then
+            
+            .Sheets.Add after:=Sheets(MainSheetNm)
+            
+            ActiveSheet.Name = ErrSheetNm
+        Else
+            .Sheets(ErrSheetNm).Clear
+        End If
+    End With
+On Error GoTo ErrorHandler
+
+    'エラーデータ取得
+    lngRet = fncReadErrorLog(TranId, vntRec, lngRow, lngCol)
+    If lngRet <> 0 Then
+        Err.Raise lngRet
+    End If
+
+    'エラーシートに貼り付け
+    'シートにデータをセット
+    With ThisWorkbook.Sheets(ErrSheetNm)
+        For lngRowCnt = 0 To lngRow - 1
+            For lngColCnt = 0 To lngCol - 1
+                .Cells(lngRowCnt + 1, lngColCnt + 1).Value = vntRec(lngRowCnt, lngColCnt)
+            Next lngColCnt
+        Next lngRowCnt
+    End With
+
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+
+ErrorHandler:
+    fncMakeErrorSheet = Err.Number
+End Function
+
+'*************************************************************************
+'
+'関数名　　：エラーログ情報取得
+'
+'引　数　　：ARG1   I   lngTranId   long    トランザクションＩＤ
+'　　　　　：ARG2   O   vntRec      Variant データ配列
+'　　　　　：ARG3   O   lngRow      long    取得行数
+'　　　　　：ARG4   O   lngCol      long    取得列数
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：エラーログ情報を取得する
+'
+'更新履歴　：2008/07/04 SRA 吉井        新規作成
+'
+'*************************************************************************
+Public Function fncReadErrorLog(ByVal lngTranId As Long, _
+                                ByRef vntRec() As Variant, _
+                                ByRef lngRow As Long, _
+                                ByRef lngCol As Long) As Long
+
+    Const PROCEDURE_NAME As String = "fncReadErrorLog"
+
+On Error GoTo ErrHandler
+    
+    Dim RS As New ADODB.Recordset       'レコードセット
+    
+    Dim strSql      As String
+    Dim lngRet      As Long
+    Dim vntRecWk()  As Variant
+    
+    Call subBeginProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    fncReadErrorLog = 0
+    
+    strSql = ""
+    strSql = strSql & " SELECT"
+    strSql = strSql & "     *"
+    strSql = strSql & " FROM"
+    strSql = strSql & "     KYK_LOG"   'ログテーブル
+    strSql = strSql & " WHERE"
+    strSql = strSql & "     TRANSACTION_ID  = " & lngTranId
+    strSql = strSql & " AND LOG_KBN         = '1'"
+    strSql = strSql & " AND SAKUJO_FLG      = '0'"
+    
+    RS.Open strSql, MainMenu.cnAdo, adOpenKeyset, adLockOptimistic, adCmdText
+    vntRecWk = RS.GetRows
+    
+    lngCol = RS.Fields.Count
+    lngRow = RS.RecordCount
+    RS.Close
+    Set RS = Nothing
+    
+    If lngRow > 0 Then
+        lngRet = fncKsCmnArrayIdxChange(vntRecWk, vntRec)
+        If lngRet <> 0 Then
+            Err.Raise lngRet
+        End If
+    End If
+    
+    Call subEndProcess(MODULE_NAME, PROCEDURE_NAME)
+    
+    Exit Function
+
+ErrHandler:
+    Set RS = Nothing
+    fncReadErrorLog = Err.Number
+End Function
+
+'*************************************************************************
+'
+'関数名　　：メッセージ表示
+'
+'引　数　　：ARG1   I   strMsgKbn   String  メッセージ区分(1:情報,2:質問,3:警告,4:エラー)
+'　　　　　：ARG2   I   lngMsgId    long    メッセージＩＤ
+'　　　　　：ARG3   I   strAddText  String  追加テキスト(項目名)
+'　　　　　：ARG4   I   strAddText2 String  追加テキスト
+'　　　　　：ARG5   I   blnPopUp    boolean メッセージボックス出力フラグ(デフォルト：True(表示))
+'
+'戻り値　　：String     エラー番号
+'
+'機能説明　：メッセージを出力する
+'
+'更新履歴　：2008/07/03 SRA 吉井        新規作成
+'
+'*************************************************************************
+Function fncKsCmnMessageDisp(ByVal strMsgKbn As String _
+                           , ByVal lngMsgId As Long _
+                           , ByVal strAddText As String _
+                  , Optional ByVal strAddText2 As String _
+                  , Optional ByVal blnPopUp As Boolean = True) As String
+
+    '共通関数をCALL
+    fncKsCmnMessageDisp = gfunc_ErrorMsg(strMsgKbn, _
+                                         lngMsgId, _
+                                         strAddText, _
+                                         strAddText2, _
+                                         blnPopUp)
+
+End Function
+
+'*************************************************************************
+'
+'関数名　　：配列の階層変更
+'
+'引　数　　：ARG1   I   vntSrcAry   Variant 修正元配列
+'　　　　　：ARG2   O   vntDstAry   Variant 修正後配列
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：Array(X,Y) -> Array(Y,X)に変更する
+'
+'更新履歴　：2008/07/03 SRA 吉井        新規作成
+'
+'*************************************************************************
+Public Function fncKsCmnArrayIdxChange(ByVal vntSrcAry As Variant, _
+                                       ByRef vntDstAry As Variant) As Long
+
+    Const PROCEDURE_NAME As String = "fncKsCmnArrayIdxChange"
+    
+On Error GoTo ErrorHandler
+
+    Dim lngCnt1      As Long
+    Dim lngCnt2      As Long
+
+    fncKsCmnArrayIdxChange = 0
+
+    ReDim vntDstAry(UBound(vntSrcAry, 2), UBound(vntSrcAry, 1))
+    For lngCnt1 = 0 To UBound(vntSrcAry, 1)
+        For lngCnt2 = 0 To UBound(vntSrcAry, 2)
+            vntDstAry(lngCnt2, lngCnt1) = vntSrcAry(lngCnt1, lngCnt2)
+        Next
+    Next
+    
+    Exit Function
+
+ErrorHandler:
+    fncKsCmnArrayIdxChange = Err.Number
+End Function
+
+'*************************************************************************
+'
+'関数名　　：未払管理情報罫線セット
+'
+'引　数　　：ARG1   I   DstWorkbook Workbook    ワークブック
+'　　　　　：ARG2   I   MaxRow      Long        最大行番号
+'          ：ARG3   I   MaxRow2     Long        口座銘柄別データ最大行番号
+'
+'戻り値　　：なし
+'
+'機能説明　：指定されたブックのTemplateシートに罫線を引く
+'
+'更新履歴　：2008/07/04 SRA 吉井        新規作成
+'            2009/02/25 NRI 堀江        更新
+'
+'*************************************************************************
+'2009/02/25 T.Horie argument added
+Sub subKsCmnSetLine(ByVal DstWorkbook As Workbook, ByVal MaxRow As Long, _
+                                                   ByVal MaxRow2 As Long)
+
+    With DstWorkbook.Sheets(SHEET_TEMP)
+    
+        .Range("A" & ROW_DATA_TOP & ":B" & MaxRow & _
+              ",C" & ROW_DATA_TOP & ":D" & MaxRow & _
+              ",E" & ROW_DATA_TOP & ":F" & MaxRow & _
+              ",G" & ROW_DATA_TOP & ":I" & MaxRow & _
+              ",J" & ROW_DATA_TOP & ":L" & MaxRow & "").Select
+        Selection.Borders(xlDiagonalDown).LineStyle = xlNone
+        Selection.Borders(xlDiagonalUp).LineStyle = xlNone
+        With Selection.Borders(xlEdgeLeft)
+            .LineStyle = xlContinuous
+            .Weight = xlThin
+            .ColorIndex = xlAutomatic
+        End With
+        With Selection.Borders(xlEdgeTop)
+            .LineStyle = xlContinuous
+            .Weight = xlThin
+            .ColorIndex = xlAutomatic
+        End With
+        With Selection.Borders(xlEdgeBottom)
+            .LineStyle = xlContinuous
+            .Weight = xlThin
+            .ColorIndex = xlAutomatic
+        End With
+        With Selection.Borders(xlEdgeRight)
+            .LineStyle = xlContinuous
+            .Weight = xlThin
+            .ColorIndex = xlAutomatic
+        End With
+        With Selection.Borders(xlInsideVertical)
+            .LineStyle = xlContinuous
+            .Weight = xlHairline
+            .ColorIndex = xlAutomatic
+        End With
+
+        If MaxRow > ROW_DATA_TOP Then
+            '2行以上ある場合は行間の罫線を引く
+            With Selection.Borders(xlInsideHorizontal)
+                .LineStyle = xlContinuous
+                .Weight = xlHairline
+                .ColorIndex = xlAutomatic
+            End With
+        End If
+
+    End With
+    
+    '2009/02/25 T.Horie added Start
+    DstWorkbook.Sheets(SHEET_TEMP2).Activate
+    With DstWorkbook.Sheets(SHEET_TEMP2)
+    
+        .Range("A" & ROW_DATA_TOP2 & ":B" & MaxRow2 & _
+              ",C" & ROW_DATA_TOP2 & ":C" & MaxRow2 & _
+              ",D" & ROW_DATA_TOP2 & ":D" & MaxRow2 & _
+              ",E" & ROW_DATA_TOP2 & ":E" & MaxRow2 & _
+              ",F" & ROW_DATA_TOP2 & ":F" & MaxRow2 & "").Select
+        Selection.Borders(xlDiagonalDown).LineStyle = xlNone
+        Selection.Borders(xlDiagonalUp).LineStyle = xlNone
+        With Selection.Borders(xlEdgeLeft)
+            .LineStyle = xlContinuous
+            .Weight = xlThin
+            .ColorIndex = xlAutomatic
+        End With
+        With Selection.Borders(xlEdgeTop)
+            .LineStyle = xlContinuous
+            .Weight = xlThin
+            .ColorIndex = xlAutomatic
+        End With
+        With Selection.Borders(xlEdgeBottom)
+            .LineStyle = xlContinuous
+            .Weight = xlThin
+            .ColorIndex = xlAutomatic
+        End With
+        With Selection.Borders(xlEdgeRight)
+            .LineStyle = xlContinuous
+            .Weight = xlThin
+            .ColorIndex = xlAutomatic
+        End With
+        With Selection.Borders(xlInsideVertical)
+            .LineStyle = xlContinuous
+            .Weight = xlHairline
+            .ColorIndex = xlAutomatic
+        End With
+
+        If MaxRow2 > ROW_DATA_TOP2 Then
+            '2行以上ある場合は行間の罫線を引く
+            With Selection.Borders(xlInsideHorizontal)
+                .LineStyle = xlContinuous
+                .Weight = xlHairline
+                .ColorIndex = xlAutomatic
+            End With
+        End If
+
+    End With
+    '2009/02/25 T.Horie added End
+
+
+End Sub

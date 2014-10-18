@@ -1,0 +1,63 @@
+Attribute VB_Name = "basIni"
+Option Explicit
+
+'*************************************************************************
+'
+'プロジェクト名：契約管理システム・信託時価データ取込処理
+'
+'オブジェクト名：basIni
+'
+'機能概要　：アプリケーション初期処理
+'
+'更新履歴　：2006/01/17 SRA T.Tanaka    新規作成
+'　　　　　：2006/01/26 SRA T.Tanaka    DBアクセスをADOに統一
+'　　　　　：2006/01/28 SRA T.Tanaka    信託銀行コードの属性変更
+'　　　　　：2006/01/28 SRA T.Tanaka    シートの可視対応
+'
+'*************************************************************************
+Private Const MODULE_NAME As String = "basIni"
+
+
+'*************************************************************************
+'関数名　　：共通変数取得処理
+'
+'引　　数　：なし
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：ＤＢ接続文字列、ログモードの取得
+'
+'更新履歴　：2006/01/18 SRA T.Tanaka    新規作成
+'
+'*************************************************************************
+Public Function fncGerValiable()
+
+    Const PROCEDURE_NAME As String = "fncGerValiable"
+    On Error GoTo ErrHandler
+    
+    Dim lngRet  As Long
+    
+    Call subBeginProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    With ThisWorkbook.Sheets("設定")
+    
+        gstrODBCConn = .Range("ODBC")
+        gstrUserName = .Range("USERNAME")
+        gstrPassWord = .Range("PASSWORD")
+        gstrLogLevel = .Range("LOGLEVEL")
+        gintDebugLvl = .Range("DEBUGLVL")
+        
+        If UCase(Trim(.Range("KICK_INSTANCE"))) = "YES" Then
+            gblnInstanceKick = True
+        Else
+            gblnInstanceKick = False
+        End If
+    End With
+    
+    Call subEndProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    Exit Function
+ErrHandler:
+    fncGerValiable = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+End Function
+

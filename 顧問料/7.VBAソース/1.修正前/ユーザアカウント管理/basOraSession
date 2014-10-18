@@ -1,0 +1,456 @@
+Attribute VB_Name = "basOraSession"
+'=========================================================================
+'プロジェクト　　　：国内顧問料ユーザアカウント管理
+'プログラム名　　　：オラクルコネクト管理モジュール
+'プログラムＩＤ　　：basOraSession
+'機能概要　　　　　：DB接続管理
+'
+'日付　　　　　　　作成者　　　　　　　　　　修正内容
+'-------------------------------------------------------------------------
+'2008/05/16       K.Furuya<SRA>　　　　　　新規作成
+'
+'=========================================================================
+Option Explicit
+'【DBアクセス関連】
+Const gcstrDBLocked      As String = "ORA-00054"             'レコードロック中
+Const gcstrDBDuplication As String = "ORA-00001"             '重複キーエラー
+Const gcstrDBNotfund     As String = "ORA-06510"             'パスワードなし
+Dim gstrErrCode              As String                           'エラーコード
+Dim gstrErrMsg               As String                           'エラーメッセージ
+
+'===============================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :  gfncDyCreate
+'機能            :  ダイナセットの作成
+'
+'日付               担当　              修正内容
+'-------------------------------------------------------------------------------
+'2008/05/19         K.Furuya<SRA>      新規作成
+'===============================================================================
+Public Function gfncDyCreate( _
+                             ByVal sSql As String, _
+                             ByRef Conn As ADODB.Connection, _
+                             ByRef RS As ADODB.Recordset) As Integer
+    
+    
+    gfncDyCreate = False
+    
+
+
+On Error GoTo gfncDyCreateERR
+    
+    'SQL文実行
+    'レコードセットオープン
+    RS.Open sSql, Conn, adOpenForwardOnly, adLockOptimistic, adCmdText
+       
+       
+    gfncDyCreate = True
+    Exit Function
+
+gfncDyCreateERR:
+    If RS.State = 1 Then
+        'RS.State = 1(オープン状態)のときはレコードセットクローズする
+        RS.Close
+    End If
+
+    Call subErrProcess(ThisWorkbook.Name & "." & "basUserCertification", "SelectUser", Err.Number, _
+                       "データ取得処理失敗しました。" & vbCrLf & Err.Description)
+
+End Function
+'===============================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   gOnErrorMsg
+'機能            :   OnError時の、エラーコードとエラーメッセージを表示する。
+'
+'日付               担当　              修正内容
+'-------------------------------------------------------------------------------
+'2008/05/19         K.Furuya<SRA>      新規作成
+'===============================================================================
+Public Sub gOnErrorMsg(sMsg$, sTitle$)
+    Dim sOnErrorMsg     As String
+    
+    sOnErrorMsg = "ｴﾗｰｺｰﾄﾞ [" & Err.Number & "]  " & Err.Description
+    Call gErrMsgPut(sOnErrorMsg, sMsg$, sTitle$)
+End Sub
+'===============================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   gEditErrMsg
+'機能            :   Oracleエラーメッセージ編集処理
+'
+'日付               担当　              修正内容
+'-------------------------------------------------------------------------------
+'2008/05/19         K.Furuya<SRA>       新規作成
+'===============================================================================
+Private Function gEditErrMsg() As String
+    
+    Dim lngRet  As Long
+    
+    gstrErrMsg = ""
+    If Err.Number = -2147467259 Then
+        lngRet = InStr(Err.Description, ": ")
+        If lngRet > 9 Then
+            If Mid(Err.Description, lngRet - 9, 1) = "O" _
+            And Mid(Err.Description, lngRet - 6, 1) = "-" Then
+                gstrErrCode = Mid(Err.Description, lngRet - 9, 9)
+                If lngRet > 10 Then gstrErrMsg = Mid(Err.Description, 1, lngRet - 10)
+                gstrErrMsg = gstrErrMsg & Mid(Err.Description, lngRet + 2)
+            Else
+                gstrErrCode = Err.Number
+                gstrErrMsg = Err.Description
+            End If
+        Else
+            gstrErrCode = Err.Number
+            gstrErrMsg = Err.Description
+        End If
+    Else
+        gstrErrCode = Err.Number
+        gstrErrMsg = Err.Description
+    End If
+
+    gEditErrMsg = gstrErrCode
+    
+End Function
+'===============================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   gErrMsgPut
+'機能            :   エラーメッセージを表示、又はエラーログに出力する。
+'                       String  sSubMsg$    i  補助メーッセージ
+'                       String  sTitle$     i   タイトル
+'
+'日付               担当　              修正内容
+'-------------------------------------------------------------------------------
+'2005/05/19         K.Furuya<SRA>      新規作成
+'===============================================================================
+Public Sub gErrMsgPut(sMsg$, sSubMsg$, sTitle$)
+    
+    'エラーメッセージ編集
+    Call gEditErrMsg
+    If StrConv(Trim(gstrErrCode), vbUpperCase) = gcstrDBLocked Then
+        '排他ロックエラー
+        MsgBox "他の端末で使用中です。処理を中止します。" & Chr$(10) & Chr$(10), vbOKOnly + vbCritical, "エラー  " & sTitle$
+    ElseIf StrConv(Trim(gstrErrCode), vbUpperCase) = gcstrDBDuplication Then
+        'キー重複エラー
+        MsgBox "キーが重複しております。処理を中止致します。" & Chr$(10) & Chr$(10), vbOKOnly + vbCritical, "エラー  " & sTitle$
+    ElseIf StrConv(Trim(gstrErrCode), vbUpperCase) = gcstrDBNotfund Then
+        'メッセージなし
+    Else
+        'その他エラーメッセージ
+        MsgBox sMsg$ & Chr$(10) & Chr$(10) & sSubMsg$, vbOKOnly + vbCritical, "エラー  " & sTitle$
+    End If
+    
+    Exit Sub
+gErrMsgPutErr:
+    Exit Sub
+End Sub
+'===============================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   gblnDbBeginTrans
+'機能            :   ﾄﾗﾝｻﾞｸｼｮﾝを開始し、ﾄﾗﾝｻﾞｸｼｮﾝ開始ﾌﾗｸﾞをｵﾝにする
+'
+'日付               担当　              修正内容
+'-------------------------------------------------------------------------------
+'2008/05/19         K.Furuya<SRA>      新規作成
+'===============================================================================
+Public Function gblnDbBeginTrans( _
+                                 ByVal Conn As ADODB.Connection, _
+                                 ByVal RS As ADODB.Recordset) As Boolean
+    Dim sMsg                As String
+
+    gblnDbBeginTrans = False
+    
+    
+    On Error GoTo gblnDbBeginTransError
+    
+    'ﾄﾗﾝｻﾞｸｼｮﾝを開始する
+    Conn.BeginTrans
+    
+    
+    gblnDbBeginTrans = True
+    
+    Exit Function
+
+gblnDbBeginTransError:
+    
+End Function
+'===============================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   gblnDbCommitTrans
+'機能            :   ｺﾐｯﾄを実行し、ﾄﾗﾝｻﾞｸｼｮﾝ開始ﾌﾗｸﾞをｵﾌにする
+'
+'日付               担当　              修正内容
+'-------------------------------------------------------------------------------
+'2008/05/19         k.Furuya<SRA>        新規作成
+'===============================================================================
+Public Function gblnDbCommitTrans( _
+                                  ByVal Conn As ADODB.Connection, _
+                                  ByVal RS As ADODB.Recordset) As Boolean
+    Dim sMsg                As String
+
+    gblnDbCommitTrans = False
+    
+    
+    On Error GoTo gblnDbCommitTransError
+    
+    'ﾄﾗﾝｻﾞｸｼｮﾝをｺﾐｯﾄする
+    Conn.CommitTrans
+    
+    gblnDbCommitTrans = True
+    
+    Exit Function
+
+gblnDbCommitTransError:
+
+End Function
+'===============================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   gblnDbExec
+'機能            :   ＳＱＬ実行
+'
+'日付               担当　              修正内容
+'-------------------------------------------------------------------------------
+'2008/05/19         K.Furuya<SRA>      新規作成
+'===============================================================================
+Public Function gblnDbExec( _
+                            ByVal sSql As String, _
+                            ByVal Conn As ADODB.Connection, _
+                            ByVal RS As ADODB.Recordset) As Integer
+                           
+    
+    gblnDbExec = False
+        
+
+
+    On Error GoTo gblnDbExecError
+        
+    'SQL文実行
+    Conn.Execute sSql
+        
+    gblnDbExec = True
+    
+    Exit Function
+
+gblnDbExecError:
+
+End Function
+'*******************************************************
+'* DB接続文字列作成                                　  *
+'*******************************************************
+Public Function DBAccessString(ByRef argDBConnect As String) As Integer
+
+    On Error GoTo ErrProc
+    
+    Dim strODBCConn As String
+    Dim strUserName As String
+    Dim strPassWord As String
+    
+    '戻り値Falseで初期化
+    DBAccessString = False
+    
+    'DB接続文字列作成
+    '非表示の"設定"シートに書かれている情報を読み取り、接続文字列を作成する
+    With ThisWorkbook.Sheets("設定")
+        strODBCConn = .Range("ODBC")
+        strUserName = .Range("USERNAME")
+        strPassWord = .Range("PASSWORD")
+    End With
+
+    argDBConnect = ""
+    argDBConnect = argDBConnect & "DSN=" & strODBCConn & ";"
+    argDBConnect = argDBConnect & "UID=" & strUserName & ";"
+    argDBConnect = argDBConnect & "PWD=" & strPassWord & ";"
+    argDBConnect = argDBConnect & "EXC=T"
+
+    '戻り値Trueへ更新
+    DBAccessString = True
+    
+    Exit Function
+
+'*******************************************************
+'* エラーセクション                                　  *
+'*******************************************************
+ErrProc:
+
+    Call subErrProcess(ThisWorkbook.Name & "." & "basOraSession", "DBAccessString", Err.Number, _
+                       "DB接続文字列の作成が失敗しました。" & vbCrLf & Err.Description)
+    On Error GoTo 0
+
+End Function
+'*******************************************************
+'* DB接続                                          　  *
+'*******************************************************
+Public Function DBOpen(ByVal argDBConnect As String, _
+                       ByVal Conn As ADODB.Connection) As Integer
+
+    On Error GoTo ErrProc
+    
+    '戻り値Falseで初期化
+    DBOpen = False
+    
+    'DB接続
+    Conn.ConnectionString = argDBConnect
+    Conn.Open
+
+    '戻り値Trueへ更新
+    DBOpen = True
+    
+    Exit Function
+
+'*******************************************************
+'* エラーセクション                                　  *
+'*******************************************************
+ErrProc:
+
+    Call subErrProcess(ThisWorkbook.Name & "." & "basOraSession", "DBOpen", Err.Number, _
+                       "DB接続失敗しました。" & vbCrLf & Err.Description)
+    
+    On Error GoTo 0
+
+End Function
+'*******************************************************
+'* DB切断                                          　  *
+'*******************************************************
+Public Function DBClose(ByRef Conn As ADODB.Connection, _
+                        ByRef RS As ADODB.Recordset) As Integer
+    
+    On Error GoTo ErrProc
+    
+    '戻り値Falseで初期化
+    DBClose = False
+    
+    If RS.State = 1 Then
+        'RS.State = 1(オープン状態)のときはレコードセットクローズする
+        RS.Close
+    End If
+    
+    'DB切断
+    Set RS = Nothing
+    Conn.Close
+    Set Conn = Nothing
+
+    '戻り値Trueへ更新
+    DBClose = True
+    
+    Exit Function
+
+'*******************************************************
+'* エラーセクション                                　  *
+'*******************************************************
+ErrProc:
+
+    Call subErrProcess(ThisWorkbook.Name & "." & "basOraSession", "DBClose", Err.Number, _
+                       "DB切断失敗しました。" & vbCrLf & Err.Description)
+
+    On Error GoTo 0
+
+End Function
+
+'===============================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   gblnDbRollback
+'機能            :   ﾛｰﾙﾊﾞｯｸを実行し、ﾄﾗﾝｻﾞｸｼｮﾝ開始ﾌﾗｸﾞをｵﾌにする
+'
+'日付               担当　              修正内容
+'-------------------------------------------------------------------------------
+'2008/05/19         K.Furuya<SRA>      新規作成
+'===============================================================================
+Public Function gblnDbRollback( _
+                               ByVal Conn As ADODB.Connection, _
+                               ByVal RS As ADODB.Recordset) As Boolean
+    
+
+    gblnDbRollback = False
+    
+    
+    On Error GoTo gblnDbRollbackError
+    
+    'ﾄﾗﾝｻﾞｸｼｮﾝをﾛｰﾙﾊﾞｯｸする
+    Conn.RollbackTrans
+    
+    gblnDbRollback = True
+    
+    Exit Function
+
+gblnDbRollbackError:
+
+End Function
+'===============================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   gstrUnifySQL
+'機能            :   SQL文の形式の統一
+'
+'日付               担当　              修正内容
+'-------------------------------------------------------------------------------
+'2008/06/12         K.Furuya<SRA>      新規作成
+'機能説明  : 引数で渡されたSQLをすべて小文字に変換する
+'             (ただし、シングルコーテーションに囲まれた文字列は変換しない）
+'             文字列中に含まれるハンカクスペースが２文字以上連続で続いている場合は､
+'             1文字にする｡
+'===============================================================================
+Public Function gstrUnifySQL( _
+    ByVal strBuf As String _
+) As String
+
+    Dim intLoop     As Integer
+    Dim intLoop2    As Integer
+    Dim blnFlg      As Boolean
+    Dim strDummy    As String
+    Dim strEdit()   As String
+    Dim strEdit2()  As String
+    
+    blnFlg = True
+    strEdit = Split(strBuf, "'")
+
+    For intLoop = LBound(strEdit) To UBound(strEdit)
+        If blnFlg Then
+            strEdit2 = Split(strEdit(intLoop), " ")
+            strEdit(intLoop) = ""
+            For intLoop2 = LBound(strEdit2) To UBound(strEdit2)
+                If Trim(strEdit2(intLoop2)) <> "" Then
+                    If intLoop = LBound(strEdit) And intLoop2 = LBound(strEdit2) Then
+                        strEdit(intLoop) = Trim(strEdit2(intLoop2))
+                    Else
+                        strEdit(intLoop) = strEdit(intLoop) & " " & _
+                                           Trim(strEdit2(intLoop2))
+                    End If
+                End If
+            Next intLoop2
+            strDummy = strDummy & StrConv(strEdit(intLoop), vbLowerCase)
+            blnFlg = False
+        Else
+            strDummy = strDummy & "'" & strEdit(intLoop) & "'"
+            blnFlg = True
+        End If
+    Next intLoop
+
+    gstrUnifySQL = strDummy
+End Function
+
+
+'===============================================================================
+'ﾌﾟﾛｼｰｼﾞｬ名称    :   gblnDbExecPwd
+'機能            :   パスワードの照合処理
+'
+'日付               担当　              修正内容
+'-------------------------------------------------------------------------------
+'2008/08/12         K.Furuya<SRA>      新規作成
+'===============================================================================
+Public Function gblnDbExecPwd( _
+                              ByVal sSql As String, _
+                              ByVal Conn As ADODB.Connection, _
+                              ByVal RS As ADODB.Recordset, _
+                              Optional ByRef strErrorCd As String = "") As Integer
+    Dim strMsg      As String
+    
+    gblnDbExecPwd = False
+        
+
+
+    On Error GoTo ExecError
+        
+    'SQL文実行
+    Conn.Execute sSql
+        
+    gblnDbExecPwd = True
+    
+    Exit Function
+
+ExecError:
+    
+'    strErrorCd = gEditErrMsg()
+    strErrorCd = Err.Number
+    'エラーへ飛んだ場合は照合不整合
+    On Error GoTo 0
+    
+
+End Function

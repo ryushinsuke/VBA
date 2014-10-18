@@ -1,0 +1,373 @@
+Attribute VB_Name = "bas30CallCalc"
+Option Explicit
+'*************************************************************************
+'
+'プロジェクト名：外部委託ライセンスフィー算出システム・計算確認書作成指示
+'
+'オブジェクト名：bas30CallCalc
+'
+'機能概要　：JAVA実行処理
+'
+'更新履歴　：2008/06/30 SRA 東       新規作成
+'
+'*************************************************************************
+
+Const MODULE_NAME As String = "bas30CallCalc"
+
+'*************************************************************************
+'関数名　　：計算処理バッチ起動
+'
+'引　　数　：
+'           strGI_No     I       口座番号
+'           strKikan       I       契約日
+'
+'戻り値　　：Boolean
+'
+'機能説明　：
+'
+'更新履歴　：2008/06/30 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Public Function func_CallCalcProcess(ByVal strGi_No As String _
+                                   , ByVal strKikan As String _
+                                   ) As Boolean
+
+On Error GoTo ErrHandler
+
+
+    Const PROCEDURE_NAME        As String = "func_CallCalcProcess"
+    Dim strBuff                 As String * 1024
+    Dim lngSpErrStatus          As Long
+    Dim strSpErrMessage         As String
+    Dim strTransactionID        As String
+    
+    
+    Dim cmdCalcKakuninsho As ADODB.Command
+   
+    Set cmdCalcKakuninsho = New ADODB.Command
+   
+    
+    func_CallCalcProcess = False
+
+'*******************************************************
+'* 関数開始　                                        　*
+'*******************************************************
+    Call subBeginProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+
+    'アクティブコネクションの設定
+    Set cmdCalcKakuninsho.ActiveConnection = cnAdo
+    
+    'タイムアウトの設定 (無限大)
+    cmdCalcKakuninsho.CommandTimeout = 0
+    
+    'コマンドオブジェクトのタイプ設定
+    cmdCalcKakuninsho.CommandType = adCmdStoredProc
+    
+    'ストアドプロシージャ名設定
+    cmdCalcKakuninsho.CommandText = "SP_BatchMain_Kakuninsho"
+    
+    'パラメータ設定
+                                                                        
+    '外部委託先番号        (IN  VARCHAR2)
+    If Trim(strGi_No) = "" Then
+        cmdCalcKakuninsho.Parameters.Append cmdCalcKakuninsho.CreateParameter("ps_gi_no" _
+                                                                            , adLongVarWChar _
+                                                                            , adParamInput _
+                                                                            , vbNull _
+                                                                            , vbNullString)
+    Else
+        cmdCalcKakuninsho.Parameters.Append cmdCalcKakuninsho.CreateParameter("ps_gi_no" _
+                                                                            , adLongVarWChar _
+                                                                            , adParamInput _
+                                                                            , LenB(strGi_No) _
+                                                                            , strGi_No)
+    End If
+                                                                        
+    '送付日          (IN  NUMBER)
+    cmdCalcKakuninsho.Parameters.Append cmdCalcKakuninsho.CreateParameter("pn_soufubi" _
+                                                                        , adInteger _
+                                                                        , adParamInput _
+                                                                        , _
+                                                                        , strKikan)
+                                                                        
+                                                                        
+    'TransactionID   (OUT VARCHAR2)
+    cmdCalcKakuninsho.Parameters.Append cmdCalcKakuninsho.CreateParameter("ps_tranId" _
+                                                                        , adLongVarWChar _
+                                                                        , adParamOutput _
+                                                                        , 1024 _
+                                                                        , strBuff)
+    'エラーステータス(OUT NUMBER)
+    cmdCalcKakuninsho.Parameters.Append cmdCalcKakuninsho.CreateParameter("pn_err_status" _
+                                                                        , adInteger _
+                                                                        , adParamOutput _
+                                                                        , _
+                                                                        , lngSpErrStatus)
+                                        
+    'エラーメッセージ(OUT VARCHAR2)
+    cmdCalcKakuninsho.Parameters.Append cmdCalcKakuninsho.CreateParameter("ps_err_message" _
+                                                                        , adLongVarWChar _
+                                                                        , adParamOutput _
+                                                                        , 2000 _
+                                                                        , strSpErrMessage)
+                                        
+                                        
+                                        
+    '実行
+    cmdCalcKakuninsho.Execute
+    
+    'ステータスの取得(0:正常、　-1:ワーニング、　-2:エラー)
+    lngSpErrStatus = cmdCalcKakuninsho.Parameters.Item("pn_err_status").Value
+    
+    '結果の取得
+    If lngSpErrStatus = 0 Then
+        '処理無し　次の処理へ
+    Else
+        If Not IsNull(cmdCalcKakuninsho.Parameters.Item("ps_err_message").Value) Then
+            strSpErrMessage = Trim(cmdCalcKakuninsho.Parameters.Item("ps_err_message").Value)
+        End If
+        Call gfunc_ErrorMsg(3, 20080, "計算確認書計算処理", strSpErrMessage & "(" & lngSpErrStatus & ")")
+        
+        'トランザクションIDの取得
+        strTransactionID = cmdCalcKakuninsho.Parameters.Item("ps_tranId").Value
+        
+        With gusrErr
+            .ModuleId = MODULE_NAME         'モジュール名
+            .Procedure = PROCEDURE_NAME     'プロシージャ名
+            .ErrNum = Err.Number            ''エラー番号
+            .ErrDescript = "処理(JAVA)でエラーが発生しました。"  'エラー概要
+            .GI_NAME = strGi_No             '外部委託先
+            .KohzaNo = ""                   '口座番号
+            'エラーメッセージ
+            .MsgNaiyou = "処理(JAVA)でエラーが発生しました。" & vbCrLf & _
+                         "ステータス：" & lngSpErrStatus & vbCrLf & _
+                         "トランザクションID：" & strTransactionID
+            'メッセージ詳細
+            .MsgSyousai = ""
+        End With
+        
+        'ログ出力
+        Call fncMakeErrorSheet(strTransactionID)
+        
+        Set cmdCalcKakuninsho = Nothing
+        
+        Call subEndProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+        
+        Exit Function
+    End If
+
+    Set cmdCalcKakuninsho = Nothing
+
+    Call subEndProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+
+    func_CallCalcProcess = True
+    
+    Exit Function
+
+ErrHandler:
+
+    func_CallCalcProcess = False
+
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+'    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+    Set cmdCalcKakuninsho = Nothing
+    
+
+End Function
+
+
+
+'*************************************************************************
+'関数名　　：配列の階層変更
+'
+'引　　数　：ARG1   I   vntSrcAry   Variant 修正元配列
+'　　　　　：ARG2   O   vntDstAry   Variant 修正後配列
+'
+'戻り値　　：エラー番号
+'
+'機能説明　：Array(X,Y) -> Array(Y,X)に変更する
+'
+'更新履歴　：2006/07/05 SRA H.Anpo      新規作成
+'
+'*************************************************************************
+Private Function fncKsCmnArrayIdxChange( _
+            ByVal vntSrcAry As Variant, _
+            ByRef vntDstAry As Variant)
+    
+On Error GoTo ErrorHandler
+    
+    Const PROCEDURE_NAME    As String = "fncKsCmnArrayIdxChange"
+    Dim lngCnt1             As Long
+    Dim lngCnt2             As Long
+
+    fncKsCmnArrayIdxChange = 0
+
+    ReDim vntDstAry(UBound(vntSrcAry, 2), UBound(vntSrcAry, 1))
+    For lngCnt1 = 0 To UBound(vntSrcAry, 1)
+        For lngCnt2 = 0 To UBound(vntSrcAry, 2)
+            vntDstAry(lngCnt2, lngCnt1) = vntSrcAry(lngCnt1, lngCnt2)
+        Next
+    Next
+    
+    Exit Function
+
+ErrorHandler:
+    fncKsCmnArrayIdxChange = Err.Number
+
+
+End Function
+
+
+
+
+'*************************************************************************
+'関数名　　：エラーログ情報取得
+'
+'引　　数　：ARG1   I   lngTranId   long    トランザクションＩＤ
+'　　　　　：ARG2   O   vntRec      Variant データ配列
+'　　　　　：ARG3   O   lngRow      long    取得行数
+'　　　　　：ARG4   O   lngCol      long    取得列数
+'
+'戻り値　　：エラー番号
+'
+'機能説明　：エラーログ情報を取得する
+'
+'更新履歴　：2006/07/05 SRA H.Anpo      新規作成
+'
+'*************************************************************************
+Private Function fncReadErrorLog( _
+            ByVal lngTranId As Long, _
+            ByRef vntRec() As Variant, _
+            ByRef lngRow As Long, _
+            ByRef lngCol As Long _
+            ) As Long
+On Error GoTo ErrHandler
+
+    Const PROCEDURE_NAME    As String = "fncReadErrorLog"
+    Dim RS                  As New ADODB.Recordset       'レコードセット
+    Dim strSql              As String
+    Dim lngRet              As Long
+    Dim vntRecWk()          As Variant
+    
+    Call subBeginProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    fncReadErrorLog = 0
+    
+    strSql = ""
+    strSql = strSql & " SELECT"
+'    strSql = strSql & "     *"
+    strSql = strSql & "  TRANSACTION_ID   "
+    strSql = strSql & " ,LOG_KBN          "
+    strSql = strSql & " ,to_char(LOG)     "
+    strSql = strSql & " ,TOHROKU_YMD      "
+    strSql = strSql & " ,KOHSHIN_YMD      "
+    strSql = strSql & " ,KOHSHIN_PGM_ID   "
+    strSql = strSql & " ,KOHSHIN_TANTOHSHA"
+    strSql = strSql & " ,SAKUJO_FLG"
+    strSql = strSql & " FROM"
+    strSql = strSql & "     KYK_LOG"   'ログテーブル
+    strSql = strSql & " WHERE"
+    strSql = strSql & "     TRANSACTION_ID  = " & lngTranId
+    strSql = strSql & " AND LOG_KBN         = '1'"
+    strSql = strSql & " AND SAKUJO_FLG      = '0'"
+    
+    RS.Open strSql, MainMenu.cnAdo, adOpenKeyset, adLockOptimistic, adCmdText
+    vntRecWk = RS.GetRows
+    
+    lngCol = RS.Fields.Count
+    lngRow = RS.RecordCount
+    RS.Close
+    Set RS = Nothing
+    
+    If lngRow > 0 Then
+        lngRet = fncKsCmnArrayIdxChange(vntRecWk, vntRec)
+        If lngRet <> 0 Then
+            Err.Raise lngRet
+        End If
+    End If
+    
+    Call subEndProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME)
+    
+    Set RS = Nothing
+    Erase vntRecWk
+    
+    Exit Function
+ErrHandler:
+    Set RS = Nothing
+    Erase vntRecWk
+    fncReadErrorLog = Err.Number
+
+End Function
+
+
+
+
+'*************************************************************************
+'関数名　　：エラーシート作成(ストアドJAVAのエラーログ情報)
+'
+'引　　数　：ARG1   I   TranId      String  トランザクションＩＤ
+'
+'戻り値　　：Long       エラー番号
+'
+'機能説明　：ストアドJAVAのエラーログ情報のエラーシートに作成する
+'
+'更新履歴　：2006/06/30 SRA Y.Azuma    新規作成
+'
+'*************************************************************************
+Private Function fncMakeErrorSheet(ByVal TranId As String) As Long
+       
+On Error GoTo ErrorHandler
+
+    Const PROCEDURE_NAME    As String = "fncMakeErrorSheet"
+    Dim lngRet              As Long
+    Dim vntRec()            As Variant
+    Dim lngRow              As Long
+    Dim lngCol              As Long
+    Dim lngRowCnt           As Long
+    Dim lngColCnt           As Long
+    
+    fncMakeErrorSheet = 0
+
+    'エラーデータ取得
+    lngRet = fncReadErrorLog(TranId, vntRec, lngRow, lngCol)
+    If lngRet <> 0 Then
+        Err.Raise lngRet
+    End If
+
+    'エラーシートに貼り付け
+    'シートにデータをセット
+    For lngRowCnt = 0 To lngRow - 1
+    
+        'メッセージ詳細
+        gusrErr.MsgSyousai = vntRec(lngRowCnt, 2)   'Log
+        
+        'エラーシート書き込み
+        Call fncWriteErrSheet(ERROR_SHEETNAME)
+    
+    Next lngRowCnt
+
+    Erase vntRec
+    
+    Exit Function
+
+ErrorHandler:
+    
+'---- Error Log Start ----------------------------------------------------
+    Dim lng As Long
+    lng = Err.Number
+    Call subErrProcess(ThisWorkbook.Name & "\" & MODULE_NAME, PROCEDURE_NAME, Err.Number, Err.Description)
+    On Error GoTo 0
+    
+    Erase vntRec
+    fncMakeErrorSheet = Err.Number
+    
+'@    Err.Raise lng
+'---- Error Log End   ----------------------------------------------------
+
+End Function
+

@@ -1,0 +1,72 @@
+VERSION 1.0 CLASS
+BEGIN
+  MultiUse = -1  'True
+END
+Attribute VB_Name = "ThisWorkbook"
+Attribute VB_GlobalNameSpace = False
+Attribute VB_Creatable = False
+Attribute VB_PredeclaredId = True
+Attribute VB_Exposed = True
+Option Explicit
+Const MODULE_NAME = "ThisWorkBook"
+
+
+
+'ブッククローズ処理
+Private Sub Workbook_BeforeClose(Cancel As Boolean)
+
+    If Worksheets(MAIN_SHEETNAME).cmdUp.Enabled Then
+        If MsgBox(gstrQuitMsg, vbQuestion + vbYesNo, ThisWorkbook.Name) = vbNo Then
+            Call HideItem
+            Cancel = True
+            Exit Sub
+        End If
+    End If
+    
+    '強制終了
+    If Me.Saved = False Then
+        Application.DisplayAlerts = False
+        ThisWorkbook.Saved = True
+    End If
+
+End Sub
+
+
+'ブックオープン処理
+Private Sub Workbook_Open()
+
+    With Application
+        .ScreenUpdating = False
+        gCom01_SheetProtect Worksheets(MAIN_SHEETNAME), False   '画面Refresh停止/保護解除
+    
+'        Call HideItem
+'
+        '初期起動関数呼出
+        With Worksheets(MAIN_SHEETNAME).cmdSearch
+            If g_subKeisanInitialize Then
+                .Enabled = True            '検索ボタン使用可能とする
+            Else
+                .Enabled = False           '検索ボタン使用不能とする
+            End If
+        End With
+        
+'------------<Modify Start azuma 2007/01/17 > -----------------------
+'''        With ThisWorkbook.Worksheets(MAIN_SHEETNAME).Combo信託銀行
+'''            .ListFillRange = "信託銀行リスト"
+'''            .Visible = True
+'''        End With
+'------------<Modify End   azuma 2007/01/17 > -----------------------
+        
+        gstrQuitMsg = gfunc_ErrorMsg(2, 10002, "", "", False)   '終了時更新確認Msgを取得しておく
+        
+        ThisWorkbook.Worksheets(MAIN_SHEETNAME).Activate
+        ActiveWindow.ScrollRow = 1
+        ActiveWindow.ScrollColumn = 1
+        ThisWorkbook.Worksheets(MAIN_SHEETNAME).Range("口座番号").Select
+
+        gCom01_SheetProtect Worksheets(MAIN_SHEETNAME), True
+        .ScreenUpdating = True                                  '保護/画面Refresh
+    End With
+End Sub
+
+
